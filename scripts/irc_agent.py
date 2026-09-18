@@ -38,7 +38,8 @@ def debug_log(path: Path | None, line: str) -> None:
 class Client:
     def __init__(self, args: argparse.Namespace) -> None:
         self.args = args
-        self.nick = args.nick
+        self.original_nick = args.nick
+        self.live_nick = args.nick
         self.chan = args.channel if args.channel.startswith("#") else "#" + args.channel
         if args.home:
             os.environ["AGENTIC_IRC_HOME"] = str(Path(args.home).expanduser())
@@ -60,6 +61,10 @@ class Client:
         self.dead = threading.Event()
         self.stop = threading.Event()
         self._outbox_started = False
+        self.sasl_ack = threading.Event()
+        self.sasl_plus = threading.Event()
+        self.sasl_903 = threading.Event()
+        self.sasl_fail = threading.Event()
 
     def send(self, line: str) -> None:
         assert self.sock is not None
@@ -78,16 +83,57 @@ class Client:
         sock.settimeout(None)
         return sock
 
-    def sasl_plain(self) -> None:
+    def sasl_token(self) -> str | None:
         user = os.environ.get("AGENTIC_IRC_SASL_USER")
         pw = os.environ.get("AGENTIC_IRC_SASL_PASSWORD")
         if not user or not pw:
+            return None
+        return base64.b64encode(b"\0" + user.encode("utf-8") + b"\0" + pw.encode("utf-8")).decode("ascii")
+
+    def sasl_on_line(self, cmd: str, args: list[str], trailing: str) -> list[str]:
+        """Advance SASL. Returns lines to send. No network."""
+        out: list[str] = []
+        cap_bits = " ".join(args + [trailing]).lower()
+        if cmd == "CAP" and "ack" in cap_bits and "sasl" in cap_bits:
+            self.sasl_ack.set()
+            out.append("AUTHENTICATE PLAIN")
+        if cmd == "AUTHENTICATE" and trailing.strip() == "+":
+            self.sasl_plus.set()
+            tok = self.sasl_token()
+            if tok:
+                out.append("AUTHENTICATE " + tok)
+        if cmd == "903":
+            self.sasl_903.set()
+            out.append("CAP END")
+        if cmd in ("902", "904", "905", "906", "907"):
+            self.sasl_fail.set()
+            out.append("CAP END")
+        return out
+
+    def sasl_plain(self) -> None:
+        if not self.sasl_token():
+            info("INFO no-sasl")
             return
+        self.sasl_ack.clear()
+        self.sasl_plus.clear()
+        self.sasl_903.clear()
+        self.sasl_fail.clear()
         self.send("CAP REQ :sasl")
-        token = base64.b64encode(b"\0" + user.encode() + b"\0" + pw.encode()).decode("ascii")
-        self.send("AUTHENTICATE PLAIN")
-        self.send("AUTHENTICATE " + token)
-        self.send("CAP END")
+        if not self.sasl_ack.wait(10):
+            info("INFO no-sasl")
+            self.send("CAP END")
+            return
+        if not self.sasl_plus.wait(10):
+            info("INFO no-sasl")
+            self.send("CAP END")
+            return
+        if self.sasl_fail.wait(0.01):
+            info("INFO no-sasl")
+            return
+        if not self.sasl_903.wait(10):
+            info("INFO no-sasl")
+            self.send("CAP END")
+            return
 
     def handle_privmsg(self, prefix: str, body: str) -> None:
         src = prefix.split("!", 1)[0].lstrip(":")
@@ -105,7 +151,7 @@ class Client:
         parsed = seal.parse_seal_line(body)
         if parsed is None:
             return
-        mine = {self.nick.lower(), self.nick.lower() + "_l"}
+        mine = {self.original_nick.lower(), self.live_nick.lower()}
         if parsed.to_nick.lower() not in mine:
             return
         payload = self.fragments.add(parsed)
@@ -160,6 +206,7 @@ class Client:
                         prefix, _, rest = t[1:].partition(" ")
                     parts = rest.split(" ")
                     cmd = parts[0] if parts else ""
+                    trailing = t.split(" :", 1)[1] if " :" in t else ""
                     if cmd == "001":
                         self.ready.set()
                     if cmd == "JOIN":
@@ -167,9 +214,12 @@ class Client:
                         if ch.lower() == self.chan.lower():
                             self.joined.set()
                     if cmd in ("433", "432"):
-                        self.nick = self.nick + "_l"
-                        self.send("NICK " + self.nick)
-                        info(f"INFO nick -> {self.nick}")
+                        if self.live_nick == self.original_nick:
+                            self.live_nick = self.original_nick + "_l"
+                            self.send("NICK " + self.live_nick)
+                            info(f"INFO nick -> {self.live_nick} (still accept {self.original_nick})")
+                    for line in self.sasl_on_line(cmd, parts[1:], trailing):
+                        self.send(line)
                     if cmd == "PRIVMSG" and " :" in t:
                         self.handle_privmsg(prefix, t.split(" :", 1)[1])
         except OSError:
@@ -207,14 +257,15 @@ class Client:
         self.ready.clear()
         self.joined.clear()
         self.dead.clear()
+        self.live_nick = self.original_nick
         self.sock = self.connect()
         threading.Thread(target=self.reader, daemon=True).start()
         if not self._outbox_started:
             threading.Thread(target=self.outbox_loop, daemon=True).start()
             self._outbox_started = True
         self.send("CAP LS 302")
-        self.send("NICK " + self.nick)
-        self.send(f"USER {self.nick} 0 * :{self.args.realname}")
+        self.send("NICK " + self.live_nick)
+        self.send(f"USER {self.live_nick} 0 * :{self.args.realname}")
         self.sasl_plain()
         if not self.ready.wait(30):
             raise TimeoutError("NO 001")
@@ -229,7 +280,7 @@ class Client:
                 info("INFO no identity; skip AGPK")
             else:
                 self.say("AGPK v1 " + self.ident["pk"])
-        info(f"INFO joined {self.chan} as {self.nick}")
+        info(f"INFO joined {self.chan} as {self.live_nick}")
         while not self.stop.is_set() and not self.dead.wait(timeout=1):
             pass
 

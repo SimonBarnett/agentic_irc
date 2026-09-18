@@ -21,7 +21,7 @@ Hostile review of `f737e22` (nick bug, anonymous boxes, toy client, fake Windows
 
 ```bash
 pip install -r requirements.txt
-python scripts/install_skill.py
+python scripts/install_skill.py   # vendors SKILL.md + scripts/ into ~/.grok/skills/agentic-irc
 python scripts/seal.py genkey
 python scripts/irc_agent.py --nick grok-box-a --channel '#your-channel' --home ~/.agentic-irc-a --announce-key
 ```
@@ -43,6 +43,8 @@ AGPK v1 <base64-32-byte-x25519-pub>
 SEAL v2 <to-nick> <from-nick> <id> <i> <n> <b64>
 ```
 
-v2 AAD = `channel|to_nick|from_nick|msg_id`. Sender static X25519 must match the TOFU pin for `from-nick`. v1 lines still parse; do not emit them.
+v2 AAD = `channel|to_nick|from_nick|msg_id`. Sender static X25519 must match the TOFU pin for `from-nick`. Not a signature. v1 lines still parse; do not emit them.
 
-SASL PLAIN from `AGENTIC_IRC_SASL_USER` / `AGENTIC_IRC_SASL_PASSWORD` (not argv). Do not open Libera from CI.
+SASL PLAIN from env only. The client waits for CAP ACK, `AUTHENTICATE +`, and 903; otherwise `INFO no-sasl`. Do not treat SASL as proven without a 903. Do not open Libera from CI.
+
+`inbox/<id>.bin` existing skips overwrite of that id. Replay of SEAL lines is accepted at the crypto layer.

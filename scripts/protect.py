@@ -9,6 +9,10 @@ from pathlib import Path
 MAGIC = b"AIRC1"
 
 
+class ProtectError(Exception):
+    pass
+
+
 def protect_path(path: Path) -> None:
     path = Path(path)
     if os.name == "nt":
@@ -24,7 +28,11 @@ def protect_path(path: Path) -> None:
             "/grant:r",
             f"{user}:(F)",
         ]
-        subprocess.run(cmd, check=False, capture_output=True)
+        r = subprocess.run(cmd, capture_output=True, text=True)
+        if r.returncode != 0:
+            err = (r.stderr or r.stdout or f"icacls exit {r.returncode}").strip()
+            sys.stderr.write(err + "\n")
+            raise ProtectError(f"icacls exit {r.returncode}")
         return
     try:
         os.chmod(path, 0o600 if path.is_file() else 0o700)

@@ -1,132 +1,256 @@
 #!/usr/bin/env python3
-"""TLS IRC agent: outbox → channel, AGPK announce, SEAL reassembly into inbox.
+"""TLS IRC agent: reconnect, SASL from env, flood delay, AGPK TOFU, SEAL v2 inbox.
 
-Lessons from WIN-MPRE8VI4U6U / grok-ionos-ntsa:
-- wrap_socket then settimeout(None); create_connection timeout must not stay on the socket
-- PING/PONG on the reader thread
-- write outbound lines to an outbox file; do not block the agent on the socket
-- never PRIVMSG secrets; SEAL lines only
+Stdout is INFO only (no raw IRC, no AGPK/SEAL bodies). Full lines go to irc.log if
+AGENTIC_IRC_DEBUG=1. SASL: AGENTIC_IRC_SASL_USER + AGENTIC_IRC_SASL_PASSWORD (not argv).
 """
 from __future__ import annotations
 
 import argparse
+import base64
 import os
+import random
 import socket
 import ssl
 import sys
 import threading
 import time
-from collections import defaultdict
 from pathlib import Path
 
-# allow `python scripts/irc_agent.py` without installing a package
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import protect  # noqa: E402
 import seal  # noqa: E402
 
-
-def send(sock: ssl.SSLSocket, lock: threading.Lock, line: str) -> None:
-    with lock:
-        sock.sendall((line + "\r\n").encode("utf-8"))
+FLOOD_S = 0.8
 
 
-def say(sock: ssl.SSLSocket, lock: threading.Lock, chan: str, msg: str) -> None:
-    send(sock, lock, "PRIVMSG " + chan + " :" + msg)
+def info(msg: str) -> None:
+    print(msg, flush=True)
 
 
-def reader(
-    sock: ssl.SSLSocket,
-    lock: threading.Lock,
-    nick: str,
-    chan: str,
-    ready: threading.Event,
-    joined: threading.Event,
-    seals: dict,
-    inbox: Path,
-    ident: dict | None,
-) -> None:
-    buf = b""
-    while True:
-        data = sock.recv(4096)
-        if not data:
-            print("DISCONNECTED", flush=True)
-            os._exit(1)
-        buf += data
-        while b"\n" in buf:
-            line, buf = buf.split(b"\n", 1)
-            t = line.decode("utf-8", "replace").rstrip("\r")
-            print(t, flush=True)
-            if t.startswith("PING "):
-                send(sock, lock, "PONG " + t[5:])
+def debug_log(path: Path | None, line: str) -> None:
+    if path is None:
+        return
+    with path.open("a", encoding="utf-8") as f:
+        f.write(line + "\n")
+
+
+class Client:
+    def __init__(self, args: argparse.Namespace) -> None:
+        self.args = args
+        self.nick = args.nick
+        self.chan = args.channel if args.channel.startswith("#") else "#" + args.channel
+        if args.home:
+            os.environ["AGENTIC_IRC_HOME"] = str(Path(args.home).expanduser())
+        self.home = seal.home()
+        self.home.mkdir(parents=True, exist_ok=True)
+        protect.protect_path(self.home)
+        self.outbox = Path(args.outbox) if args.outbox else self.home / "outbox.txt"
+        self.inbox = self.home / "inbox"
+        self.inbox.mkdir(parents=True, exist_ok=True)
+        protect.protect_path(self.inbox)
+        self.debug = self.home / "irc.log" if os.environ.get("AGENTIC_IRC_DEBUG") else None
+        self.ident = seal.load_ident() if seal.ident_path().exists() else None
+        self.peers = seal.load_peers()
+        self.fragments = seal.FragmentStore()
+        self.lock = threading.Lock()
+        self.sock: ssl.SSLSocket | None = None
+        self.ready = threading.Event()
+        self.joined = threading.Event()
+        self.dead = threading.Event()
+        self.stop = threading.Event()
+        self._outbox_started = False
+
+    def send(self, line: str) -> None:
+        assert self.sock is not None
+        with self.lock:
+            self.sock.sendall((line + "\r\n").encode("utf-8"))
+
+    def say(self, msg: str) -> None:
+        self.send("PRIVMSG " + self.chan + " :" + msg)
+        time.sleep(FLOOD_S)
+
+    def connect(self) -> ssl.SSLSocket:
+        ctx = ssl.create_default_context()
+        raw = socket.create_connection((self.args.host, self.args.port), 20)
+        raw.settimeout(None)
+        sock = ctx.wrap_socket(raw, server_hostname=self.args.host)
+        sock.settimeout(None)
+        return sock
+
+    def sasl_plain(self) -> None:
+        user = os.environ.get("AGENTIC_IRC_SASL_USER")
+        pw = os.environ.get("AGENTIC_IRC_SASL_PASSWORD")
+        if not user or not pw:
+            return
+        self.send("CAP REQ :sasl")
+        token = base64.b64encode(b"\0" + user.encode() + b"\0" + pw.encode()).decode("ascii")
+        self.send("AUTHENTICATE PLAIN")
+        self.send("AUTHENTICATE " + token)
+        self.send("CAP END")
+
+    def handle_privmsg(self, prefix: str, body: str) -> None:
+        src = prefix.split("!", 1)[0].lstrip(":")
+        if body.startswith("AGPK v1 "):
+            pk = body.split(" ", 2)[2].strip()
+            if len(pk) < 40:
+                return
+            result = seal.tofu_pin(self.peers, src, pk)
+            if result == "pinned":
+                seal.save_peers(self.peers)
+                info(f"INFO peer {src} AGPK pinned")
+            elif result == "mismatch":
+                info(f"INFO peer {src} AGPK mismatch (ignored)")
+            return
+        parsed = seal.parse_seal_line(body)
+        if parsed is None:
+            return
+        mine = {self.nick.lower(), self.nick.lower() + "_l"}
+        if parsed.to_nick.lower() not in mine:
+            return
+        payload = self.fragments.add(parsed)
+        if payload is None:
+            return
+        if self.ident is None:
+            info(f"INFO SEAL {parsed.msg_id} dropped (no identity)")
+            return
+        try:
+            blob = seal.b64d(payload)
+            if parsed.version == 2:
+                from_nick = parsed.from_nick or src
+                pin = self.peers.get(from_nick.lower(), {}).get("pk")
+                if not pin:
+                    info(f"INFO SEAL {parsed.msg_id} dropped (no AGPK pin for {from_nick})")
+                    return
+                pt = seal.open_bytes_v2(
+                    blob, self.ident, self.chan, parsed.to_nick, from_nick, parsed.msg_id, pin
+                )
+            else:
+                pt = seal.open_bytes_v1(blob, self.ident)
+        except Exception as e:
+            info(f"INFO SEAL {parsed.msg_id} decrypt failed {type(e).__name__}")
+            return
+        dest = self.inbox / f"{parsed.msg_id}.bin"
+        if dest.exists():
+            info(f"INFO SEAL {parsed.msg_id} replay ignored")
+            return
+        dest.write_bytes(pt)
+        protect.protect_path(dest)
+        info(f"INFO SEAL {parsed.msg_id} -> inbox ({len(pt)} bytes)")
+
+    def reader(self) -> None:
+        assert self.sock is not None
+        buf = b""
+        try:
+            while not self.stop.is_set():
+                data = self.sock.recv(4096)
+                if not data:
+                    return
+                buf += data
+                while b"\n" in buf:
+                    line, buf = buf.split(b"\n", 1)
+                    t = line.decode("utf-8", "replace").rstrip("\r")
+                    debug_log(self.debug, t)
+                    if t.startswith("PING "):
+                        self.send("PONG " + t[5:])
+                        continue
+                    prefix = ""
+                    rest = t
+                    if t.startswith(":"):
+                        prefix, _, rest = t[1:].partition(" ")
+                    parts = rest.split(" ")
+                    cmd = parts[0] if parts else ""
+                    if cmd == "001":
+                        self.ready.set()
+                    if cmd == "JOIN":
+                        ch = parts[1].lstrip(":") if len(parts) > 1 else ""
+                        if ch.lower() == self.chan.lower():
+                            self.joined.set()
+                    if cmd in ("433", "432"):
+                        self.nick = self.nick + "_l"
+                        self.send("NICK " + self.nick)
+                        info(f"INFO nick -> {self.nick}")
+                    if cmd == "PRIVMSG" and " :" in t:
+                        self.handle_privmsg(prefix, t.split(" :", 1)[1])
+        except OSError:
+            return
+        finally:
+            self.dead.set()
+
+    def outbox_loop(self) -> None:
+        path = self.outbox
+        last = path.stat().st_size if path.exists() else 0
+        while not self.stop.is_set():
+            if not self.joined.wait(timeout=1):
                 continue
-            parts = t.split(" ")
-            if len(parts) >= 2 and parts[1] == "001":
-                ready.set()
-            if len(parts) >= 3 and parts[1] == "JOIN" and chan.lower() in t.lower():
-                joined.set()
-            if len(parts) >= 2 and parts[1] in ("433", "432"):
-                send(sock, lock, "NICK " + nick + "_l")
-            # trailing PRIVMSG text
-            if len(parts) >= 4 and parts[1] == "PRIVMSG":
-                body = t.split(" :", 1)[-1] if " :" in t else ""
-                handle_body(body, nick, seals, inbox, ident)
+            time.sleep(1)
+            if not path.exists():
+                continue
+            sz = path.stat().st_size
+            if sz < last:
+                last = 0
+            if sz <= last:
+                continue
+            with path.open("r", encoding="utf-8", errors="replace") as f:
+                f.seek(last)
+                chunk = f.read()
+                last = f.tell()
+            for line in chunk.splitlines():
+                line = line.strip()
+                if line and self.sock is not None:
+                    try:
+                        self.say(line)
+                    except OSError:
+                        return
 
-
-def handle_body(body: str, nick: str, seals: dict, inbox: Path, ident: dict | None) -> None:
-    if body.startswith("AGPK v1 "):
-        return
-    parsed = seal.parse_seal_line(body)
-    if not parsed:
-        return
-    to_nick, msg_id, i, n, chunk = parsed
-    if to_nick.lower() not in (nick.lower(), nick.lower() + "_l", "*"):
-        return
-    bag = seals[msg_id]
-    bag[i] = chunk
-    bag["_n"] = n
-    if len([k for k in bag if isinstance(k, int)]) < n:
-        return
-    b64 = "".join(bag[j] for j in range(1, n + 1))
-    seals.pop(msg_id, None)
-    if ident is None:
-        print(f"SEAL {msg_id} complete but no identity; not decrypting", flush=True)
-        return
-    try:
-        pt = seal.open_bytes(seal.b64d(b64), ident)
-    except Exception as e:
-        print(f"SEAL {msg_id} decrypt failed: {type(e).__name__}", flush=True)
-        return
-    inbox.mkdir(parents=True, exist_ok=True)
-    dest = inbox / f"{msg_id}.bin"
-    dest.write_bytes(pt)
-    try:
-        os.chmod(dest, 0o600)
-    except OSError:
-        pass
-    print(f"SEAL {msg_id} -> {dest} ({len(pt)} bytes)", flush=True)
-
-
-def outbox_loop(sock: ssl.SSLSocket, lock: threading.Lock, chan: str, path: Path, joined: threading.Event) -> None:
-    joined.wait()
-    last = 0
-    if path.exists():
-        last = path.stat().st_size
-    while True:
+    def session(self) -> None:
+        self.ready.clear()
+        self.joined.clear()
+        self.dead.clear()
+        self.sock = self.connect()
+        threading.Thread(target=self.reader, daemon=True).start()
+        if not self._outbox_started:
+            threading.Thread(target=self.outbox_loop, daemon=True).start()
+            self._outbox_started = True
+        self.send("CAP LS 302")
+        self.send("NICK " + self.nick)
+        self.send(f"USER {self.nick} 0 * :{self.args.realname}")
+        self.sasl_plain()
+        if not self.ready.wait(30):
+            raise TimeoutError("NO 001")
         time.sleep(1)
-        if not path.exists():
-            continue
-        sz = path.stat().st_size
-        if sz < last:
-            last = 0
-        if sz <= last:
-            continue
-        with path.open("r", encoding="utf-8", errors="replace") as f:
-            f.seek(last)
-            chunk = f.read()
-            last = f.tell()
-        for line in chunk.splitlines():
-            line = line.strip()
-            if line:
-                say(sock, lock, chan, line)
+        self.send("JOIN " + self.chan)
+        if not self.joined.wait(30):
+            raise TimeoutError("NO JOIN")
+        if self.args.hello:
+            self.say(self.args.hello)
+        if self.args.announce_key:
+            if self.ident is None:
+                info("INFO no identity; skip AGPK")
+            else:
+                self.say("AGPK v1 " + self.ident["pk"])
+        info(f"INFO joined {self.chan} as {self.nick}")
+        while not self.stop.is_set() and not self.dead.wait(timeout=1):
+            pass
+
+    def run_forever(self) -> None:
+        backoff = 1.0
+        while not self.stop.is_set():
+            try:
+                self.session()
+                backoff = 1.0
+            except Exception as e:
+                info(f"INFO session end {type(e).__name__}")
+            try:
+                if self.sock:
+                    self.sock.close()
+            except OSError:
+                pass
+            self.sock = None
+            delay = backoff + random.uniform(0, 1)
+            info(f"INFO reconnect in {delay:.1f}s")
+            time.sleep(delay)
+            backoff = min(60.0, backoff * 2)
 
 
 def main() -> None:
@@ -135,58 +259,18 @@ def main() -> None:
     p.add_argument("--port", type=int, default=6697)
     p.add_argument("--nick", required=True)
     p.add_argument("--channel", required=True)
+    p.add_argument("--home", default="", help="AGENTIC_IRC_HOME (required if two nicks on one box)")
     p.add_argument("--realname", default="agentic-irc")
-    p.add_argument("--outbox", default="", help="append-only file of PRIVMSG lines")
-    p.add_argument("--hello", default="", help="one public line after JOIN (no secrets)")
-    p.add_argument("--announce-key", action="store_true", help="PRIVMSG AGPK v1 after JOIN")
+    p.add_argument("--outbox", default="")
+    p.add_argument("--hello", default="")
+    p.add_argument("--announce-key", action="store_true")
+    p.add_argument("--once", action="store_true", help="no reconnect (tests)")
     args = p.parse_args()
-    chan = args.channel if args.channel.startswith("#") else "#" + args.channel
-    irc_home = seal.home()
-    outbox = Path(args.outbox) if args.outbox else irc_home / "outbox.txt"
-    inbox = irc_home / "inbox"
-    ident = None
-    if seal.ident_path().exists():
-        ident = seal.load_ident()
-
-    ctx = ssl.create_default_context()
-    raw = socket.create_connection((args.host, args.port), 20)
-    raw.settimeout(None)
-    sock = ctx.wrap_socket(raw, server_hostname=args.host)
-    sock.settimeout(None)
-
-    lock = threading.Lock()
-    ready = threading.Event()
-    joined = threading.Event()
-    seals: dict = defaultdict(dict)
-
-    threading.Thread(
-        target=reader,
-        args=(sock, lock, args.nick, chan, ready, joined, seals, inbox, ident),
-        daemon=True,
-    ).start()
-    threading.Thread(target=outbox_loop, args=(sock, lock, chan, outbox, joined), daemon=True).start()
-
-    send(sock, lock, "NICK " + args.nick)
-    send(sock, lock, f"USER {args.nick} 0 * :{args.realname}")
-    if not ready.wait(30):
-        print("NO 001", flush=True)
-        os._exit(2)
-    time.sleep(1)
-    send(sock, lock, "JOIN " + chan)
-    if not joined.wait(30):
-        print("NO JOIN", flush=True)
-        os._exit(3)
-    time.sleep(1)
-    if args.hello:
-        say(sock, lock, chan, args.hello)
-    if args.announce_key:
-        if ident is None:
-            print("no identity; skip AGPK", flush=True)
-        else:
-            say(sock, lock, chan, "AGPK v1 " + ident["pk"])
-    print(f"joined {chan} as {args.nick}; outbox={outbox}", flush=True)
-    while True:
-        time.sleep(60)
+    c = Client(args)
+    if args.once:
+        c.session()
+        return
+    c.run_forever()
 
 
 if __name__ == "__main__":

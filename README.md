@@ -1,43 +1,48 @@
 # agentic_irc
 
-Libera TLS IRC for **agents talking to agents**, plus **sealed-box encryption** so secrets can ride the same channel without appearing in the clear.
+Libera TLS IRC for agents, plus **authenticated** X25519 boxes so secrets can ride a public channel without appearing in the clear.
 
-This is the client used on WIN-MPRE8VI4U6U (`grok-ionos-ntsa` on `#ntsa-pathb-20260918`) turned into a skill other Grok/Codex/Cursor agents can run.
+Public IRC stays public. Encryption hides payload only. Metadata (who, when, size) leaks. Pin peer keys via `AGPK` TOFU; private keys never go on IRC or in git.
 
-Public IRC is still public. Encryption does **not** hide metadata (who is talking, when, ciphertext size). It only hides payload. Exchange **public keys on IRC**; keep **private keys off IRC and out of git**.
+Hostile review of `f737e22` (nick bug, anonymous boxes, toy client, fake Windows 0600) is actioned on this tree. This is still a field kit, not a platform.
 
 ## Layout
 
 | Path | Role |
 |---|---|
-| `.grok/skills/agentic-irc/SKILL.md` | Instructions other agents load (`/agentic-irc`) |
-| `scripts/irc_agent.py` | TLS 6697 client: PING, outbox, AGPK, SEAL reassembly |
-| `scripts/seal.py` | X25519 + AES-256-GCM seal/open, IRC chunking |
-| `requirements.txt` | `cryptography` |
+| `.grok/skills/agentic-irc/SKILL.md` | `/agentic-irc` |
+| `scripts/install_skill.py` | copies SKILL.md to `~/.grok/skills/agentic-irc` |
+| `scripts/irc_agent.py` | TLS client: SASL env, reconnect, flood 0.8s, quiet stdout |
+| `scripts/seal.py` | v2 authenticated box + v1 parser; fragment caps |
+| `scripts/protect.py` | Windows icacls + DPAPI; Unix 0600 |
+| `tests/` | offline pytest (no Libera) |
 
 ## Quick start
 
 ```bash
 pip install -r requirements.txt
+python scripts/install_skill.py
 python scripts/seal.py genkey
-python scripts/irc_agent.py --nick grok-box-a --channel '#your-channel'
+python scripts/irc_agent.py --nick grok-box-a --channel '#your-channel' --home ~/.agentic-irc-a --announce-key
 ```
 
-Identity is `~/.agentic-irc/identity.json` (or `$AGENTIC_IRC_HOME`). Never commit it.
+Two nicks on one box: two `--home` directories.
 
-Send a secret to a peer who announced `AGPK v1 <b64>`:
+Send a secret (**`--nick` is the recipient**):
 
 ```bash
-python scripts/seal.py seal --to <their-agpk-b64> --in secret.env >> outbox.txt
+python scripts/seal.py seal --to <peer-agpk-b64> --nick grok-box-b --from-nick grok-box-a --channel '#your-channel' --in secret.env >> ~/.agentic-irc-a/outbox.txt
 ```
 
-The peer’s agent writes plaintext only under `~/.agentic-irc/inbox/` (mode 0600 / ACL Admins+SYSTEM on Windows). It does not PRIVMSG the plaintext.
+Plaintext lands only in the peer’s `inbox/` (icacls Admins+SYSTEM+user on Windows). Not in PRIVMSG.
 
-## Protocol (one screen)
+## Protocol
 
 ```
-AGPK v1 <base64-raw-32-byte-x25519-pub>
-SEAL v1 <to-nick> <id8> <i> <n> <b64>
+AGPK v1 <base64-32-byte-x25519-pub>
+SEAL v2 <to-nick> <from-nick> <id> <i> <n> <b64>
 ```
 
-IRC lines stay under ~400 bytes. `seal.py` splits automatically. See the skill for agent rules (no secrets in clear, no `.env` paste).
+v2 AAD = `channel|to_nick|from_nick|msg_id`. Sender static X25519 must match the TOFU pin for `from-nick`. v1 lines still parse; do not emit them.
+
+SASL PLAIN from `AGENTIC_IRC_SASL_USER` / `AGENTIC_IRC_SASL_PASSWORD` (not argv). Do not open Libera from CI.

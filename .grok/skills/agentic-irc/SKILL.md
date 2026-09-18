@@ -1,61 +1,65 @@
 ---
 name: agentic-irc
 description: >
-  Join Libera TLS IRC as an agent, keep a channel alive, and pass secrets as X25519 sealed
-  boxes (never plaintext). Use when the user says join IRC, Libera, agentic_irc, /agentic-irc,
-  talk to another Grok on IRC, or encrypt secrets for IRC.
+  Join Libera TLS IRC as an agent, keep a channel alive, and pass secrets as
+  authenticated X25519 boxes (never plaintext). Use when the user says join IRC,
+  Libera, agentic_irc, /agentic-irc, talk to another Grok on IRC, or encrypt
+  secrets for IRC.
 ---
 
 # agentic-irc
 
-Two or more agents coordinate on **Libera** (`irc.libera.chat:6697` TLS). Clear text is for status. Secrets go as `SEAL` lines only.
+Libera `irc.libera.chat:6697` TLS. Status in clear. Secrets only as `SEAL v2` lines.
 
-Repo (clone next to the skill if needed): `https://github.com/SimonBarnett/agentic_irc`
+Repo: `https://github.com/SimonBarnett/agentic_irc`
+
+`--nick` on `seal.py` is the **recipient** IRC nick, not yours.
 
 ## Install once per box
 
 ```bash
 pip install -r requirements.txt
+python scripts/install_skill.py
 python scripts/seal.py genkey
 ```
 
-Identity: `$AGENTIC_IRC_HOME/identity.json` or `~/.agentic-irc/identity.json`. Do not commit it. Do not PRIVMSG the `sk` field.
+Two agents on one box **must** use different `--home` / `AGENTIC_IRC_HOME`. Do not share `~/.agentic-irc`.
+
+Identity is DPAPI-wrapped on Windows (`identity.json`); Unix is 0600. Never commit it. Never PRIVMSG `sk`. Never dump `inbox/*.bin` into chat.
+
+SASL (optional, from env only): `AGENTIC_IRC_SASL_USER`, `AGENTIC_IRC_SASL_PASSWORD`.
 
 ## Connect
 
-Leave this running (background). Outbox is append-only; the process has no stdin command channel.
-
 ```bash
-python scripts/irc_agent.py --nick <nick> --channel '#<chan>' --announce-key --hello '<one public status line>'
+python scripts/irc_agent.py --nick grok-box-a --channel '#ops' --home ~/.agentic-irc-a --announce-key --hello 'box-a online'
 ```
 
-Required client facts (this is what broke on IONOS until fixed):
+Stdout is INFO only. Raw IRC is not printed (set `AGENTIC_IRC_DEBUG=1` for `irc.log`).
 
-- `create_connection` timeout is connect-only; `settimeout(None)` on the TLS socket after wrap
-- Answer `PING` with `PONG` on the reader thread
-- Nick collision (`433`) → `nick_l`
-- Write public replies by appending lines to `~/.agentic-irc/outbox.txt`
+Client facts:
 
-Do not paste `.env`, tokens, or PEM on the channel. Do not dump inbox files into chat.
+- connect timeout then `settimeout(None)` on the TLS socket
+- PING on the reader thread
+- reconnect with jitter; flood delay 0.8s/line
+- public replies: append to `$AGENTIC_IRC_HOME/outbox.txt`
+
+Do not paste `.env`, tokens, or PEM on the channel.
 
 ## Secrets
 
-1. Peer announces `AGPK v1 <b64>` (32-byte X25519 pub). Copy that b64 only.
-2. Encrypt a file (never echo the plaintext in the agent transcript if you can write a file instead):
+1. Peer announces `AGPK v1 <b64>`. Agent pins it in `peers.json` (TOFU). Copy the b64 only if sealing offline.
+2. Encrypt **to the recipient**:
 
 ```bash
-python scripts/seal.py seal --to <peer-agpk-b64> --nick <your-nick> --in secret.env >> ~/.agentic-irc/outbox.txt
+python scripts/seal.py seal --to <peer-agpk-b64> --nick <peer-irc-nick> --from-nick grok-box-a --channel '#ops' --in secret.env >> $AGENTIC_IRC_HOME/outbox.txt
 ```
 
-3. Receiver’s `irc_agent.py` reassembles `SEAL v1 <to> <id> <i> <n> <b64>` addressed to its nick, decrypts, writes `~/.agentic-irc/inbox/<id>.bin` (0600). Stdout only logs `SEAL <id> -> path (N bytes)`.
-4. Read that file with tools; do not re-broadcast it.
+Wrong: `--nick` = your own nick (peer silently drops).
 
-Construction: ephemeral X25519 + HKDF-SHA256 + AES-256-GCM (`agentic-irc-seal-v1`). Ciphertext is `eph_pk(32) || nonce(12) || ct+tag`. IRC chunks at 300 b64 chars.
+3. Receiver writes `$AGENTIC_IRC_HOME/inbox/<id>.bin`. Stdout: `INFO SEAL <id> -> inbox (N bytes)`.
+4. Read that file with tools; do not re-broadcast.
 
-Public lines stay ordinary PRIVMSG. If a secret must move and you have no AGPK yet, wait — do not fall back to cleartext.
+v2 blob: `sender_pk || eph_pk || nonce || ct`. AAD: `channel|to_nick|from_nick|msg_id`. v1 parser remains for old lines; do not send v1.
 
-## Channel etiquette for agents
-
-- First line after join: who you are, box hostname, git SHA, what you need. No secrets.
-- Stay joined until the user says close IRC.
-- `/leave` of a product call is unrelated; do not QUIT unless asked.
+If there is no AGPK pin yet, wait. Do not send cleartext.

@@ -2,8 +2,8 @@
 """X25519 boxes for agentic IRC.
 
 v1: anonymous sealed box (eph X25519 + HKDF + AES-GCM). Keep a parser; do not send.
-v2: authenticated box. Blob = sender_pk(32) || eph_pk(32) || nonce(12) || ct+tag.
-    AAD = channel|to_nick|from_nick|msg_id. Receiver pins sender_pk via AGPK TOFU.
+v2: TOFU-pinned DH-AAD (not a signature). Blob = sender_pk(32) || eph_pk(32) || nonce(12) || ct+tag.
+    AAD = lower(channel)|lower(to)|lower(from)|lower(id). No '|' in fields.
 """
 from __future__ import annotations
 
@@ -32,7 +32,7 @@ CHUNK = 300
 MAX_N = 64
 BAG_TTL_S = 120.0
 MAX_INDEX_DIGITS = 2  # n <= 64
-MSGID_RE = re.compile(r"^[a-fA-F0-9]{8}$")
+MSGID_RE = re.compile(r"^[a-fA-F0-9]{16}$")
 NICK_RE = re.compile(r"^[A-Za-z\[\\\]^`{|}][A-Za-z0-9\[\\\]^`{|}\\-_]{0,31}$")
 
 
@@ -97,7 +97,11 @@ def _pub_bytes(pk: X25519PublicKey) -> bytes:
 
 
 def aad_v2(channel: str, to_nick: str, from_nick: str, msg_id: str) -> bytes:
-    return f"{channel}|{to_nick}|{from_nick}|{msg_id}".encode("utf-8")
+    fields = (channel, to_nick, from_nick, msg_id)
+    if any("|" in f for f in fields):
+        raise ValueError("pipe in AAD field")
+    ch, to, fr, mid = (f.lower() for f in fields)
+    return f"{ch}|{to}|{fr}|{mid}".encode("utf-8")
 
 
 def seal_bytes_v1(plaintext: bytes, recip_pk_b64: str) -> bytes:
@@ -194,7 +198,7 @@ def irc_lines_v2(
     n = len(parts)
     if n > MAX_N:
         raise ValueError(f"payload needs {n} chunks; max {MAX_N}")
-    msg_id = msg_id or secrets.token_hex(4)
+    msg_id = msg_id or secrets.token_hex(8)
     return [f"SEAL v2 {to_nick} {from_nick} {msg_id} {i + 1} {n} {part}" for i, part in enumerate(parts)]
 
 
@@ -205,7 +209,7 @@ def irc_lines(blob: bytes, to_nick: str, msg_id: str | None = None) -> list[str]
     n = len(parts)
     if n > MAX_N:
         raise ValueError(f"payload needs {n} chunks; max {MAX_N}")
-    msg_id = msg_id or secrets.token_hex(4)
+    msg_id = msg_id or secrets.token_hex(8)
     return [f"SEAL v1 {to_nick} {msg_id} {i + 1} {n} {part}" for i, part in enumerate(parts)]
 
 
@@ -292,21 +296,22 @@ class FragmentStore:
         self._gc(now)
         if line.n > MAX_N or line.i < 1 or line.i > line.n:
             return None
-        bag = self._bags.get(line.msg_id)
+        key = ((line.from_nick or "").lower(), line.msg_id.lower())
+        bag = self._bags.get(key)
         if bag is None:
             bag = {"n": line.n, "ver": line.version, "parts": {}, "t0": now}
-            self._bags[line.msg_id] = bag
+            self._bags[key] = bag
         if bag["n"] != line.n or bag["ver"] != line.version:
             return None
         prev = bag["parts"].get(line.i)
         if prev is not None and prev != line.chunk:
-            del self._bags[line.msg_id]
+            del self._bags[key]
             return None
         bag["parts"][line.i] = line.chunk
         if len(bag["parts"]) < line.n:
             return None
         payload = "".join(bag["parts"][j] for j in range(1, line.n + 1))
-        del self._bags[line.msg_id]
+        del self._bags[key]
         return payload
 
 
@@ -368,9 +373,11 @@ def main() -> None:
         print(f"AGPK v1 {load_ident()['pk']}")
         return
     if args.cmd == "seal":
+        if "|" in args.channel or "|" in args.to_nick or "|" in args.from_nick:
+            raise SystemExit("channel and nicks must not contain |")
         data = sys.stdin.buffer.read() if args.infile == "-" else Path(args.infile).read_bytes()
         ident = load_ident()
-        msg_id = secrets.token_hex(4)
+        msg_id = secrets.token_hex(8)
         blob = seal_bytes_v2(
             data, args.to, ident, args.channel, args.to_nick, args.from_nick, msg_id
         )

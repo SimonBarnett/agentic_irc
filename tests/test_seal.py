@@ -29,21 +29,23 @@ def test_v1_roundtrip(tmp_path: Path):
 def test_v2_roundtrip_and_aad(tmp_path: Path):
     a, b = _pair(tmp_path)
     blob = seal.seal_bytes_v2(
-        b"secret", b["pk"], a, "#ops", "bob", "alice", "deadbeef"
+        b"secret", b["pk"], a, "#ops", "bob", "alice", "deadbeefdeadbeef"
     )
-    pt = seal.open_bytes_v2(blob, b, "#ops", "bob", "alice", "deadbeef", a["pk"])
+    pt = seal.open_bytes_v2(blob, b, "#Ops", "Bob", "Alice", "deadbeefdeadbeef", a["pk"])
     assert pt == b"secret"
     with pytest.raises(Exception):
-        seal.open_bytes_v2(blob, b, "#other", "bob", "alice", "deadbeef", a["pk"])
+        seal.open_bytes_v2(blob, b, "#other", "bob", "alice", "deadbeefdeadbeef", a["pk"])
     with pytest.raises(Exception):
-        seal.open_bytes_v2(blob, b, "#ops", "bob", "mallory", "deadbeef", a["pk"])
+        seal.open_bytes_v2(blob, b, "#ops", "bob", "mallory", "deadbeefdeadbeef", a["pk"])
     with pytest.raises(ValueError, match="sender key"):
-        seal.open_bytes_v2(blob, b, "#ops", "bob", "alice", "deadbeef", b["pk"])
+        seal.open_bytes_v2(blob, b, "#ops", "bob", "alice", "deadbeefdeadbeef", b["pk"])
+    with pytest.raises(ValueError, match="pipe"):
+        seal.aad_v2("#op|s", "bob", "alice", "deadbeefdeadbeef")
 
 
 def test_wrong_to_nick_ignored():
     store = seal.FragmentStore()
-    line = seal.parse_seal_line("SEAL v2 bob alice abcdabcd 1 1 AAA")
+    line = seal.parse_seal_line("SEAL v2 bob alice abcdabcdabcdabcd 1 1 AAA")
     assert line is not None
     assert line.to_nick == "bob"
     # receiver carol drops
@@ -51,30 +53,29 @@ def test_wrong_to_nick_ignored():
 
 
 def test_parse_rejects_huge_n():
-    assert seal.parse_seal_line("SEAL v2 bob alice abcdabcd 1 1000000 x") is None
-    assert seal.parse_seal_line("SEAL v1 bob abcdabcd 1 1000000 x") is None
+    assert seal.parse_seal_line("SEAL v2 bob alice abcdabcdabcdabcd 1 1000000 x") is None
+    assert seal.parse_seal_line("SEAL v1 bob abcdabcdabcdabcd 1 1000000 x") is None
     store = seal.FragmentStore()
-    # even if someone built a SealLine by hand with n=10**6, add must not allocate that many
-    fake = seal.SealLine(2, "bob", "alice", "abcd", 1, 10**6, "x")
+    fake = seal.SealLine(2, "bob", "alice", "abcdabcdabcdabcd", 1, 10**6, "x")
     assert store.add(fake) is None
-    assert "abcd" not in store._bags
+    assert store._bags == {}
 
 
 def test_duplicate_i_mismatch_and_bounds():
     store = seal.FragmentStore()
-    l1 = seal.parse_seal_line("SEAL v2 bob alice abababab 1 2 AAAA")
-    l2 = seal.parse_seal_line("SEAL v2 bob alice abababab 1 2 BBBB")
-    l3 = seal.parse_seal_line("SEAL v2 bob alice abababab 0 2 AAAA")
+    l1 = seal.parse_seal_line("SEAL v2 bob alice abababababababab 1 2 AAAA")
+    l2 = seal.parse_seal_line("SEAL v2 bob alice abababababababab 1 2 BBBB")
+    l3 = seal.parse_seal_line("SEAL v2 bob alice abababababababab 0 2 AAAA")
     assert l3 is None
     assert store.add(l1) is None
     assert store.add(l2) is None  # duplicate i different chunk
-    assert store.add(seal.parse_seal_line("SEAL v2 bob alice abababab 2 2 CCCC")) is None
+    assert store.add(seal.parse_seal_line("SEAL v2 bob alice abababababababab 2 2 CCCC")) is None
 
 
 def test_multi_chunk_reassembly(tmp_path: Path):
     a, b = _pair(tmp_path)
-    blob = seal.seal_bytes_v2(b"xyz", b["pk"], a, "#c", "bob", "alice", "c0ffeec0")
-    lines = seal.irc_lines_v2(blob, "bob", "alice", "c0ffeec0")
+    blob = seal.seal_bytes_v2(b"xyz", b["pk"], a, "#c", "bob", "alice", "c0ffeec0c0ffeec0")
+    lines = seal.irc_lines_v2(blob, "bob", "alice", "c0ffeec0c0ffeec0")
     store = seal.FragmentStore()
     got = None
     for ln in lines:
@@ -82,7 +83,7 @@ def test_multi_chunk_reassembly(tmp_path: Path):
         assert parsed is not None
         got = store.add(parsed) or got
     assert got is not None
-    pt = seal.open_bytes_v2(seal.b64d(got), b, "#c", "bob", "alice", "c0ffeec0", a["pk"])
+    pt = seal.open_bytes_v2(seal.b64d(got), b, "#c", "bob", "alice", "c0ffeec0c0ffeec0", a["pk"])
     assert pt == b"xyz"
 
 
@@ -107,7 +108,7 @@ def test_tofu_pin():
 
 
 def test_v1_parser_still_works():
-    line = seal.parse_seal_line("SEAL v1 bob abcdabcd 1 1 QUJD")
+    line = seal.parse_seal_line("SEAL v1 bob abcdabcdabcdabcd 1 1 QUJD")
     assert line is not None
     assert line.version == 1
     assert line.from_nick is None
@@ -115,10 +116,19 @@ def test_v1_parser_still_works():
 
 def test_msgid_rejects_path():
     assert seal.parse_seal_line("SEAL v2 bob alice ../etc/pw 1 1 AAAA") is None
-    assert seal.parse_seal_line("SEAL v2 bob alice abcdabcd 1 1 AAAA") is not None
+    assert seal.parse_seal_line("SEAL v2 bob alice abcdabcdabcdabcd 1 1 AAAA") is not None
 
 
 def test_agpk_must_be_32_bytes():
     assert seal.parse_agpk_line("AGPK v1 short") is None
     pk = seal.b64(b"\x11" * 32)
     assert seal.parse_agpk_line("AGPK v1 " + pk) == pk
+
+
+def test_fragment_key_includes_from_nick():
+    store = seal.FragmentStore()
+    a = seal.parse_seal_line("SEAL v2 bob alice abababababababab 1 2 AAAA")
+    b = seal.parse_seal_line("SEAL v2 bob mallory abababababababab 1 2 BBBB")
+    assert store.add(a) is None
+    assert store.add(b) is None
+    assert len(store._bags) == 2

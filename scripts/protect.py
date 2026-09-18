@@ -36,8 +36,8 @@ def protect_path(path: Path) -> None:
         return
     try:
         os.chmod(path, 0o600 if path.is_file() else 0o700)
-    except OSError:
-        pass
+    except OSError as e:
+        raise ProtectError(f"chmod failed: {e}") from e
 
 
 def _dpapi_protect(data: bytes) -> bytes:

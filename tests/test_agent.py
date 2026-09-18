@@ -38,10 +38,10 @@ def test_433_still_accepts_original_nick(tmp_path: Path, monkeypatch):
     c.peers = {"bob": {"pk": bob["pk"], "nick": "bob"}}
     c.live_nick = "alice_l"
     assert c.original_nick == "alice"
-    blob = seal.seal_bytes_v2(b"payload", alice["pk"], bob, "#ops", "alice", "bob", "aa11bb22")
-    line = seal.irc_lines_v2(blob, "alice", "bob", "aa11bb22")[0]
+    blob = seal.seal_bytes_v2(b"payload", alice["pk"], bob, "#ops", "alice", "bob", "aa11bb22aa11bb22")
+    line = seal.irc_lines_v2(blob, "alice", "bob", "aa11bb22aa11bb22")[0]
     c.handle_privmsg("bob!u@h", "#ops", line)
-    dest = c.inbox / "aa11bb22.bin"
+    dest = c.inbox / "aa11bb22aa11bb22.bin"
     assert dest.read_bytes() == b"payload"
 
 
@@ -54,10 +54,10 @@ def test_wrong_to_nick_not_written(tmp_path: Path, monkeypatch):
     c = irc_agent.Client(_args(tmp_path / "alice", "alice"))
     c.ident = alice
     c.peers = {"bob": {"pk": bob["pk"], "nick": "bob"}}
-    blob = seal.seal_bytes_v2(b"nope", alice["pk"], bob, "#ops", "carol", "bob", "cc00cc00")
-    line = seal.irc_lines_v2(blob, "carol", "bob", "cc00cc00")[0]
+    blob = seal.seal_bytes_v2(b"nope", alice["pk"], bob, "#ops", "carol", "bob", "cc00cc00cc00cc00")
+    line = seal.irc_lines_v2(blob, "carol", "bob", "cc00cc00cc00cc00")[0]
     c.handle_privmsg("bob!u@h", "#ops", line)
-    assert not (c.inbox / "cc00cc00.bin").exists()
+    assert not (c.inbox / "cc00cc00cc00cc00.bin").exists()
 
 
 def test_replay_clobber_guard_not_crypto(tmp_path: Path, monkeypatch):
@@ -69,13 +69,13 @@ def test_replay_clobber_guard_not_crypto(tmp_path: Path, monkeypatch):
     c = irc_agent.Client(_args(tmp_path / "alice", "alice"))
     c.ident = alice
     c.peers = {"bob": {"pk": bob["pk"], "nick": "bob"}}
-    blob = seal.seal_bytes_v2(b"one", alice["pk"], bob, "#ops", "alice", "bob", "r1r1r1r1")
-    line = seal.irc_lines_v2(blob, "alice", "bob", "r1r1r1r1")[0]
+    blob = seal.seal_bytes_v2(b"one", alice["pk"], bob, "#ops", "alice", "bob", "r1r1r1r1r1r1r1r1")
+    line = seal.irc_lines_v2(blob, "alice", "bob", "r1r1r1r1r1r1r1r1")[0]
     c.handle_privmsg("bob!u@h", "#ops", line)
     c.fragments = seal.FragmentStore()
-    (c.inbox / "r1r1r1r1.bin").write_bytes(b"one")
+    (c.inbox / "r1r1r1r1r1r1r1r1.bin").write_bytes(b"one")
     c.handle_privmsg("bob!u@h", "#ops", line)
-    assert (c.inbox / "r1r1r1r1.bin").read_bytes() == b"one"
+    assert (c.inbox / "r1r1r1r1r1r1r1r1.bin").read_bytes() == b"one"
 
 
 def test_peer_mismatch_does_not_overwrite(tmp_path: Path, monkeypatch):
@@ -130,15 +130,15 @@ def test_multi_chunk_forced_small(tmp_path: Path, monkeypatch):
     monkeypatch.setenv("AGENTIC_IRC_HOME", str(tmp_path / "b"))
     b = seal.genkey()
     monkeypatch.setattr(seal, "CHUNK", 8)
-    blob = seal.seal_bytes_v2(b"0123456789abcdef", b["pk"], a, "#c", "bob", "alice", "cafecafe")
-    lines = seal.irc_lines_v2(blob, "bob", "alice", "cafecafe")
+    blob = seal.seal_bytes_v2(b"0123456789abcdef", b["pk"], a, "#c", "bob", "alice", "cafecafecafecafe")
+    lines = seal.irc_lines_v2(blob, "bob", "alice", "cafecafecafecafe")
     assert len(lines) > 1
     store = seal.FragmentStore()
     got = None
     for ln in lines:
         got = store.add(seal.parse_seal_line(ln)) or got
     assert got is not None
-    pt = seal.open_bytes_v2(seal.b64d(got), b, "#c", "bob", "alice", "cafecafe", a["pk"])
+    pt = seal.open_bytes_v2(seal.b64d(got), b, "#c", "bob", "alice", "cafecafecafecafe", a["pk"])
     assert pt == b"0123456789abcdef"
 
 
@@ -154,7 +154,7 @@ def test_v1_not_written_to_inbox(tmp_path: Path, monkeypatch):
     alice = seal.genkey()
     c = irc_agent.Client(_args(tmp_path / "alice", "alice"))
     c.ident = alice
-    line = "SEAL v1 alice abcdabcd 1 1 QUJDRA=="
+    line = "SEAL v1 alice abcdabcdabcdabcd 1 1 QUJDRA=="
     c.handle_privmsg("bob!u@h", "#ops", line)
     assert not list(c.inbox.glob("*.bin"))
 
@@ -168,7 +168,22 @@ def test_wrong_channel_dropped(tmp_path: Path, monkeypatch):
     c = irc_agent.Client(_args(tmp_path / "alice", "alice"))
     c.ident = alice
     c.peers = {"bob": {"pk": bob["pk"], "nick": "bob"}}
-    blob = seal.seal_bytes_v2(b"x", alice["pk"], bob, "#ops", "alice", "bob", "dd11dd11")
-    line = seal.irc_lines_v2(blob, "alice", "bob", "dd11dd11")[0]
+    blob = seal.seal_bytes_v2(b"x", alice["pk"], bob, "#ops", "alice", "bob", "dd11dd11dd11dd11")
+    line = seal.irc_lines_v2(blob, "alice", "bob", "dd11dd11dd11dd11")[0]
     c.handle_privmsg("bob!u@h", "#evil", line)
-    assert not (c.inbox / "dd11dd11.bin").exists()
+    assert not (c.inbox / "dd11dd11dd11dd11.bin").exists()
+
+
+def test_prefix_must_match_from_nick(tmp_path: Path, monkeypatch):
+    monkeypatch.setenv("AGENTIC_IRC_HOME", str(tmp_path / "alice"))
+    alice = seal.genkey()
+    monkeypatch.setenv("AGENTIC_IRC_HOME", str(tmp_path / "bob"))
+    bob = seal.genkey()
+    monkeypatch.setenv("AGENTIC_IRC_HOME", str(tmp_path / "alice"))
+    c = irc_agent.Client(_args(tmp_path / "alice", "alice"))
+    c.ident = alice
+    c.peers = {"bob": {"pk": bob["pk"], "nick": "bob"}}
+    blob = seal.seal_bytes_v2(b"x", alice["pk"], bob, "#ops", "alice", "bob", "ee11ee11ee11ee11")
+    line = seal.irc_lines_v2(blob, "alice", "bob", "ee11ee11ee11ee11")[0]
+    c.handle_privmsg("mallory!u@h", "#ops", line)
+    assert not (c.inbox / "ee11ee11ee11ee11.bin").exists()

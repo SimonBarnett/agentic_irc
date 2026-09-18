@@ -40,7 +40,10 @@ class Client:
         self.args = args
         self.original_nick = args.nick
         self.live_nick = args.nick
-        self.chan = args.channel if args.channel.startswith("#") else "#" + args.channel
+        chan = args.channel if args.channel.startswith("#") else "#" + args.channel
+        if "|" in chan:
+            raise ValueError("channel must not contain |")
+        self.chan = chan
         if args.home:
             os.environ["AGENTIC_IRC_HOME"] = str(Path(args.home).expanduser())
         self.home = seal.home()
@@ -60,7 +63,6 @@ class Client:
         self.joined = threading.Event()
         self.dead = threading.Event()
         self.stop = threading.Event()
-        self._outbox_started = False
         self.sasl_ack = threading.Event()
         self.sasl_plus = threading.Event()
         self.sasl_903 = threading.Event()
@@ -151,6 +153,9 @@ class Client:
         parsed = seal.parse_seal_line(body)
         if parsed is None:
             return
+        if parsed.version == 2 and parsed.from_nick and parsed.from_nick.lower() != src.lower():
+            info("INFO SEAL prefix != from_nick, drop")
+            return
         mine = {self.original_nick.lower(), self.live_nick.lower()}
         if parsed.to_nick.lower() not in mine:
             return
@@ -234,7 +239,7 @@ class Client:
     def outbox_loop(self) -> None:
         path = self.outbox
         last = path.stat().st_size if path.exists() else 0
-        while not self.stop.is_set():
+        while not self.stop.is_set() and not self.dead.is_set():
             if not self.joined.wait(timeout=1):
                 continue
             time.sleep(1)
@@ -264,9 +269,7 @@ class Client:
         self.live_nick = self.original_nick
         self.sock = self.connect()
         threading.Thread(target=self.reader, daemon=True).start()
-        if not self._outbox_started:
-            threading.Thread(target=self.outbox_loop, daemon=True).start()
-            self._outbox_started = True
+        threading.Thread(target=self.outbox_loop, daemon=True).start()
         self.send("CAP LS 302")
         self.send("NICK " + self.live_nick)
         self.send(f"USER {self.live_nick} 0 * :{self.args.realname}")
@@ -309,6 +312,8 @@ class Client:
 
 
 def main() -> None:
+    import signal
+
     p = argparse.ArgumentParser(description="agentic TLS IRC")
     p.add_argument("--host", default="irc.libera.chat")
     p.add_argument("--port", type=int, default=6697)
@@ -322,6 +327,13 @@ def main() -> None:
     p.add_argument("--once", action="store_true", help="no reconnect (tests)")
     args = p.parse_args()
     c = Client(args)
+
+    def _stop(*_a: object) -> None:
+        c.stop.set()
+
+    signal.signal(signal.SIGINT, _stop)
+    if hasattr(signal, "SIGTERM"):
+        signal.signal(signal.SIGTERM, _stop)
     if args.once:
         c.session()
         return

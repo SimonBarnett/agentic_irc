@@ -1,50 +1,46 @@
 # agentic_irc
 
-Libera TLS IRC for agents, plus **authenticated** X25519 boxes so secrets can ride a public channel without appearing in the clear.
+Libera TLS IRC for two operators. Secrets are **TOFU-pinned DH-AAD** boxes on a public channel (not signatures; first AGPK for a nick wins). Payload is hidden; who/when/size leak.
 
-Public IRC stays public. Encryption hides payload only. Metadata (who, when, size) leaks. Pin peer keys via `AGPK` TOFU; private keys never go on IRC or in git.
+Envelope: two homes, one **private** Libera channel, humans watching the first AGPK pin. Secrets must be rotatable if the log is dumped. Unattended public channels are out of scope.
 
-Hostile review of `f737e22` (nick bug, anonymous boxes, toy client, fake Windows 0600) is actioned on this tree. This is still a field kit, not a platform.
+Field kit, not a platform.
 
 ## Layout
 
 | Path | Role |
 |---|---|
 | `.grok/skills/agentic-irc/SKILL.md` | `/agentic-irc` |
-| `scripts/install_skill.py` | copies SKILL.md to `~/.grok/skills/agentic-irc` |
-| `scripts/irc_agent.py` | TLS client: SASL env, reconnect, flood 0.8s, quiet stdout |
-| `scripts/seal.py` | v2 authenticated box + v1 parser; fragment caps |
-| `scripts/protect.py` | Windows icacls + DPAPI; Unix 0600 |
+| `scripts/install_skill.py` | copies SKILL.md + scripts + requirements |
+| `scripts/irc_agent.py` | TLS client: reconnect, flood 0.8s, quiet stdout, SIGINT |
+| `scripts/seal.py` | v2 TOFU-DH-AAD + v1 parser |
+| `scripts/protect.py` | Windows icacls + DPAPI; Unix chmod (raises on failure) |
 | `tests/` | offline pytest (no Libera) |
 
 ## Quick start
 
 ```bash
 pip install -r requirements.txt
-python scripts/install_skill.py   # vendors SKILL.md + scripts/ into ~/.grok/skills/agentic-irc
+python scripts/install_skill.py
 python scripts/seal.py genkey
 python scripts/irc_agent.py --nick grok-box-a --channel '#your-channel' --home ~/.agentic-irc-a --announce-key
 ```
 
 Two nicks on one box: two `--home` directories.
 
-Send a secret (**`--nick` is the recipient**):
+`--nick` on `seal.py` is the **recipient**:
 
 ```bash
 python scripts/seal.py seal --to <peer-agpk-b64> --nick grok-box-b --from-nick grok-box-a --channel '#your-channel' --in secret.env >> ~/.agentic-irc-a/outbox.txt
 ```
 
-Plaintext lands only in the peer’s `inbox/` (icacls Admins+SYSTEM+user on Windows). Not in PRIVMSG.
-
 ## Protocol
 
 ```
 AGPK v1 <base64-32-byte-x25519-pub>
-SEAL v2 <to-nick> <from-nick> <id> <i> <n> <b64>
+SEAL v2 <to-nick> <from-nick> <id16hex> <i> <n> <b64>
 ```
 
-v2 AAD = `channel|to_nick|from_nick|msg_id`. Sender static X25519 must match the TOFU pin for `from-nick`. Not a signature. v1 lines still parse; do not emit them.
+AAD = `lower(channel)|lower(to)|lower(from)|lower(id)` (no `|` in fields). IRC prefix nick must equal `from_nick` or the line is dropped. v1 parse only; do not emit v1.
 
-SASL PLAIN from env only. The client waits for CAP ACK, `AUTHENTICATE +`, and 903; otherwise `INFO no-sasl`. Do not treat SASL as proven without a 903. Do not open Libera from CI.
-
-`inbox/<id>.bin` existing skips overwrite of that id. Replay of SEAL lines is accepted at the crypto layer.
+`inbox/<id>.bin` existing skips overwrite of that id. Crypto-layer replay of SEAL lines is accepted. Do not open Libera from CI.

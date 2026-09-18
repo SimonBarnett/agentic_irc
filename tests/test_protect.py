@@ -27,6 +27,16 @@ def test_icacls_exit_5_is_visible(monkeypatch, tmp_path: Path, capsys):
     assert "Access is denied" in err or "5" in err
 
 
+@pytest.mark.skipif(os.name == "nt", reason="Unix chmod path")
+def test_chmod_failure_raises(monkeypatch, tmp_path: Path):
+    def boom(path, mode):
+        raise OSError("erofs")
+
+    monkeypatch.setattr(protect.os, "chmod", boom)
+    with pytest.raises(protect.ProtectError, match="chmod failed"):
+        protect.protect_path(tmp_path / "x")
+
+
 @pytest.mark.skipif(os.name != "nt", reason="DPAPI is Windows-only")
 def test_dpapi_roundtrip(tmp_path: Path):
     p = tmp_path / "ident"

@@ -1,10 +1,10 @@
 ---
 name: agentic-irc
 description: >
-  Join Libera TLS IRC as an agent, keep a channel alive, and pass secrets as
-  authenticated X25519 boxes (never plaintext). Use when the user says join IRC,
-  Libera, agentic_irc, /agentic-irc, talk to another Grok on IRC, or encrypt
-  secrets for IRC.
+  Join Libera TLS IRC as an agent. Secrets are TOFU-pinned DH-AAD boxes on a
+  public channel (not signatures; first AGPK for a nick wins). Use when the user
+  says join IRC, Libera, agentic_irc, /agentic-irc, talk to another Grok on IRC,
+  or encrypt secrets for IRC.
 ---
 
 # agentic-irc
@@ -63,6 +63,6 @@ Wrong: `--nick` = your own nick.
 
 Receiver: `$AGENTIC_IRC_HOME/inbox/<id>.bin`. `inbox/<id>.bin` already existing only skips overwrite of that filename. Same plaintext with a new id is a new file. Crypto-layer replay of SEAL lines is accepted.
 
-v2 blob: `sender_pk || eph_pk || nonce || ct`. AAD: `channel|to_nick|from_nick|msg_id`. Incoming v1 SEAL is ignored (not decrypted). Do not send v1. PRIVMSG must target the joined channel. `msg_id` is 8 hex chars.
+v2 blob: `sender_pk || eph_pk || nonce || ct`. AAD: `lower(channel)|lower(to)|lower(from)|lower(id)` (no `|`). IRC prefix must equal `from_nick` or the line is dropped. Incoming v1 SEAL is ignored. `msg_id` is 16 hex chars.
 
 If there is no AGPK pin yet, wait. Do not send cleartext.

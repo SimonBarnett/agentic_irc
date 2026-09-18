@@ -23,6 +23,9 @@ def main() -> None:
         if not src.exists():
             raise SystemExit(f"missing {src}")
         shutil.copy2(src, scripts_dest / name)
+    req = root / "requirements.txt"
+    if req.exists():
+        shutil.copy2(req, dest / "requirements.txt")
     print(f"installed {dest}")
 
 

@@ -93,8 +93,8 @@ class Client:
     def sasl_on_line(self, cmd: str, args: list[str], trailing: str) -> list[str]:
         """Advance SASL. Returns lines to send. No network."""
         out: list[str] = []
-        cap_bits = " ".join(args + [trailing]).lower()
-        if cmd == "CAP" and "ack" in cap_bits and "sasl" in cap_bits:
+        tokens = [a.lower() for a in args] + trailing.lower().split()
+        if cmd == "CAP" and "ack" in tokens and "sasl" in tokens:
             self.sasl_ack.set()
             out.append("AUTHENTICATE PLAIN")
         if cmd == "AUTHENTICATE" and trailing.strip() == "+":
@@ -135,12 +135,12 @@ class Client:
             self.send("CAP END")
             return
 
-    def handle_privmsg(self, prefix: str, body: str) -> None:
+    def handle_privmsg(self, prefix: str, target: str, body: str) -> None:
+        if target.lower() != self.chan.lower():
+            return
         src = prefix.split("!", 1)[0].lstrip(":")
-        if body.startswith("AGPK v1 "):
-            pk = body.split(" ", 2)[2].strip()
-            if len(pk) < 40:
-                return
+        pk = seal.parse_agpk_line(body)
+        if pk is not None:
             result = seal.tofu_pin(self.peers, src, pk)
             if result == "pinned":
                 seal.save_peers(self.peers)
@@ -153,6 +153,9 @@ class Client:
             return
         mine = {self.original_nick.lower(), self.live_nick.lower()}
         if parsed.to_nick.lower() not in mine:
+            return
+        if parsed.version != 2:
+            info(f"INFO SEAL {parsed.msg_id} v1 ignored")
             return
         payload = self.fragments.add(parsed)
         if payload is None:
@@ -172,13 +175,13 @@ class Client:
                     blob, self.ident, self.chan, parsed.to_nick, from_nick, parsed.msg_id, pin
                 )
             else:
-                pt = seal.open_bytes_v1(blob, self.ident)
+                return
         except Exception as e:
             info(f"INFO SEAL {parsed.msg_id} decrypt failed {type(e).__name__}")
             return
         dest = self.inbox / f"{parsed.msg_id}.bin"
         if dest.exists():
-            info(f"INFO SEAL {parsed.msg_id} replay ignored")
+            info(f"INFO SEAL {parsed.msg_id} inbox id exists, skip write")
             return
         dest.write_bytes(pt)
         protect.protect_path(dest)
@@ -221,7 +224,8 @@ class Client:
                     for line in self.sasl_on_line(cmd, parts[1:], trailing):
                         self.send(line)
                     if cmd == "PRIVMSG" and " :" in t:
-                        self.handle_privmsg(prefix, t.split(" :", 1)[1])
+                        target = parts[1].lstrip(":") if len(parts) > 1 else ""
+                        self.handle_privmsg(prefix, target, t.split(" :", 1)[1])
         except OSError:
             return
         finally:

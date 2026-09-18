@@ -63,6 +63,6 @@ Wrong: `--nick` = your own nick.
 
 Receiver: `$AGENTIC_IRC_HOME/inbox/<id>.bin`. `inbox/<id>.bin` already existing only skips overwrite of that filename. Same plaintext with a new id is a new file. Crypto-layer replay of SEAL lines is accepted.
 
-v2 blob: `sender_pk || eph_pk || nonce || ct`. AAD: `channel|to_nick|from_nick|msg_id`. v1 parse only; do not send v1.
+v2 blob: `sender_pk || eph_pk || nonce || ct`. AAD: `channel|to_nick|from_nick|msg_id`. Incoming v1 SEAL is ignored (not decrypted). Do not send v1. PRIVMSG must target the joined channel. `msg_id` is 8 hex chars.
 
 If there is no AGPK pin yet, wait. Do not send cleartext.

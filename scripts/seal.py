@@ -11,6 +11,7 @@ import argparse
 import base64
 import json
 import os
+import re
 import secrets
 import sys
 import time
@@ -31,6 +32,8 @@ CHUNK = 300
 MAX_N = 64
 BAG_TTL_S = 120.0
 MAX_INDEX_DIGITS = 2  # n <= 64
+MSGID_RE = re.compile(r"^[a-fA-F0-9]{8}$")
+NICK_RE = re.compile(r"^[A-Za-z\[\\\]^`{|}][A-Za-z0-9\[\\\]^`{|}\\-_]{0,31}$")
 
 
 def home() -> Path:
@@ -251,7 +254,24 @@ def parse_seal_line(line: str) -> SealLine | None:
     n = _parse_index(n_s)
     if i is None or n is None or i > n:
         return None
+    if not MSGID_RE.match(msg_id) or not NICK_RE.match(to_nick):
+        return None
+    if from_nick is not None and not NICK_RE.match(from_nick):
+        return None
     return SealLine(version, to_nick, from_nick, msg_id, i, n, chunk)
+
+
+def parse_agpk_line(body: str) -> str | None:
+    if not body.startswith("AGPK v1 "):
+        return None
+    pk = body[8:].strip()
+    try:
+        raw = b64d(pk)
+    except Exception:
+        return None
+    if len(raw) != 32:
+        return None
+    return b64(raw)
 
 
 class FragmentStore:

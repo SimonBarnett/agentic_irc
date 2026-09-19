@@ -14,6 +14,7 @@ Owner: Bob orchestrates; build agents on **ionos** implement. Prefer model build
 ## Open WPs (priority order)
 
 ### WP-M3-A5 - Mode 3 live IONOS smoke (UAT blocker)
+**Status (2026-09-19):** **CLOSED** at `4abdce5` / mrb-mode3-a5-retest. Mode 3 ready for human UAT on Win8+ Schannel only.
 **Goal:** Chair `cm-bob` OPEN moot; run release `airc-moot-thin.exe` (or local build); operators allowlist; sealed `exec hostname`; stdout to chair; commit log excerpt under `docs/mode3-live-smoke-2026-09-19.md`.  
 **Done when:** Bob can re-MRB Mode 3 toward ready for human UAT (Win8+ only).  
 **Do not:** claim Win95; put keys in git; open Libera from CI.

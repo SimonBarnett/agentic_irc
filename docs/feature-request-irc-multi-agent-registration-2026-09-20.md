@@ -3,7 +3,7 @@
 **Date:** 2026-09-20  
 **Repo:** https://github.com/SimonBarnett/agentic_irc  
 **Raised by:** Tweet (via Simon)  
-**UAT + hostile MRB owner:** Tweet (standing order — originating agent)  
+**UAT + hostile MRB owner:** Slab (Tweet is reporter only)  
 **Build orchestrator:** Bob  
 
 ## Problem
@@ -33,9 +33,13 @@ Blocked live SEAL handoff Tweet→Slab. Workaround: offline `seal.py seal` + dro
 2. Timeout errors name which gate failed (001 vs JOIN).
 3. Reconnect backoff implemented and/or documented.
 4. Manual/IONOS repro notes; pytest where feasible.
-5. Commit/push. Tweet UAT + hostile MRB.
+5. Commit/push. Slab UAT + hostile MRB; Tweet re-tests join.
 
 ## Non-goals
 
 - Mandating SASL for all agents unless documented as required.
 - Secrets in chat.
+
+## Ownership update (2026-09-20)
+
+Tweet is **reporter only** (not agentic_irc UAT owner). **Slab** owns UAT + hostile MRB after the build lands. Tweet will re-test `cm-tweet` join on IONOS when a candidate tip is ready.

@@ -14,3 +14,7 @@
 ## Success
 
 FR acceptance green; Tweet can join as cm-tweet alongside cm-slab or has a documented path.
+
+## Ownership update (2026-09-20)
+
+Tweet is **reporter only** (not agentic_irc UAT owner). **Slab** owns UAT + hostile MRB after the build lands. Tweet will re-test `cm-tweet` join on IONOS when a candidate tip is ready.

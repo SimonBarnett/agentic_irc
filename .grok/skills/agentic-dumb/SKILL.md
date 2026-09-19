@@ -7,9 +7,14 @@ description: >
 
 # agentic-dumb
 
-Not an agent. `scripts/dumb_agent.py` joins the channel (stdlib socket+ssl), announces CAPA on join and every 10 minutes, and runs **allowlisted** ping/sysinfo/exec/get/put from `--operators` only. Unknown operators: no exec, no result on the channel. Truncated exec stdout/stderr spills to `dumb/results/<id>.txt` with `truncated: true`.
+Not an agent. Two connectors share the same PSK DUMB v1 protocol:
 
-Generate PSK **off-channel** (`python scripts/seal.py dumb-key`). Copy `connector.key` by RDP/USB. Never print it. Compare sha256 fingerprints out of band.
+- **Python reference:** `scripts/dumb_agent.py` joins the channel (stdlib socket+ssl), announces CAPA on join and every 10 minutes, and runs **allowlisted** ping/sysinfo/exec/get/put from `--operators` only.
+- **net45 adapter:** `src/dumb_dotnet/airc-dumb.exe` (TcpClient + SslStream TLS 1.2). Same CAPA, jobs, jail, and wire rules. Python remains the protocol reference.
+
+Unknown operators: no exec, no result ciphertext on the channel. Truncated exec stdout/stderr spills to `dumb/results/<id>.txt` with `truncated: true`. Empty `--operators` is refused.
+
+Generate PSK **off-channel** (`python scripts/seal.py dumb-key`). Copy `connector.key` by RDP/USB. Never print it. Compare sha256 fingerprints out of band. The file may be raw 32 bytes or `AIRC1`+DPAPI.
 
 `--operators` is required. Jail `--allow-path` (default `C:\agent-drop`). Default bins: cmd.exe, powershell.exe, hostname.exe, ipconfig.exe, whoami.exe.
 
@@ -20,7 +25,7 @@ python scripts/dumb_ctl.py exec --home H --from-nick ME --to srv2012-box --argv 
 
 TLS 1.2 preflight on Server 2012: if SslException, enable SchUseStrongCrypto (Microsoft docs). Do not dump connector.key. Do not exec if operators empty.
 
-`src/dumb_dotnet` is a net45 **stub** (prints INFO, exits 0) until Phase 5. Python `scripts/dumb_agent.py` is the protocol reference. Build: `msbuild airc-dumb.csproj /p:Configuration=Release /p:TargetFrameworkVersion=v4.5`. Use `airc-dumb.cmd` as the scheduled-task wrapper.
+Build the net45 exe: `src/dumb_dotnet/build.bat` or `msbuild airc-dumb.csproj /p:Configuration=Release /p:TargetFrameworkVersion=v4.5`. No runtime NuGet for crypto. Use `airc-dumb.cmd` as the scheduled-task wrapper. `--tls-insecure` is lab/offline only. Offline pytest: `DOTNET_DUMB_EXE`. Not ready for human UAT (no live Server 2012 Libera claim from this tree).
 
 Scheduled task (operator fills paths):
 

@@ -1,6 +1,6 @@
 # airc-moot-thin (Mode 3)
 
-Win32 **ANSI** 32-bit console PE. Not an LLM. Not 16-bit DOS. Not the deferred .NET `airc-dumb` stub.
+Win32 **ANSI** 32-bit console PE. Not an LLM. Not 16-bit DOS. Not the net45 `airc-dumb.exe` connector (that lives in `src/dumb_dotnet/`).
 
 Joins a moot, accepts **DUMB v1** sealed jobs from `--operators`, runs allowlisted bins inside `--allow-path`, returns stdout/stderr/rc.
 

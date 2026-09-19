@@ -34,4 +34,23 @@ jobs:
           pip install -r requirements.txt pytest
           $env:AIRC_MOOT_THIN_EXE = (Resolve-Path src/moot_thin/airc-moot-thin.exe).Path
           pytest -q
+  dumb-dotnet:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build
+        working-directory: src/dumb_dotnet
+        run: .\build.bat
+      - name: Selftest
+        working-directory: src/dumb_dotnet
+        run: .\airc-dumb.exe --selftest
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: pytest with exe
+        shell: pwsh
+        run: |
+          pip install -r requirements.txt pytest
+          $env:DOTNET_DUMB_EXE = (Resolve-Path src/dumb_dotnet/airc-dumb.exe).Path
+          pytest -q
 

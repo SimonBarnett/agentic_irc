@@ -355,11 +355,3 @@ def test_empty_operators_refused(monkeypatch):
     )
     with pytest.raises(SystemExit, match="operators"):
         dumb_agent.main()
-
-
-@pytest.mark.skipif(not os.environ.get("DOTNET_DUMB_EXE"), reason="DOTNET_DUMB_EXE not set")
-def test_dotnet_exe_if_present():
-    exe = os.environ["DOTNET_DUMB_EXE"]
-    r = subprocess.run([exe], capture_output=True, text=True, timeout=10)
-    assert r.returncode == 0
-    assert "INFO" in (r.stdout or "")

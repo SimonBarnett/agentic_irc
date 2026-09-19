@@ -19,7 +19,7 @@ Build proposal / engineering handoff for three extensions on the existing two-op
 
 ## Status
 
-**Ready for human UAT** (Python phases 0-4). See [mrb-2026-09-19-v2.md](./mrb-2026-09-19-v2.md). .NET Phase 5 still deferred. Phases 0â€“4 Python surface is on `main`; MRB blockers 1â€“4 (AIRC-FILE envelope, dumb listen, D2 on the wire, truncated exec spill) are implemented. See [gap-vs-feature-request-2026-09-19.md](./gap-vs-feature-request-2026-09-19.md).
+**Python phases 0-4:** ready for human UAT (see [mrb-2026-09-19-v2.md](./mrb-2026-09-19-v2.md)). **Phase 5 .NET clone:** present in `src/dumb_dotnet/` pending Bob MRB; **not** ready for human UAT. See [gap-vs-feature-request-2026-09-19.md](./gap-vs-feature-request-2026-09-19.md).
 
 | Deliverable | Status |
 |---|---|
@@ -28,7 +28,7 @@ Build proposal / engineering handoff for three extensions on the existing two-op
 | FILE FileBag + hash-before-`complete/` | Implemented; F1â€“F8 offline including AIRC-FILE v1 envelope on tier S |
 | Dumb Python jail/PSK/busy/timeout | Job runner + `dumb_agent.py` listen (connect/join/flood/CAPA/jobs); D2 no result on wire; truncated spill |
 | Skills + `install_skill.py` | Present (`agentic-moot` / `agentic-file` / `agentic-dumb`) |
-| `.NET` `airc-dumb.exe` | **Stub** (INFO + exit 0). MSBuild + TLS 1.2 preflight documented. `airc-dumb.cmd` wrapper added. Not a protocol clone. |
+| `.NET` `airc-dumb.exe` | net45 protocol clone (SslStream TLS 1.2, CAPA, PSK jobs, jail, D2, truncated spill). Offline `DOTNET_DUMB_EXE`. Pending Bob MRB. Not ready for human UAT. |
 | Manual Libera session | `tests/MANUAL.md` only â€” not run by CI |
 
-Do not claim the Server 2012 adapter exists until Phase 5 clones `dumb_agent.py`. Do not claim ready for human UAT.
+Do not claim live Server 2012 Libera from CI. Do not claim Phase 5 ready for human UAT until Bob MRB.

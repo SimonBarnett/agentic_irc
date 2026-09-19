@@ -20,7 +20,7 @@ Owner: Bob orchestrates; build agents on **ionos** implement. Prefer model build
 
 ### WP-P5 - .NET 4.5 `airc-dumb.exe` protocol clone
 **Goal:** Replace stub in `src/dumb_dotnet/` with behaviour-compatible clone of `scripts/dumb_agent.py` (TcpClient+SslStream TLS 1.2, CAPA, PSK DUMB jobs, jail, ping/sysinfo/exec/get/put). MSBuild net45; no runtime NuGet crypto if avoidable. Offline tests via `DOTNET_DUMB_EXE` where possible. Update README + skill honesty.  
-**Done when:** stub claim removed; pytest path with built exe green or documented skip reasons; Bob MRB.  
+**Status:** implemented in tree (pending Bob MRB). **Not** ready for human UAT.  
 **Do not:** break Python dumb; Mode 3 is separate.
 
 ### WP-YIELD - `YIELD *` returns floor to chair

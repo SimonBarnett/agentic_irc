@@ -14,8 +14,8 @@
 | File | Tier S AIRC-FILE v1 encode on offer / decode on receive; basename jail; hash/length gate; DONE path hashes | F1–F8 offline (F1 is envelope, not raw SEAL bytes) |
 | Dumb Python | Listen loop (stdlib socket+ssl) + jail/PSK + CAPA + job path | D1–D10 including D2 no result ciphertext on connector path; truncated spill |
 | Skills + installer | Yes | Not asserted in pytest |
-| `.NET` | **Stub** (INFO + exit 0) + `airc-dumb.cmd` | Skip unless `DOTNET_DUMB_EXE` |
-| CI | `pytest -q` only | Tests must not mention `irc.libera.chat` |
+| `.NET` | net45 protocol clone `airc-dumb.exe` + `airc-dumb.cmd` | Skip unless `DOTNET_DUMB_EXE` / built exe |
+| CI | ubuntu pytest + windows Mode 3 + windows net45 dumb | Tests must not mention `irc.libera.chat` |
 
 Do **not** treat this list as ready for human UAT.
 
@@ -84,9 +84,9 @@ Do **not** treat this list as ready for human UAT.
 | 4 | 20 KiB tier M + sha256 | **Covered** |
 | 5 | Jail + unknown operators | **Covered** (incl. no result on connector wire) |
 | 6 | DUMB-PSK Python seal/open | **Covered** |
-| 7 | .NET + MSBuild + TLS 1.2 preflight | **Stub only.** Recipe + `airc-dumb.cmd` + skill note. Not a protocol clone. |
-| 8 | README field kit | Yes; .NET described as stub; Python connector is a listen loop |
-| 9 | No CI resolves `irc.libera.chat` | Workflow is pytest only; tests forbid the hostname |
+| 7 | .NET + MSBuild + TLS 1.2 preflight | **Clone present.** net45 `airc-dumb.exe` (SslStream TLS 1.2, CAPA, PSK jobs, jail, D2, truncated spill). Offline via `DOTNET_DUMB_EXE`. Not Bob-MRB'd; not ready for human UAT. |
+| 8 | README field kit | Yes; .NET described as net45 clone pending MRB; Python connector is a listen loop |
+| 9 | No CI resolves `irc.libera.chat` | Workflow is offline pytest + local exe selftest; tests forbid the hostname |
 
 ---
 
@@ -94,7 +94,7 @@ Do **not** treat this list as ready for human UAT.
 
 Do **not** treat this list as ready for human UAT.
 
-1. **Phase 5 .NET protocol clone** — `Program.cs` still prints INFO and exits 0. No TcpClient, SslStream, AES-GCM, jail, CAPA. Highest remaining host-constraint gap. Deferred until after Python listen (now present).
+1. **Phase 5 .NET protocol clone** — **Landed in tree** (`src/dumb_dotnet/`, TcpClient+SslStream TLS 1.2, CAPA, PSK DUMB v1 ping/sysinfo/exec/get/put, jail, unknown operator no result ciphertext, truncated spill). Offline tests in `tests/test_dumb_dotnet.py`. Pending Bob MRB. **Not** ready for human UAT. Live Server 2012 Libera is still human/manual.
 2. **`FLOOR_IDLE_S`** — skill-only (PDF: optional chair hint in v1).
 3. **`YIELD *`** — code sets `floor=None` (state-machine box). Table 3 prose says “* returns it to chair”. Left as-is.
 4. **Manual Libera session** (`tests/MANUAL.md` / §12.6) — human-only; not run from this machine.
@@ -114,4 +114,4 @@ Group SEAL, DCC, web UI, signed `airc-dumb.exe` from CI, connector as SYSTEM wit
 
 ## This dispatch
 
-MRB blockers 1–4 only. `pytest -q` green. .NET remains a stub. **Not** self-declared ready for human UAT.
+WP-P5 .NET protocol clone. `pytest -q` green with or without `DOTNET_DUMB_EXE`. **Not** self-declared ready for human UAT.

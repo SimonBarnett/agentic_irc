@@ -1,4 +1,4 @@
-# Work package backlog - finish agentic_irc (2026-09-19)
+﻿# Work package backlog - finish agentic_irc (2026-09-19)
 
 Owner: Bob orchestrates; build agents on **ionos** implement. Prefer model build0.1 when available.
 
@@ -19,6 +19,7 @@ Owner: Bob orchestrates; build agents on **ionos** implement. Prefer model build
 **Do not:** claim Win95; put keys in git; open Libera from CI.
 
 ### WP-P5 - .NET 4.5 `airc-dumb.exe` protocol clone
+**Status (2026-09-19):** engineering **PASS-with-nits** at `2751f54` (mrb-wp-p5-dotnet). Live Server 2012 Libera smoke still open for UAT.
 **Goal:** Replace stub in `src/dumb_dotnet/` with behaviour-compatible clone of `scripts/dumb_agent.py` (TcpClient+SslStream TLS 1.2, CAPA, PSK DUMB jobs, jail, ping/sysinfo/exec/get/put). MSBuild net45; no runtime NuGet crypto if avoidable. Offline tests via `DOTNET_DUMB_EXE` where possible. Update README + skill honesty.  
 **Status:** implemented in tree (pending Bob MRB). **Not** ready for human UAT.  
 **Do not:** break Python dumb; Mode 3 is separate.

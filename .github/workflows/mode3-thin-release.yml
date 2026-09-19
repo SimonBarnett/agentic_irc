@@ -1,0 +1,74 @@
+name: mode3-thin-release
+on:
+  push:
+    branches: [main]
+    paths:
+      - "src/moot_thin/**"
+      - ".github/workflows/mode3-thin-release.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x86
+      - name: Build
+        working-directory: src/moot_thin
+        run: .\build.bat
+      - name: Selftest
+        working-directory: src/moot_thin
+        run: .\airc-moot-thin.exe --selftest
+      - name: Checksum
+        working-directory: src/moot_thin
+        shell: pwsh
+        run: |
+          $h = (Get-FileHash airc-moot-thin.exe -Algorithm SHA256).Hash.ToLower()
+          Set-Content -Path airc-moot-thin.exe.sha256 -Value "$h  airc-moot-thin.exe" -Encoding ascii
+          Get-Content airc-moot-thin.exe.sha256
+      - name: Rolling release mode3-thin
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: mode3-thin
+          name: mode3-thin
+          target_commitish: ${{ github.sha }}
+          body: |
+            Rolling Mode 3 thin client (`airc-moot-thin.exe`), 32-bit Win32 ANSI console PE.
+            Rebuilds of `src/moot_thin/**` replace these assets.
+
+            This release does **not** claim Windows 95 TLS. See docs/mode3-tls-spike.md
+            and docs/mode3-os-matrix.md. Live Libera is expected on Windows 8 / Server 2012+.
+
+            Do not attach secrets. Generate `connector.key` off IRC.
+          files: |
+            src/moot_thin/airc-moot-thin.exe
+            src/moot_thin/airc-moot-thin.exe.sha256
+            src/moot_thin/airc-moot-thin.ini.example
+          make_latest: false
+      - name: Immutable version tag if new
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: pwsh
+        run: |
+          $ver = (Get-Content src/moot_thin/VERSION -Raw).Trim()
+          $tag = "airc-moot-thin-v$ver"
+          git fetch --tags --force
+          $exists = git tag -l $tag
+          if ($exists) {
+            Write-Host "tag $tag already exists; leaving immutable"
+            exit 0
+          }
+          gh release create $tag `
+            src/moot_thin/airc-moot-thin.exe `
+            src/moot_thin/airc-moot-thin.exe.sha256 `
+            src/moot_thin/airc-moot-thin.ini.example `
+            --title $tag `
+            --notes "Mode 3 thin client $ver. 32-bit Win32 ANSI. Does not claim Win95 TLS. See docs/mode3-release.md." `
+            --target ${{ github.sha }}

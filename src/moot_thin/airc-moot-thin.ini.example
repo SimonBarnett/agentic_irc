@@ -1,0 +1,17 @@
+; Example config for airc-moot-thin.exe
+; Copy to airc-moot-thin.ini and fill in. CLI flags override these keys.
+; Do not put PSK material, SASL passwords, or API key assignments in this file.
+; Generate connector.key off IRC and point key= at the 32-byte file (or AIRC1+DPAPI file).
+
+[client]
+nick=thin-box
+channel=#ops
+moot=0123456789abcdef
+home=C:\airc-thin
+allow_path=C:\airc-thin\jail
+operators=cm-bob
+key=C:\airc-thin\dumb\connector.key
+host=irc.libera.chat
+port=6697
+hello=
+realname=airc-moot-thin

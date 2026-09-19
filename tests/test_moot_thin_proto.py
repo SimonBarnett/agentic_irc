@@ -1,0 +1,242 @@
+from __future__ import annotations
+
+import json
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+import pytest
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
+import dumb_agent
+import moot_thin_proto as thin
+import seal
+import wire
+
+FIX = Path(__file__).resolve().parent / "fixtures" / "mode3"
+ROOT = Path(__file__).resolve().parents[1]
+JID = "0123456789abcdef"
+
+
+def _exe() -> str | None:
+    env = os.environ.get("AIRC_MOOT_THIN_EXE")
+    if env and Path(env).exists():
+        return env
+    cand = ROOT / "src" / "moot_thin" / "airc-moot-thin.exe"
+    if cand.exists():
+        return str(cand)
+    return None
+
+
+def test_config_parse_ini_and_cli_override():
+    text = (FIX / "config_ok.ini").read_text(encoding="utf-8")
+    ini = thin.parse_ini(text)
+    cfg = thin.merge_config(ini, None)
+    thin.validate_config(cfg)
+    assert cfg.nick == "thin-box"
+    assert cfg.channel == "#ops"
+    assert cfg.moot_id == JID
+    assert "alice" in thin.operators_set(cfg.operators)
+    argv = thin.parse_argv(["--nick", "other-box", "--operators", "cm-bob"])
+    cfg2 = thin.merge_config(ini, argv)
+    thin.validate_config(cfg2)
+    assert cfg2.nick == "other-box"
+    assert thin.operators_set(cfg2.operators) == {"cm-bob"}
+
+
+def test_empty_operators_refused():
+    cfg = thin.ThinConfig(
+        nick="thin-box",
+        channel="#ops",
+        moot_id=JID,
+        home=".",
+        allow_path=".",
+        operators="",
+    )
+    with pytest.raises(ValueError, match="operators"):
+        thin.validate_config(cfg)
+    with pytest.raises(ValueError, match="operators"):
+        thin.require_operators("  ,  ")
+
+
+def test_moot_join_golden():
+    want = (FIX / "moot_join.txt").read_text(encoding="utf-8").strip()
+    assert thin.moot_join_line(JID) == want
+    parsed = wire.parse_moot_line(want)
+    assert parsed is not None
+    assert parsed.verb == "JOIN"
+    assert parsed.moot_id == JID
+
+
+def test_capa_line_shape():
+    line = thin.capa_line("thin-box", r"C:\jail", True)
+    p = wire.parse_capa_line(line)
+    assert p is not None
+    assert p.nick == "thin-box"
+    assert "exec" in p.verbs
+    assert p.psk == "1"
+
+
+def test_aesgcm_vector_matches_seal():
+    vec = json.loads((FIX / "aesgcm_vector.json").read_text(encoding="utf-8"))
+    key = bytes.fromhex(vec["key_hex"])
+    blob = bytes.fromhex(vec["blob_hex"])
+    pt = seal.dumb_open_bytes(blob, key, vec["channel"], vec["to_nick"], vec["from_nick"], vec["msg_id"])
+    assert pt.decode("utf-8") == vec["plaintext"]
+    job = json.loads(pt)
+    assert job["op"] == "ping"
+    assert job["id"] == JID
+
+
+def test_unknown_operator_drop_no_wire_intent(tmp_path):
+    job = json.loads((FIX / "job_exec.json").read_text(encoding="utf-8"))
+    ops = {"alice"}
+    assert thin.emit_result_on_wire("mallory", ops) is False
+    assert thin.emit_result_on_wire("alice", ops) is True
+    out = thin.run_job(job, operators=ops, from_nick="mallory", allow_path=tmp_path, home=tmp_path)
+    assert out["ok"] is False
+    assert out["error"] == "operator"
+
+
+def test_jail_refuse(tmp_path):
+    drop = tmp_path / "drop"
+    drop.mkdir()
+    job = {"v": 1, "op": "get", "id": JID, "path": str(drop / ".." / "Windows" / "win.ini")}
+    out = thin.run_job(job, operators={"alice"}, from_nick="alice", allow_path=drop, home=tmp_path)
+    assert out["ok"] is False
+    assert out["error"] == "jail"
+    job2 = {"v": 1, "op": "get", "id": JID, "path": r"\\server\share\x"}
+    out2 = thin.run_job(job2, operators={"alice"}, from_nick="alice", allow_path=drop, home=tmp_path)
+    assert out2["error"] == "jail"
+
+
+def test_exec_stdout_rc_framing(tmp_path):
+    def runner(argv, cwd, timeout):
+        return 0, "ionos-box\n", ""
+
+    job = json.loads((FIX / "job_exec.json").read_text(encoding="utf-8"))
+    job["_runner"] = runner
+    out = thin.run_job(job, operators={"alice"}, from_nick="alice", allow_path=tmp_path, home=tmp_path)
+    assert out["op"] == "exec"
+    assert out["ok"] is True
+    assert out["rc"] == 0
+    assert out["stdout"] == "ionos-box\n"
+    assert out.get("truncated") is False
+
+
+def test_truncation_flag_and_spill(tmp_path):
+    big = "B" * 9000
+
+    def runner(argv, cwd, timeout):
+        return 0, big, "e"
+
+    job = {"v": 1, "op": "exec", "id": JID, "argv": ["hostname"], "_runner": runner}
+    out = thin.run_job(job, operators={"alice"}, from_nick="alice", allow_path=tmp_path, home=tmp_path)
+    assert out["truncated"] is True
+    assert len(out["stdout"]) + len(out["stderr"]) <= 8192
+    spill = tmp_path / "dumb" / "results" / f"{JID}.txt"
+    assert big in spill.read_text(encoding="utf-8")
+
+
+def test_version_sync():
+    ver = (ROOT / "src" / "moot_thin" / "VERSION").read_text(encoding="utf-8").strip()
+    main = (ROOT / "src" / "moot_thin" / "main.c").read_text(encoding="utf-8")
+    assert f'"{ver}"' in main
+    assert ver == "0.1.0"
+
+
+def test_release_docs_locked_defaults():
+    rel = (ROOT / "docs" / "mode3-release.md").read_text(encoding="utf-8")
+    spike = (ROOT / "docs" / "mode3-tls-spike.md").read_text(encoding="utf-8")
+    readme = (ROOT / "src" / "moot_thin" / "README.md").read_text(encoding="utf-8")
+    assert "mode3-thin" in rel
+    assert "airc-moot-thin-v" in rel
+    assert "Win95 cannot be claimed" in spike or "No claim that Win95" in spike
+    assert "does **not** claim a Win95 pass" in readme or "not claim" in readme.lower()
+
+
+@pytest.mark.skipif(_exe() is None, reason="airc-moot-thin.exe not built")
+def test_c_exe_selftest():
+    exe = _exe()
+    r = subprocess.run([exe, "--selftest"], capture_output=True, text=True, timeout=60)
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "selftest ok" in (r.stdout or "")
+
+
+@pytest.mark.skipif(_exe() is None, reason="airc-moot-thin.exe not built")
+def test_c_exe_empty_operators(tmp_path):
+    exe = _exe()
+    r = subprocess.run(
+        [
+            exe,
+            "--offline",
+            "--nick",
+            "box",
+            "--channel",
+            "#ops",
+            "--moot",
+            JID,
+            "--home",
+            str(tmp_path),
+            "--allow-path",
+            str(tmp_path),
+            "--operators",
+            "",
+            "--from-nick",
+            "alice",
+            "--job-in",
+            str(FIX / "job_ping.json"),
+        ],
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    assert r.returncode != 0
+    text = (r.stdout or "") + (r.stderr or "")
+    assert "operators" in text.lower()
+
+
+@pytest.mark.skipif(_exe() is None, reason="airc-moot-thin.exe not built")
+def test_c_exe_offline_operator_drop(tmp_path):
+    exe = _exe()
+    outp = tmp_path / "r.json"
+    r = subprocess.run(
+        [
+            exe,
+            "--offline",
+            "--nick",
+            "box",
+            "--channel",
+            "#ops",
+            "--moot",
+            JID,
+            "--home",
+            str(tmp_path),
+            "--allow-path",
+            str(tmp_path),
+            "--operators",
+            "alice",
+            "--from-nick",
+            "mallory",
+            "--job-in",
+            str(FIX / "job_exec.json"),
+            "--job-out",
+            str(outp),
+        ],
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    assert r.returncode == 0, r.stdout + r.stderr
+    doc = json.loads(outp.read_text(encoding="utf-8"))
+    assert doc["ok"] is False
+    assert doc["error"] == "operator"
+
+
+def test_default_bins_powershell_optional():
+    assert "cmd.exe" in dumb_agent.DEFAULT_BINS
+    assert "hostname.exe" in dumb_agent.DEFAULT_BINS
+    src = (ROOT / "src" / "moot_thin" / "jail.c").read_text(encoding="utf-8")
+    assert "powershell_present" in src
+    assert "cmd.exe" in src

@@ -12,3 +12,26 @@ jobs:
           python-version: "3.12"
       - run: pip install -r requirements.txt pytest
       - run: pytest -q
+  moot-thin:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x86
+      - name: Build
+        working-directory: src/moot_thin
+        run: .\build.bat
+      - name: Selftest
+        working-directory: src/moot_thin
+        run: .\airc-moot-thin.exe --selftest
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: pytest with exe
+        shell: pwsh
+        run: |
+          pip install -r requirements.txt pytest
+          $env:AIRC_MOOT_THIN_EXE = (Resolve-Path src/moot_thin/airc-moot-thin.exe).Path
+          pytest -q
+

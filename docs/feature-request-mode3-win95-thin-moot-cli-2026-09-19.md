@@ -1,6 +1,6 @@
 # Feature request — Mode 3: Win95-era thin moot CLI (2026-09-19)
 
-**Status:** parked for build agent  
+**Status:** first ticket on `main` (P0–P3). Not ready for human UAT. Win95 TLS **not** claimed (`docs/mode3-tls-spike.md`).  
 **Repo:** SimonBarnett/agentic_irc  
 **Related:** Mode 1 (agent↔agent SEAL), Mode 2 (moot + FILE), Mode DUMB (Server 2012 `dumb_agent.py` / deferred .NET Phase 5). Mode 3 is **not** a reimplementation of Phase 5; it is a new product surface.
 

@@ -15,6 +15,7 @@ Field kit, not a platform.
 | `scripts/irc_agent.py` | TLS client: reconnect, flood 0.8s, quiet stdout, SIGINT |
 | `scripts/seal.py` | v2 TOFU-DH-AAD + v1 parser |
 | `scripts/protect.py` | Windows icacls + DPAPI; Unix chmod (raises on failure) |
+| `src/moot_thin/` | Mode 3 `airc-moot-thin.exe` (Win32 ANSI; Schannel; DUMB jobs + moot JOIN) |
 | `tests/` | offline pytest (no Libera) |
 
 ## Quick start
@@ -64,5 +65,8 @@ Still a field kit. Still a **private** channel. Unattended public channels stay 
 | `MOOT v1` | `/agentic-moot` | Chair, roster, floor. Do not SAY unless you hold the floor. |
 | `FILE v1` | `/agentic-file` | Tier S = SEAL; M = clear CHUNKs (not secret); L = path drop. |
 | `DUMB v1` / `CAPA v1` | `/agentic-dumb` | Allowlisted connector. `--operators` required. Jail. PSK off-channel. |
+| Mode 3 thin CLI | `airc-moot-thin.exe` | Native Win32 ANSI moot member. Same DUMB jobs. `--operators` required. Release tag `mode3-thin`. Win95 TLS **not** claimed. |
 
 Python reference: `scripts/dumb_agent.py` (stdlib socket+ssl listen: connect/join/flood/CAPA/jobs; jail + PSK). Operators drive it with `dumb_ctl.py`. Server 2012 exe: `src/dumb_dotnet/` is a **net45 stub** (INFO + exit 0), not a protocol clone. Documented build: `msbuild airc-dumb.csproj /p:Configuration=Release /p:TargetFrameworkVersion=v4.5`. TLS 1.2 preflight (`SchUseStrongCrypto`) is in the skill and `src/dumb_dotnet/README.md`. Wrapper: `airc-dumb.cmd`. CI stays `pytest -q` with no Libera.
+
+Mode 3 native client lives in `src/moot_thin/` (`airc-moot-thin.exe`, GitHub Release `mode3-thin`). It is not a Phase 5 .NET port. It does **not** claim Windows 95 TLS; see `docs/mode3-tls-spike.md` and `docs/mode3-os-matrix.md`.

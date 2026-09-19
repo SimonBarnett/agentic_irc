@@ -9,3 +9,11 @@ inbox/
 outbox.txt
 .DS_Store
 Thumbs.db
+src/moot_thin/*.exe
+src/moot_thin/*.obj
+src/moot_thin/*.o
+src/moot_thin/*.pdb
+src/moot_thin/*.ilk
+src/moot_thin/*.sha256
+src/moot_thin/*.exp
+src/moot_thin/*.lib

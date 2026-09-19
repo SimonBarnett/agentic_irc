@@ -1,0 +1,10 @@
+{
+  "key_hex": "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff",
+  "nonce_hex": "0102030405060708090a0b0c",
+  "channel": "#ops",
+  "to_nick": "box",
+  "from_nick": "alice",
+  "msg_id": "0123456789abcdef",
+  "plaintext": "{\"v\":1,\"op\":\"ping\",\"id\":\"0123456789abcdef\"}",
+  "blob_hex": "0102030405060708090a0b0c01507382d2268963858899fb4e9f767c14bc8fd55e95c4790ea2c59d7f03107e72e67adda31cd8f667954d7248703b3eb582e3b2f1d462c441bba7"
+}

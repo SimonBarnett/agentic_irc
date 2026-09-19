@@ -9,7 +9,7 @@ description: >
 
 Pick the tier. Scripts/logs may be M on a **private** channel. Secrets, identity.json, connector.key, inbox/ → **tier S** (SEAL v2) or stay off IRC (tier L to a path the receiver already has).
 
-Name is a basename only: `^[A-Za-z0-9._+-]{1,80}$`. No slash, space, or `..`.
+Name is a basename only: `^[A-Za-z0-9._+-]{1,80}$`. No slash, space, `..`, or drive letters. Tier S plaintext inside SEAL v2 is an `AIRC-FILE v1` envelope (name/bytes/sha256/mode, then a blank line, then raw bytes). Receiver decodes the envelope and writes `files/complete/` only if the basename jail, sha256, and length match.
 
 ```
 python scripts/filexfer.py offer --home H --channel '#ops' --from-nick ME --to PEER --in ./note.txt --tier S

@@ -19,16 +19,16 @@ Build proposal / engineering handoff for three extensions on the existing two-op
 
 ## Status
 
-**Not ready for human UAT.** Phases 0–4 Python surface is on `main`; this pass closed the thinnest §12 test holes and documented remaining PDF items. See [gap-vs-feature-request-2026-09-19.md](./gap-vs-feature-request-2026-09-19.md).
+**Not ready for human UAT.** Phases 0–4 Python surface is on `main`; MRB blockers 1–4 (AIRC-FILE envelope, dumb listen, D2 on the wire, truncated exec spill) are implemented. See [gap-vs-feature-request-2026-09-19.md](./gap-vs-feature-request-2026-09-19.md).
 
 | Deliverable | Status |
 |---|---|
 | Wire CAPA/MOOT/FILE/DUMB parsers | Implemented; W1–W6 covered offline |
 | Moot chair/roster/floor + skill | Implemented; 3-nick non-floor SAY drop via `handle_privmsg` |
-| FILE FileBag + hash-before-`complete/` | Implemented; F1–F8 offline (tier S is still raw SEAL bytes, not AIRC-FILE envelope) |
-| Dumb Python jail/PSK/busy/timeout | Job runner implemented; `dumb_agent.main` is **no-listen** |
+| FILE FileBag + hash-before-`complete/` | Implemented; F1–F8 offline including AIRC-FILE v1 envelope on tier S |
+| Dumb Python jail/PSK/busy/timeout | Job runner + `dumb_agent.py` listen (connect/join/flood/CAPA/jobs); D2 no result on wire; truncated spill |
 | Skills + `install_skill.py` | Present (`agentic-moot` / `agentic-file` / `agentic-dumb`) |
 | `.NET` `airc-dumb.exe` | **Stub** (INFO + exit 0). MSBuild + TLS 1.2 preflight documented. `airc-dumb.cmd` wrapper added. Not a protocol clone. |
 | Manual Libera session | `tests/MANUAL.md` only — not run by CI |
 
-Do not claim the Server 2012 adapter exists until Phase 5 clones `dumb_agent.py`.
+Do not claim the Server 2012 adapter exists until Phase 5 clones `dumb_agent.py`. Do not claim ready for human UAT.

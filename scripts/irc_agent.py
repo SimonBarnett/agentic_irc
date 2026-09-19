@@ -249,6 +249,8 @@ class Client:
         except Exception as e:
             info(f"INFO SEAL {parsed.msg_id} decrypt failed {type(e).__name__}")
             return
+        if self._take_airc_file(parsed.msg_id, pt):
+            return
         dest = self.inbox / f"{parsed.msg_id}.bin"
         if dest.exists():
             info(f"INFO SEAL {parsed.msg_id} inbox id exists, skip write")
@@ -256,6 +258,37 @@ class Client:
         dest.write_bytes(pt)
         protect.protect_path(dest)
         info(f"INFO SEAL {parsed.msg_id} -> inbox ({len(pt)} bytes)")
+
+    def _take_airc_file(self, msg_id: str, pt: bytes) -> bool:
+        """Consume AIRC-FILE v1 plaintext into files/complete/. True = not an inbox SEAL."""
+        if not pt.startswith(b"AIRC-FILE v1"):
+            return False
+        env = filexfer.decode_airc_file(pt)
+        if env is None:
+            info(f"INFO file DONE id={msg_id} fail")
+            return True
+        offer = self.file_bags._offers.get(msg_id.lower(), {})
+        if offer:
+            if offer.get("sha") and str(offer["sha"]).lower() != env["sha256"]:
+                info(f"INFO file DONE id={msg_id} fail")
+                return True
+            try:
+                offered_n = int(offer["bytes"]) if offer.get("bytes") is not None else None
+            except (TypeError, ValueError):
+                offered_n = None
+            if offered_n is not None and offered_n != env["bytes"]:
+                info(f"INFO file DONE id={msg_id} fail")
+                return True
+            if offer.get("name") and offer["name"] != env["name"]:
+                info(f"INFO file DONE id={msg_id} fail")
+                return True
+        if filexfer.complete_write(
+            self.home, msg_id, env["name"], env["data"], env["sha256"], expect_len=env["bytes"]
+        ):
+            info(f"INFO file DONE id={msg_id} ok")
+        else:
+            info(f"INFO file DONE id={msg_id} fail")
+        return True
 
     def reader(self) -> None:
         assert self.sock is not None

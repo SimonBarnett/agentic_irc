@@ -7,7 +7,7 @@ description: >
 
 # agentic-dumb
 
-Not an agent. Joins the channel, announces CAPA, runs **allowlisted** ping/sysinfo/exec/get/put from `--operators` only.
+Not an agent. `scripts/dumb_agent.py` joins the channel (stdlib socket+ssl), announces CAPA on join and every 10 minutes, and runs **allowlisted** ping/sysinfo/exec/get/put from `--operators` only. Unknown operators: no exec, no result on the channel. Truncated exec stdout/stderr spills to `dumb/results/<id>.txt` with `truncated: true`.
 
 Generate PSK **off-channel** (`python scripts/seal.py dumb-key`). Copy `connector.key` by RDP/USB. Never print it. Compare sha256 fingerprints out of band.
 

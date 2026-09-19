@@ -154,6 +154,104 @@ def test_f8_disk_cap_refuse_accept(tmp_path, monkeypatch):
     assert "ACCEPT" not in out
 
 
+def test_airc_file_roundtrip():
+    data = b"hello-envelope"
+    env = filexfer.encode_airc_file("note.bin", data)
+    assert env.startswith(b"AIRC-FILE v1\n")
+    assert b"\n\n" in env
+    got = filexfer.decode_airc_file(env)
+    assert got is not None
+    assert got["data"] == data
+    assert got["name"] == "note.bin"
+    assert got["bytes"] == len(data)
+    assert got["sha256"] == hashlib.sha256(data).hexdigest()
+
+
+def test_airc_file_basename_jail():
+    data = b"x"
+    for name in ("../x", "a/b", r"a\b", "..", "foo..bar", "C:foo", "has space"):
+        try:
+            filexfer.encode_airc_file(name, data)
+            assert False, name
+        except ValueError:
+            pass
+    sha = hashlib.sha256(data).hexdigest().encode()
+    bad = b"AIRC-FILE v1\nname: ../win.ini\nbytes: 1\nsha256: " + sha + b"\nmode: 0644\n\nx"
+    assert filexfer.decode_airc_file(bad) is None
+    drive = b"AIRC-FILE v1\nname: C:foo\nbytes: 1\nsha256: " + sha + b"\nmode: 0644\n\nx"
+    assert filexfer.decode_airc_file(drive) is None
+
+
+def test_airc_file_hash_length_gate():
+    data = b"abcd"
+    env = filexfer.encode_airc_file("n.bin", data)
+    assert filexfer.decode_airc_file(env[:-1] + b"Z") is None
+    # declared bytes != body length
+    h = hashlib.sha256(data).hexdigest()
+    short = f"AIRC-FILE v1\nname: n.bin\nbytes: 99\nsha256: {h}\nmode: 0644\n\n".encode() + data
+    assert filexfer.decode_airc_file(short) is None
+    wrong = f"AIRC-FILE v1\nname: n.bin\nbytes: 4\nsha256: {'ab' * 32}\nmode: 0644\n\n".encode() + data
+    assert filexfer.decode_airc_file(wrong) is None
+    assert filexfer.decode_airc_file(b"not-an-envelope") is None
+
+
+def test_f1_tier_s_envelope_offer_and_receive(tmp_path, monkeypatch):
+    alice_home = tmp_path / "alice"
+    bob_home = tmp_path / "bob"
+    monkeypatch.setenv("AGENTIC_IRC_HOME", str(alice_home))
+    alice = seal.genkey()
+    monkeypatch.setenv("AGENTIC_IRC_HOME", str(bob_home))
+    bob = seal.genkey()
+    monkeypatch.setenv("AGENTIC_IRC_HOME", str(alice_home))
+    seal.save_peers({"bob": {"pk": bob["pk"], "nick": "bob"}})
+    data = bytes(range(256)) * 4
+    src = alice_home / "note.bin"
+    src.write_bytes(data)
+    ns = argparse.Namespace(
+        home=str(alice_home),
+        infile=str(src),
+        to="bob",
+        from_nick="alice",
+        tier="S",
+        channel="#ops",
+    )
+    filexfer.offer(ns)
+    outbox = (alice_home / "outbox.txt").read_text()
+    assert "FILE v1 OFFER" in outbox
+    assert "SEAL v2" in outbox
+    assert "AIRC-FILE" not in outbox
+    monkeypatch.setenv("AGENTIC_IRC_HOME", str(bob_home))
+    c = irc_agent.Client(_args(bob_home, "bob"))
+    c.ident = bob
+    c.peers = {"alice": {"pk": alice["pk"], "nick": "alice"}}
+    for line in outbox.splitlines():
+        if line.strip():
+            c.handle_privmsg("alice!u@h", "#ops", line)
+    written = list((bob_home / "files" / "complete").glob("*-note.bin"))
+    assert len(written) == 1
+    assert written[0].read_bytes() == data
+    assert hashlib.sha256(written[0].read_bytes()).hexdigest() == hashlib.sha256(data).hexdigest()
+    assert not list(c.inbox.glob("*.bin"))
+
+
+def test_f1_envelope_jail_name_not_complete(tmp_path, monkeypatch):
+    monkeypatch.setenv("AGENTIC_IRC_HOME", str(tmp_path / "alice"))
+    alice = seal.genkey()
+    monkeypatch.setenv("AGENTIC_IRC_HOME", str(tmp_path / "bob"))
+    bob = seal.genkey()
+    monkeypatch.setenv("AGENTIC_IRC_HOME", str(tmp_path / "bob"))
+    c = irc_agent.Client(_args(tmp_path / "bob", "bob"))
+    c.ident = bob
+    c.peers = {"alice": {"pk": alice["pk"], "nick": "alice"}}
+    bad = b"AIRC-FILE v1\nname: ../x\nbytes: 1\nsha256: " + hashlib.sha256(b"x").hexdigest().encode() + b"\nmode: 0644\n\nx"
+    blob = seal.seal_bytes_v2(bad, bob["pk"], alice, "#ops", "bob", "alice", FID)
+    line = seal.irc_lines_v2(blob, "bob", "alice", FID)[0]
+    c.handle_privmsg("alice!u@h", "#ops", line)
+    complete = tmp_path / "bob" / "files" / "complete"
+    assert not complete.exists() or not list(complete.glob("*"))
+    assert not list(c.inbox.glob("*.bin"))
+
+
 def test_f1_done_matching_hash_writes_complete(tmp_path, monkeypatch):
     monkeypatch.setenv("AGENTIC_IRC_HOME", str(tmp_path))
     seal.genkey()

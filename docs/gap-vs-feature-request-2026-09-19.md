@@ -2,7 +2,7 @@
 
 **Spec:** [feature-request-moot-file-dumb-2026-09-19.pdf](./feature-request-moot-file-dumb-2026-09-19.pdf)  
 **First-audit HEAD:** `1a11e98`  
-**This pass:** strengthen §12 offline tests + small FILE/dumb holes those tests need.  
+**This pass:** Bob MRB v1 blockers 1–4 only (AIRC-FILE envelope, dumb listen, D2 on the wire, truncated exec spill).  
 **Method:** PDF §12 tables + Appendix C vs what offline tests assert. No Libera.
 
 ## Snapshot
@@ -11,13 +11,13 @@
 |---|---|---|
 | Wire parsers | Yes | W1–W6 covered |
 | Moot | Yes | M1–M7; 3-nick floor via `handle_privmsg` |
-| File | Receive path now hashes on DONE; ABORT + disk-cap | F1–F8 offline (F1 is hash-into-`complete/`, not AIRC-FILE envelope) |
-| Dumb Python | Job runner + jail/meta/timeout/prefix | D1–D10 offline except D2 “no result on the wire” |
+| File | Tier S AIRC-FILE v1 encode on offer / decode on receive; basename jail; hash/length gate; DONE path hashes | F1–F8 offline (F1 is envelope, not raw SEAL bytes) |
+| Dumb Python | Listen loop (stdlib socket+ssl) + jail/PSK + CAPA + job path | D1–D10 including D2 no result ciphertext on connector path; truncated spill |
 | Skills + installer | Yes | Not asserted in pytest |
 | `.NET` | **Stub** (INFO + exit 0) + `airc-dumb.cmd` | Skip unless `DOTNET_DUMB_EXE` |
 | CI | `pytest -q` only | Tests must not mention `irc.libera.chat` |
 
-`pytest -q` this pass: **68 passed, 2 skipped** (`test_chmod_failure_raises` Unix-only; `test_dotnet_exe_if_present` unless `DOTNET_DUMB_EXE`).
+Do **not** treat this list as ready for human UAT.
 
 ---
 
@@ -48,11 +48,11 @@
 
 | ID | Expect | Status |
 |---|---|---|
-| F1 | Tier S 1 KiB → `complete/` sha256 match | **Partial.** 1 KiB matching hash writes `complete/` (incl. DONE path). Offer still seals **raw bytes**, not AIRC-FILE v1 envelope (§5.2). |
+| F1 | Tier S 1 KiB → `complete/` sha256 match | **Covered.** `offer --tier S` wraps `AIRC-FILE v1`; receiver decodes envelope, basename-jails, hash/length-gates, writes `complete/`. |
 | F2 | Tier M 20 KiB shuffled | **Covered** |
 | F3 | Hash mismatch DONE → no `complete/` | **Covered** via `handle_file` |
 | F4 | offer `identity.json` | **Covered** |
-| F5 | slash/space name | **Covered** |
+| F5 | slash/space name | **Covered** (plus `..` / drive-letter jail on envelope) |
 | F6 | second OFFER same id ignored | **Covered** |
 | F7 | ABORT mid-bag | **Covered** |
 | F8 | disk cap → ACCEPT not sent / refuse | **Covered** (`FILES_HOME_CAP` monkeypatch) |
@@ -61,8 +61,8 @@
 
 | ID | Expect | Status |
 |---|---|---|
-| D1 | PSK ping ok | **Covered** |
-| D2 | unknown operator | **Partial.** `error=operator` in-process. PDF also says no result **on the wire**; `handle_dumb` still only INFO-logs (no job runner on the IRC client). |
+| D1 | PSK ping ok | **Covered** (in-process + connector path emits DUMB result) |
+| D2 | unknown operator | **Covered.** Connector `handle_privmsg`: no `subprocess.run`, no result ciphertext on the wire. In-process still `error=operator`. |
 | D3 | jail escape | **Covered** (`agent-drop\..\Windows\win.ini`, UNC, secret names) |
 | D4 | put then get sha256 | **Covered** (asserts `hashlib.sha256(data)`) |
 | D5 | exec timeout | **Covered** (`subprocess.TimeoutExpired` monkeypatch) |
@@ -78,14 +78,14 @@
 
 | # | Criterion | Status |
 |---|---|---|
-| 1 | pytest -q green + §12 tests | Green; F1 envelope + D2-on-wire still thin |
+| 1 | pytest -q green + §12 tests | Green; F1 envelope + D2-on-wire asserted |
 | 2 | Three skills + installer + safety rules | Present; not pytest-covered |
 | 3 | 3-party in-process moot to CLOSE | **Covered** via `handle_privmsg` |
 | 4 | 20 KiB tier M + sha256 | **Covered** |
-| 5 | Jail + unknown operators | **Covered** |
+| 5 | Jail + unknown operators | **Covered** (incl. no result on connector wire) |
 | 6 | DUMB-PSK Python seal/open | **Covered** |
 | 7 | .NET + MSBuild + TLS 1.2 preflight | **Stub only.** Recipe + `airc-dumb.cmd` + skill note. Not a protocol clone. |
-| 8 | README field kit | Yes; .NET described as stub |
+| 8 | README field kit | Yes; .NET described as stub; Python connector is a listen loop |
 | 9 | No CI resolves `irc.libera.chat` | Workflow is pytest only; tests forbid the hostname |
 
 ---
@@ -94,15 +94,19 @@
 
 Do **not** treat this list as ready for human UAT.
 
-1. **Phase 5 .NET protocol clone** — `Program.cs` still prints INFO and exits 0. No TcpClient, SslStream, AES-GCM, jail, CAPA. Highest remaining host-constraint gap.
-2. **`dumb_agent.py` listen loop** — `main` is `INFO no-listen`. PDF wants a connect loop in the spirit of `irc_agent`. Modern operators use `irc_agent` + `dumb_ctl` / in-process runner.
-3. **Tier S AIRC-FILE envelope** (§5.2) — `offer --tier S` still seals raw file bytes, not `AIRC-FILE v1` headers.
-4. **Truncated exec spill** — JSON truncates at 8 KiB; PDF also wants `dumb/results/<id>.txt`.
-5. **D2 on the wire** — unknown operator returns an in-process error dict; the IRC client does not run jobs or emit a result box.
-6. **`FLOOR_IDLE_S`** — skill-only (PDF: optional chair hint in v1).
-7. **`YIELD *`** — code sets `floor=None` (state-machine box). Table 3 prose says “* returns it to chair”. Left as-is.
-8. **Manual Libera session** (`tests/MANUAL.md` / §12.6) — human-only; not run from this machine.
-9. **install_skill / skill text** — not locked by pytest.
+1. **Phase 5 .NET protocol clone** — `Program.cs` still prints INFO and exits 0. No TcpClient, SslStream, AES-GCM, jail, CAPA. Highest remaining host-constraint gap. Deferred until after Python listen (now present).
+2. **`FLOOR_IDLE_S`** — skill-only (PDF: optional chair hint in v1).
+3. **`YIELD *`** — code sets `floor=None` (state-machine box). Table 3 prose says “* returns it to chair”. Left as-is.
+4. **Manual Libera session** (`tests/MANUAL.md` / §12.6) — human-only; not run from this machine.
+5. **install_skill / skill text** — not locked by pytest.
+6. **AGPK-mode dumb jobs** — connector is PSK (PDF default on the exe). SEAL-v2 job unwrap on the connector is not implemented this pass.
+
+Closed this pass (MRB blockers 1–4):
+
+- Tier S AIRC-FILE v1 envelope encode/decode, basename jail, hash/length gate.
+- `dumb_agent.py` connect/join/flood/CAPA/job listen loop (stdlib socket+ssl). Offline-tested via fake socket + `handle_privmsg`.
+- D2: unknown operator → no exec + no result ciphertext on the connector path.
+- Truncated exec writes `dumb/results/<id>.txt` and `truncated: true`.
 
 ## Non-goals (Appendix B) — correctly absent
 
@@ -110,4 +114,4 @@ Group SEAL, DCC, web UI, signed `airc-dumb.exe` from CI, connector as SYSTEM wit
 
 ## This dispatch
 
-Gap doc committed first. Offline tests moved toward §12 (file hash/jail, moot non-floor, dumb jail/timeout/meta/prefix). `pytest -q` green. .NET documented as stub. **Not** self-declared ready for human UAT.
+MRB blockers 1–4 only. `pytest -q` green. .NET remains a stub. **Not** self-declared ready for human UAT.

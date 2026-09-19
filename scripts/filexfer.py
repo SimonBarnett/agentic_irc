@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""FILE v1 offer/accept/chunk reassembly. Tier S uses SEAL v2 envelope; M is clear CHUNKs."""
+"""FILE v1 offer/accept/chunk reassembly. Tier S uses SEAL v2 AIRC-FILE envelope; M is clear CHUNKs."""
 from __future__ import annotations
 
 import argparse
@@ -19,6 +19,77 @@ import wire
 MAX_N_FILE = 320
 FILE_TTL_S = 1800
 FILES_HOME_CAP = 64 * 1024 * 1024
+
+
+def name_allowed(name: str) -> bool:
+    """Basename jail: PDF §5.2 regex plus slash / backslash / .. / drive letter."""
+    if not name or not wire.FILE_NAME_RE.match(name):
+        return False
+    if "/" in name or "\\" in name or ".." in name or " " in name:
+        return False
+    if len(name) >= 2 and name[1] == ":":
+        return False
+    return True
+
+
+def encode_airc_file(name: str, data: bytes, mode: str = "0644") -> bytes:
+    """AIRC-FILE v1 plaintext (PDF §5.2) for tier S inside SEAL v2."""
+    if not name_allowed(name):
+        raise ValueError("bad name")
+    h = hashlib.sha256(data).hexdigest()
+    header = (
+        f"AIRC-FILE v1\n"
+        f"name: {name}\n"
+        f"bytes: {len(data)}\n"
+        f"sha256: {h}\n"
+        f"mode: {mode}\n"
+        f"\n"
+    )
+    return header.encode("ascii") + data
+
+
+def decode_airc_file(blob: bytes) -> dict | None:
+    """Parse AIRC-FILE v1. None on malformation, basename jail, hash or length mismatch."""
+    if blob.startswith(b"AIRC-FILE v1\r\n"):
+        rest = blob[len(b"AIRC-FILE v1\r\n") :]
+        nl = b"\r\n"
+    elif blob.startswith(b"AIRC-FILE v1\n"):
+        rest = blob[len(b"AIRC-FILE v1\n") :]
+        nl = b"\n"
+    else:
+        return None
+    sep = nl + nl
+    if sep not in rest:
+        return None
+    header, data = rest.split(sep, 1)
+    try:
+        text = header.decode("ascii")
+    except UnicodeDecodeError:
+        return None
+    delim = "\r\n" if nl == b"\r\n" else "\n"
+    fields: dict[str, str] = {}
+    for line in text.split(delim):
+        if not line.strip():
+            continue
+        if ":" not in line:
+            return None
+        k, _, v = line.partition(":")
+        fields[k.strip().lower()] = v.strip()
+    name = fields.get("name", "")
+    if not name_allowed(name):
+        return None
+    try:
+        nbytes = int(fields.get("bytes", ""))
+    except ValueError:
+        return None
+    sha = fields.get("sha256", "").lower()
+    if len(sha) != 64 or any(c not in "0123456789abcdef" for c in sha):
+        return None
+    if len(data) != nbytes:
+        return None
+    if hashlib.sha256(data).hexdigest() != sha:
+        return None
+    return {"name": name, "bytes": nbytes, "sha256": sha, "mode": fields.get("mode", ""), "data": data}
 
 
 def files_bytes_used(home: Path) -> int:
@@ -120,7 +191,7 @@ def offer(args: argparse.Namespace) -> None:
     fid = secrets.token_hex(8)
     tier = args.tier
     name = path.name
-    if not wire.FILE_NAME_RE.match(name):
+    if not name_allowed(name):
         raise SystemExit("bad name")
     line = f"FILE v1 OFFER {args.to} {args.from_nick} {fid} {len(data)} {h} {tier} {name}"
     (home / "outbox.txt").open("a", encoding="utf-8").write(line + "\n")
@@ -134,7 +205,8 @@ def offer(args: argparse.Namespace) -> None:
         pk = peers.get(args.to.lower(), {}).get("pk")
         if not pk:
             raise SystemExit("no AGPK pin for recipient")
-        blob = seal.seal_bytes_v2(data, pk, ident, args.channel, args.to, args.from_nick, fid)
+        env = encode_airc_file(name, data)
+        blob = seal.seal_bytes_v2(env, pk, ident, args.channel, args.to, args.from_nick, fid)
         for ln in seal.irc_lines_v2(blob, args.to, args.from_nick, fid):
             (home / "outbox.txt").open("a", encoding="utf-8").write(ln + "\n")
     elif tier == "M":
@@ -149,7 +221,13 @@ def offer(args: argparse.Namespace) -> None:
     print(fid)
 
 
-def complete_write(home: Path, fid: str, name: str, data: bytes, sha: str) -> bool:
+def complete_write(
+    home: Path, fid: str, name: str, data: bytes, sha: str, expect_len: int | None = None
+) -> bool:
+    if not name_allowed(name):
+        return False
+    if expect_len is not None and len(data) != expect_len:
+        return False
     if hashlib.sha256(data).hexdigest() != sha:
         return False
     dest = home / "files" / "complete" / f"{fid}-{name}"

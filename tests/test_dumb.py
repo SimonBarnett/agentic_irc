@@ -13,7 +13,9 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 import dumb_agent
 import irc_agent
+import protect
 import seal
+import wire
 
 JID = "0123456789abcdef"
 
@@ -196,6 +198,153 @@ def test_d9_prefix_not_from_nick(tmp_path, monkeypatch, capsys):
     c.handle_privmsg("alice!u@h", "#ops", line)
     err2 = capsys.readouterr().out
     assert "INFO dumb job" in err2
+
+
+def _dumb_args(home: Path, nick: str = "box", operators: str = "alice") -> argparse.Namespace:
+    return argparse.Namespace(
+        nick=nick,
+        channel="#ops",
+        home=str(home),
+        operators=operators,
+        allow_path=str(home / "drop"),
+        hello="",
+        host="127.0.0.1",
+        port=6697,
+        realname="test",
+        once=True,
+        allow_meta=False,
+        allow_bin="",
+    )
+
+
+def _write_key(home: Path) -> bytes:
+    key = os.urandom(32)
+    protect.write_secret_bytes(home / "dumb" / "connector.key", key)
+    return key
+
+
+class _FakeSock:
+    def __init__(self, inbound: bytes) -> None:
+        self.inbound = inbound
+        self.out = bytearray()
+
+    def sendall(self, data: bytes) -> None:
+        self.out.extend(data)
+
+    def recv(self, n: int) -> bytes:
+        if not self.inbound:
+            return b""
+        chunk, self.inbound = self.inbound[:n], self.inbound[n:]
+        return chunk
+
+    def close(self) -> None:
+        pass
+
+
+def test_exec_truncated_spills_results(tmp_path):
+    big = "B" * 9000
+    err = "e" * 20
+
+    def runner(argv, cwd, timeout):
+        return 0, big, err
+
+    job = {"v": 1, "op": "exec", "id": JID, "argv": ["hostname"], "_runner": runner}
+    out = dumb_agent.run_job(
+        job,
+        operators={"alice"},
+        from_nick="alice",
+        allow_path=tmp_path,
+        allow_bin=set(dumb_agent.DEFAULT_BINS),
+        home=tmp_path,
+    )
+    assert out["truncated"] is True
+    assert len(out["stdout"]) + len(out["stderr"]) <= 8192
+    spill = tmp_path / "dumb" / "results" / f"{JID}.txt"
+    text = spill.read_text(encoding="utf-8")
+    assert big in text
+    assert err in text
+
+
+def test_exec_not_truncated_no_spill(tmp_path):
+    def runner(argv, cwd, timeout):
+        return 0, "hi", ""
+
+    job = {"v": 1, "op": "exec", "id": JID, "argv": ["hostname"], "_runner": runner}
+    out = dumb_agent.run_job(
+        job,
+        operators={"alice"},
+        from_nick="alice",
+        allow_path=tmp_path,
+        allow_bin=set(dumb_agent.DEFAULT_BINS),
+        home=tmp_path,
+    )
+    assert out.get("truncated") is False
+    assert not (tmp_path / "dumb" / "results" / f"{JID}.txt").exists()
+
+
+def test_d2_unknown_operator_no_result_on_wire(tmp_path, monkeypatch):
+    monkeypatch.setenv("AGENTIC_IRC_HOME", str(tmp_path))
+    monkeypatch.setattr(dumb_agent, "FLOOD_S", 0)
+    (tmp_path / "drop").mkdir()
+    key = _write_key(tmp_path)
+    c = dumb_agent.Client(_dumb_args(tmp_path))
+    ran: list[int] = []
+
+    def boom(*a, **k):
+        ran.append(1)
+        return subprocess.CompletedProcess(a[0] if a else "hostname", 0, "", "")
+
+    monkeypatch.setattr(subprocess, "run", boom)
+    job = {"v": 1, "op": "exec", "id": JID, "argv": ["hostname"]}
+    blob = seal.dumb_seal_bytes(json.dumps(job).encode(), key, "#ops", "box", "mallory", JID)
+    for ln in seal.dumb_irc_lines(blob, "box", "mallory", JID):
+        c.handle_privmsg("mallory!u@h", "#ops", ln)
+    assert ran == []
+    assert not any("DUMB v1" in x for x in c.sent)
+    assert not any(x.startswith("PRIVMSG") for x in c.sent)
+
+
+def test_operator_ping_emits_result_on_wire(tmp_path, monkeypatch):
+    monkeypatch.setenv("AGENTIC_IRC_HOME", str(tmp_path))
+    monkeypatch.setattr(dumb_agent, "FLOOD_S", 0)
+    (tmp_path / "drop").mkdir()
+    key = _write_key(tmp_path)
+    c = dumb_agent.Client(_dumb_args(tmp_path))
+    job = {"v": 1, "op": "ping", "id": JID}
+    blob = seal.dumb_seal_bytes(json.dumps(job).encode(), key, "#ops", "box", "alice", JID)
+    for ln in seal.dumb_irc_lines(blob, "box", "alice", JID):
+        c.handle_privmsg("alice!u@h", "#ops", ln)
+    wire_lines = [x.split(" :", 1)[1] for x in c.sent if x.startswith("PRIVMSG") and "DUMB v1" in x]
+    assert wire_lines
+    store = seal.FragmentStore()
+    got = None
+    for ln in wire_lines:
+        parsed = wire.parse_dumb_line(ln)
+        assert parsed is not None
+        got = store.add(parsed) or got
+    assert got is not None
+    pt = json.loads(seal.dumb_open_bytes(seal.b64d(got), key, "#ops", "alice", "box", JID).decode())
+    assert pt["ok"] is True
+    assert pt["op"] == "ping"
+
+
+def test_listen_join_capa_offline(tmp_path, monkeypatch):
+    monkeypatch.setenv("AGENTIC_IRC_HOME", str(tmp_path))
+    monkeypatch.setattr(dumb_agent, "FLOOD_S", 0)
+    monkeypatch.setattr(dumb_agent, "SETTLE_S", 0)
+    (tmp_path / "drop").mkdir()
+    _write_key(tmp_path)
+    fake = _FakeSock(b":srv 001 box :welcome\r\n:box!u@h JOIN :#ops\r\n")
+    monkeypatch.setattr(dumb_agent.Client, "connect", lambda self: fake)
+    c = dumb_agent.Client(_dumb_args(tmp_path))
+    c.session()
+    text = fake.out.decode("utf-8", "replace")
+    assert "NICK box" in text
+    assert "JOIN #ops" in text
+    assert "CAPA v1 dumb" in text
+    assert "no-listen" not in text
+    src = Path(dumb_agent.__file__).read_text(encoding="utf-8")
+    assert "no-listen" not in src
 
 
 def test_empty_operators_refused(monkeypatch):

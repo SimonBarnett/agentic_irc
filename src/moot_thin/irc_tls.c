@@ -12,6 +12,12 @@
 #ifndef SP_PROT_TLS1_3_CLIENT
 #define SP_PROT_TLS1_3_CLIENT 0x00002000
 #endif
+#ifndef ISC_REQ_USE_SUPPLIED_CREDS
+#define ISC_REQ_USE_SUPPLIED_CREDS 0x00000080
+#endif
+#ifndef SEC_I_INCOMPLETE_CREDENTIALS
+#define SEC_I_INCOMPLETE_CREDENTIALS ((SECURITY_STATUS)0x00090320L)
+#endif
 
 #define EXTRA_MAX 16384
 #define LINES_MAX 8192
@@ -104,13 +110,18 @@ static int sock_recv_timeout(SOCKET s, char *buf, int cap, int timeout_ms)
     if (k < 0)
         return -1;
     k = recv(s, buf, cap, 0);
+    if (k == 0)
+        return -1; /* peer closed */
     return k;
 }
 
 static SECURITY_STATUS handshake_step(IrcConn *c, const char *host, SecBufferDesc *in, SecBufferDesc *out, DWORD *flags)
 {
+    /* USE_SUPPLIED_CREDS: Libera (and other public TLS) may send CertificateRequest.
+       Combined with SCH_CRED_NO_DEFAULT_CREDS this sends an empty client cert instead
+       of stopping on SEC_I_INCOMPLETE_CREDENTIALS. */
     DWORD req = ISC_REQ_SEQUENCE_DETECT | ISC_REQ_REPLAY_DETECT | ISC_REQ_CONFIDENTIALITY |
-                ISC_REQ_ALLOCATE_MEMORY | ISC_REQ_STREAM;
+                ISC_REQ_ALLOCATE_MEMORY | ISC_REQ_STREAM | ISC_REQ_USE_SUPPLIED_CREDS;
     return InitializeSecurityContextA(
         &c->cred,
         c->have_ctx ? &c->ctx : NULL,
@@ -124,6 +135,23 @@ static SECURITY_STATUS handshake_step(IrcConn *c, const char *host, SecBufferDes
         out,
         flags,
         NULL);
+}
+
+static int send_out_token(IrcConn *c, SecBuffer *outb, char *err, int errlen, const char *why)
+{
+    if (!outb->cbBuffer || !outb->pvBuffer)
+        return 0;
+    if (sock_sendall(c->sock, (char *)outb->pvBuffer, (int)outb->cbBuffer) != 0) {
+        FreeContextBuffer(outb->pvBuffer);
+        outb->pvBuffer = NULL;
+        outb->cbBuffer = 0;
+        _snprintf(err, errlen, "%s", why);
+        return -1;
+    }
+    FreeContextBuffer(outb->pvBuffer);
+    outb->pvBuffer = NULL;
+    outb->cbBuffer = 0;
+    return 0;
 }
 
 static int tls_handshake(IrcConn *c, const char *host, char *err, int errlen)
@@ -155,14 +183,8 @@ static int tls_handshake(IrcConn *c, const char *host, char *err, int errlen)
     outd.pBuffers = &outb;
 
     ss = handshake_step(c, host, NULL, &outd, &flags);
-    if (outb.cbBuffer && outb.pvBuffer) {
-        if (sock_sendall(c->sock, (char *)outb.pvBuffer, (int)outb.cbBuffer) != 0) {
-            FreeContextBuffer(outb.pvBuffer);
-            _snprintf(err, errlen, "tls send token");
-            return -1;
-        }
-        FreeContextBuffer(outb.pvBuffer);
-    }
+    if (send_out_token(c, &outb, err, errlen, "tls send token") != 0)
+        return -1;
     if (ss == SEC_E_OK) {
         c->have_ctx = 1;
         goto done;
@@ -173,45 +195,53 @@ static int tls_handshake(IrcConn *c, const char *host, char *err, int errlen)
     }
     c->have_ctx = 1;
 
+    {
+    int cred_tries = 0;
     for (;;) {
         SecBuffer inb[2];
         SecBufferDesc ind;
+        SecBufferDesc *pin = NULL;
         int k;
-        if (inn >= IO_MAX) {
-            _snprintf(err, errlen, "tls handshake overflow");
-            return -1;
+        int cred_retry = (ss == SEC_I_INCOMPLETE_CREDENTIALS);
+
+        if (!cred_retry) {
+            if (inn >= IO_MAX) {
+                _snprintf(err, errlen, "tls handshake overflow");
+                return -1;
+            }
+            k = sock_recv_timeout(c->sock, inbuf + inn, IO_MAX - inn, 20000);
+            if (k <= 0) {
+                _snprintf(err, errlen, "tls handshake recv");
+                return -1;
+            }
+            inn += k;
         }
-        k = sock_recv_timeout(c->sock, inbuf + inn, IO_MAX - inn, 20000);
-        if (k <= 0) {
-            _snprintf(err, errlen, "tls handshake recv");
-            return -1;
+        if (inn > 0) {
+            inb[0].pvBuffer = inbuf;
+            inb[0].cbBuffer = (unsigned long)inn;
+            inb[0].BufferType = SECBUFFER_TOKEN;
+            inb[1].pvBuffer = NULL;
+            inb[1].cbBuffer = 0;
+            inb[1].BufferType = SECBUFFER_EMPTY;
+            ind.ulVersion = SECBUFFER_VERSION;
+            ind.cBuffers = 2;
+            ind.pBuffers = inb;
+            pin = &ind;
         }
-        inn += k;
-        inb[0].pvBuffer = inbuf;
-        inb[0].cbBuffer = (unsigned long)inn;
-        inb[0].BufferType = SECBUFFER_TOKEN;
-        inb[1].pvBuffer = NULL;
-        inb[1].cbBuffer = 0;
-        inb[1].BufferType = SECBUFFER_EMPTY;
-        ind.ulVersion = SECBUFFER_VERSION;
-        ind.cBuffers = 2;
-        ind.pBuffers = inb;
         outb.pvBuffer = NULL;
         outb.cbBuffer = 0;
         outb.BufferType = SECBUFFER_TOKEN;
         outd.ulVersion = SECBUFFER_VERSION;
         outd.cBuffers = 1;
         outd.pBuffers = &outb;
-        ss = handshake_step(c, host, &ind, &outd, &flags);
-        if (outb.cbBuffer && outb.pvBuffer) {
-            if (sock_sendall(c->sock, (char *)outb.pvBuffer, (int)outb.cbBuffer) != 0) {
-                FreeContextBuffer(outb.pvBuffer);
-                _snprintf(err, errlen, "tls send token2");
-                return -1;
-            }
-            FreeContextBuffer(outb.pvBuffer);
-        }
-        if (inb[1].BufferType == SECBUFFER_EXTRA && inb[1].cbBuffer > 0) {
+        ss = handshake_step(c, host, pin, &outd, &flags);
+        if (send_out_token(c, &outb, err, errlen, "tls send token2") != 0)
+            return -1;
+        /* Keep unread bytes on INCOMPLETE_MESSAGE. Zeroing inn here used to
+           turn a split ServerHello into SEC_E_INVALID_TOKEN (80090308). */
+        if (ss == SEC_E_INCOMPLETE_MESSAGE)
+            continue;
+        if (pin && inb[1].BufferType == SECBUFFER_EXTRA && inb[1].cbBuffer > 0) {
             int extra = (int)inb[1].cbBuffer;
             memmove(inbuf, inbuf + inn - extra, extra);
             inn = extra;
@@ -220,10 +250,19 @@ static int tls_handshake(IrcConn *c, const char *host, char *err, int errlen)
         }
         if (ss == SEC_E_OK)
             break;
-        if (ss == SEC_I_CONTINUE_NEEDED || ss == SEC_E_INCOMPLETE_MESSAGE)
+        if (ss == SEC_I_CONTINUE_NEEDED)
             continue;
+        /* Optional client-cert request: retry ISC with no new recv (empty cert). */
+        if (ss == SEC_I_INCOMPLETE_CREDENTIALS) {
+            if (++cred_tries > 2) {
+                _snprintf(err, errlen, "tls handshake %lx", (unsigned long)ss);
+                return -1;
+            }
+            continue;
+        }
         _snprintf(err, errlen, "tls handshake %lx", (unsigned long)ss);
         return -1;
+    }
     }
     if (inn > 0 && inn < EXTRA_MAX) {
         memcpy(c->extra, inbuf, inn);
@@ -331,21 +370,24 @@ int irc_send_line(IrcConn *c, const char *line)
 static int tls_decrypt_more(IrcConn *c, int timeout_ms)
 {
     char raw[IO_MAX];
-    int k = sock_recv_timeout(c->sock, raw, sizeof(raw), timeout_ms);
+    int k;
     SecBuffer bufs[4];
     SecBufferDesc d;
     SECURITY_STATUS ss;
     char *msg;
     int msglen;
     int i;
-    if (k == 0)
-        return 0;
-    if (k < 0)
-        return -1;
-    if (c->extra_n + k > EXTRA_MAX)
-        return -1;
-    memcpy(c->extra + c->extra_n, raw, k);
-    c->extra_n += k;
+    if (c->extra_n == 0) {
+        k = sock_recv_timeout(c->sock, raw, sizeof(raw), timeout_ms);
+        if (k == 0)
+            return 0;
+        if (k < 0)
+            return -1;
+        if (k > EXTRA_MAX)
+            return -1;
+        memcpy(c->extra, raw, k);
+        c->extra_n = k;
+    }
     msg = (char *)malloc(c->extra_n);
     if (!msg)
         return -1;
@@ -363,6 +405,15 @@ static int tls_decrypt_more(IrcConn *c, int timeout_ms)
     ss = DecryptMessage(&c->ctx, &d, 0, NULL);
     if (ss == SEC_E_INCOMPLETE_MESSAGE) {
         free(msg);
+        k = sock_recv_timeout(c->sock, raw, sizeof(raw), timeout_ms);
+        if (k == 0)
+            return 0;
+        if (k < 0)
+            return -1;
+        if (c->extra_n + k > EXTRA_MAX)
+            return -1;
+        memcpy(c->extra + c->extra_n, raw, k);
+        c->extra_n += k;
         return 1;
     }
     if (ss != SEC_E_OK && ss != SEC_I_RENEGOTIATE) {

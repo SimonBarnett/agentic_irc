@@ -358,11 +358,16 @@ static int session(ThinConfig *cfg, Jail *jail, const uint8_t *key, int have_key
         irc_send_line(irc, n);
         irc_send_line(irc, u);
     }
+    /* CAP LS without CAP END stalls 001 on IRCv3 (Libera). No SASL in this client. */
+    irc_send_line(irc, "CAP END");
     t0 = GetTickCount();
     while (!got_001) {
         int r = irc_recv_line(irc, line, sizeof(line), 1000);
-        if (r < 0)
-            break;
+        if (r < 0) {
+            info("INFO NO 001 (recv fail)");
+            irc_free(irc);
+            return -1;
+        }
         if (r == 0) {
             if ((int)(GetTickCount() - t0) > 30000) {
                 info("INFO NO 001");

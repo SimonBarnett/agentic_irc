@@ -146,6 +146,16 @@ def test_version_sync():
     assert ver == "0.1.0"
 
 
+def test_live_tls_contracts_in_source():
+    """A5 live smoke: CAP LS without CAP END stalls Libera 001; Schannel must keep incomplete tokens."""
+    main = (ROOT / "src" / "moot_thin" / "main.c").read_text(encoding="utf-8")
+    tls = (ROOT / "src" / "moot_thin" / "irc_tls.c").read_text(encoding="utf-8")
+    assert "CAP END" in main
+    assert "ISC_REQ_USE_SUPPLIED_CREDS" in tls
+    assert "SEC_I_INCOMPLETE_CREDENTIALS" in tls
+    assert "SEC_E_INCOMPLETE_MESSAGE" in tls
+
+
 def test_release_docs_locked_defaults():
     rel = (ROOT / "docs" / "mode3-release.md").read_text(encoding="utf-8")
     spike = (ROOT / "docs" / "mode3-tls-spike.md").read_text(encoding="utf-8")

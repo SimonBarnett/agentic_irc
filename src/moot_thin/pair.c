@@ -83,6 +83,26 @@ void pair_ack_line(const char *moot_id, const char *pair_id, char *out, int outl
     _snprintf(out, outlen, "PAIR v1 ACK %s %s", moot_id, pair_id);
 }
 
+void chair_invite_line(const char *pin, const char *channel, const char *moot_id,
+                       char *out, int outlen)
+{
+    if (!out || outlen <= 0)
+        return;
+    out[0] = 0;
+    _snprintf(out, outlen, "airc-moot-thin.exe --pin %s --channel \"%s\" --moot %s",
+              pin ? pin : "", channel ? channel : "", moot_id ? moot_id : "");
+}
+
+void chair_print_banner(const char *pin, const char *channel, const char *moot_id)
+{
+    char invite[LINE_MAX];
+    chair_invite_line(pin, channel, moot_id, invite, sizeof(invite));
+    info("INFO PIN %s   moot=%s   channel=%s   expires 10m",
+         pin ? pin : "", moot_id ? moot_id : "", channel ? channel : "");
+    info("INFO copy-paste thin (expires 10m):");
+    info("%s", invite);
+}
+
 static void pair_hello_aad(const char *channel, const char *moot_id, const char *pair_id,
                            char *out, int outlen)
 {

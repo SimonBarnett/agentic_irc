@@ -209,6 +209,11 @@ def pair_offer_line(moot_id: str, pair_id: str, expires: int) -> str:
     return f"PAIR v1 OFFER {moot_id} {pair_id} {expires}"
 
 
+def chair_invite_line(pin: str, channel: str, moot_id: str) -> str:
+    """Copy-paste thin command printed by --chair. Channel quoted for PowerShell."""
+    return f'airc-moot-thin.exe --pin {pin} --channel "{channel}" --moot {moot_id}'
+
+
 def pair_ack_line(moot_id: str, pair_id: str) -> str:
     return f"PAIR v1 ACK {moot_id} {pair_id}"
 

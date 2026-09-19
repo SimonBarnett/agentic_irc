@@ -143,7 +143,7 @@ def test_version_sync():
     ver = (ROOT / "src" / "moot_thin" / "VERSION").read_text(encoding="utf-8").strip()
     main = (ROOT / "src" / "moot_thin" / "main.c").read_text(encoding="utf-8")
     assert f'"{ver}"' in main
-    assert ver == "0.2.0"
+    assert ver == "0.2.1"
 
 
 def test_live_tls_contracts_in_source():
@@ -318,6 +318,11 @@ def test_c_exe_selftest_zero_config_lines():
     assert "pin wrap ok" in out
     assert "pin mismatch refused" in out
     assert "pair grant operators=alice" in out
+    assert "chair invite banner ok" in out
+    assert "--pin" in out
+    assert "--moot" in out
+    assert "--channel" in out
+    assert "expires" in out.lower()
 
 
 def test_sanitize_hostname_and_self_heal():
@@ -338,6 +343,25 @@ def test_sanitize_hostname_and_self_heal():
     cfg2 = thin.merge_self_heal(None, None, exe_dir=r"C:\airc", hostname="WALRUS")
     assert cfg2.nick == "walrus"
     assert cfg2.hello == "walrus-online"
+
+
+def test_chair_invite_line_shape():
+    line = thin.chair_invite_line("482917", "#ops", JID)
+    assert "--pin" in line
+    assert "--channel" in line
+    assert "--moot" in line
+    assert "482917" in line
+    assert JID in line
+    assert '"#ops"' in line
+    assert line.startswith("airc-moot-thin.exe ")
+    assert "psk" not in line.lower()
+    assert "connector.key" not in line.lower()
+    skill = (ROOT / ".grok" / "skills" / "invite-airc" / "SKILL.md").read_text(encoding="utf-8")
+    assert "--pin" in skill and "--moot" in skill and "--channel" in skill
+    assert "does not yet print" not in skill.lower()
+    main = (ROOT / "src" / "moot_thin" / "main.c").read_text(encoding="utf-8")
+    assert "chair_print_banner" in main
+    assert "Does not claim Windows 95 TLS" in main
 
 
 def test_pin_wrap_and_grant_roundtrip():

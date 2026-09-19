@@ -10,14 +10,14 @@
 #include <time.h>
 
 /* Keep in sync with VERSION */
-#define AIRC_THIN_VERSION "0.2.0"
+#define AIRC_THIN_VERSION "0.2.1"
 
 static void usage(void)
 {
     info("airc-moot-thin %s — Win32 ANSI thin moot CLI (not an LLM)", AIRC_THIN_VERSION);
     info("usage: airc-moot-thin.exe          (zero-arg: self-heal + PIN prompt)");
     info("       airc-moot-thin.exe --pin NNNNNN");
-    info("       airc-moot-thin.exe --chair  (prints PIN + moot; OPEN; PAIR GRANT)");
+    info("       airc-moot-thin.exe --chair  (prints copy-paste thin invite; OPEN; PAIR GRANT)");
     info("       airc-moot-thin.exe --nick N --channel #chan --moot 16hex --home DIR --allow-path DIR --operators nicks");
     info("  [--key PATH] [--config FILE.ini] [--host HOST] [--port N] [--hello TEXT] [--once]");
     info("  --selftest   offline checks, no sockets");
@@ -283,6 +283,23 @@ static int selftest(void)
                 fails++;
             } else
                 info("INFO pair grant operators=alice");
+        }
+        {
+            char invite[LINE_MAX];
+            const char *fix_pin = "482917";
+            const char *fix_ch = "#ops";
+            const char *fix_moot = "0123456789abcdef";
+            chair_invite_line(fix_pin, fix_ch, fix_moot, invite, sizeof(invite));
+            if (!strstr(invite, "--pin") || !strstr(invite, "--channel") ||
+                !strstr(invite, "--moot") || !strstr(invite, fix_pin) ||
+                !strstr(invite, fix_moot) || !strstr(invite, fix_ch) ||
+                strstr(invite, "psk") || strstr(invite, "connector.key")) {
+                info("FAIL chair invite banner %s", invite);
+                fails++;
+            } else {
+                chair_print_banner(fix_pin, fix_ch, fix_moot);
+                info("INFO chair invite banner ok");
+            }
         }
         {
             PairLine pl;
@@ -869,7 +886,7 @@ static int prepare_chair(ThinConfig *cfg, PairSess *ps, uint8_t *key, int *have_
     if (pair_wrap_key(ps->pin, ps->pair_id, cfg->channel, cfg->moot_id, ps->wrap) != 0)
         return -1;
     ps->have_wrap = 1;
-    info("INFO PIN %s   moot=%s   channel=%s   expires 10m", ps->pin, cfg->moot_id, cfg->channel);
+    chair_print_banner(ps->pin, cfg->channel, cfg->moot_id);
     return 0;
 }
 

@@ -22,7 +22,7 @@ Compile target: 32-bit Win32 **ANSI** console PE, `_WIN32_WINNT=0x0501`. TLS: Sc
 
 XP **cannot** be told to open Libera with this binary. On a Win8+ box:
 
-Zero-config (PIN): `airc-moot-thin.exe --chair` on the modern box prints PIN + moot + channel. On the field box, double-click `airc-moot-thin.exe` (or `--pin NNNNNN`). Nick/home/jail self-heal. Long-term PSK is not sent as cleartext. See `docs/mode3-zero-config-2026-09-19.md`. Zero-config is **not** a Win95 TLS claim and is **not** ready for human UAT until Bob re-MRBs it.
+Zero-config (PIN): `airc-moot-thin.exe --chair` on the modern box prints PIN + moot + channel **and** a copy-paste thin line (`--pin`, `--channel`, `--moot`, expires 10m). On the field box, copy the `airc` folder and run that one command (or double-click and type the PIN). Nick/home/jail self-heal. Long-term PSK is not sent as cleartext. See `docs/mode3-zero-config-2026-09-19.md` and `.grok/skills/invite-airc/SKILL.md`. Zero-config is **not** a Win95 TLS claim and is **not** ready for human UAT until Bob re-MRBs it.
 
 Air-gap (`--key`) still works:
 

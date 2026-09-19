@@ -1,4 +1,4 @@
-﻿---
+---
 name: invite-airc
 description: >
   Invite an elder/field Windows box into an agentic_irc Mode 3 moot with a
@@ -19,15 +19,15 @@ Do **not** require flag soup, interactive PIN hunting, or hand-edited 8-arg line
 
 ## Agent steps (chair / modern box)
 
-1. Prefer release `mode3-thin` / `airc-moot-thin.exe` >= 0.2.0 (zero-config + PIN).
+1. Prefer release `mode3-thin` / `airc-moot-thin.exe` >= 0.2.1 (chair prints the thin invite).
 2. Start chair invite on the modern box (IONOS etc.):
 
 ```bat
 airc-moot-thin.exe --chair --channel "#YOUR-PRIVATE-CHAN" --nick cm-bob
 ```
 
-3. Capture stdout: `PIN`, `moot=`, `channel=`, `expires`.
-4. Hand the operator **one** thin command to run after copying `airc`:
+3. Capture stdout. `--chair` prints a ready-to-copy thin line plus PIN / moot / channel / expires (TTL 10m).
+4. Hand the operator **that one line** to run after copying `airc`. Shape:
 
 ```bat
 airc-moot-thin.exe --pin NNNNNN --channel "#YOUR-PRIVATE-CHAN" --moot 16hex
@@ -42,4 +42,4 @@ Self-heal fills nick/home/jail from the box. Optional: `--hello`.
 - Win95/98/NT4/XP live Libera still not claimed.
 - Empty operators refused for unattended installs; after PIN pair, chair becomes operator.
 - Do not commit `connector.key` or live PINs.
-- If `--chair` does not yet print the thin one-liner, compose it from PIN/moot/channel yourself until the feature request lands.
+- `--chair` stdout includes the copy-paste thin one-liner (`--pin`, `--channel`, `--moot`) and an expires note.

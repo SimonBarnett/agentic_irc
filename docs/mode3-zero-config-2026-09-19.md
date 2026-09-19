@@ -32,9 +32,11 @@ No mandatory `--nick --channel --moot --home --allow-path --operators --key` on 
 ```
 airc-moot-thin.exe --chair
 -> prints: PIN 482917   moot=<16hex>   channel=#airc-moot   expires 10m
+-> copy-paste thin (expires 10m):
+airc-moot-thin.exe --pin 482917 --channel "#airc-moot" --moot <16hex>
 ```
 
-Optional: `--channel #your-private-chan --nick cm-bob`. The PIN is **not** sent on IRC.
+`482917` is the fixture PIN used in `--selftest` / docs, not a live secret. Optional: `--channel "#your-private-chan" --nick cm-bob`. The PIN is **not** sent on IRC. See `.grok/skills/invite-airc/SKILL.md`.
 
 ### Thin (field box)
 

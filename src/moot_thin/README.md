@@ -38,9 +38,13 @@ Chair (modern box):
 ```
 airc-moot-thin.exe --chair
 -> PIN 482917   moot=<16hex>   channel=#airc-moot   expires 10m
+-> copy-paste thin (expires 10m):
+airc-moot-thin.exe --pin 482917 --channel "#airc-moot" --moot <16hex>
 ```
 
-Thin (field box): type the PIN at `Enter PIN:`, or pass `--pin 482917`. The long-term PSK is **not** sent as cleartext. After GRANT the thin writes `{home}\dumb\connector.key` and `{home}\dumb\paired.ini` (no PIN, no PSK) and joins the moot. Success line: `joined as <nick> moot=<id> pin=ok`.
+`482917` above is the **fixture** PIN from `--selftest`, not a live secret. Live `--chair` prints a fresh PIN.
+
+Thin (field box): copy the `airc` folder and run **that one line**. Self-heal fills nick/home/jail. Interactive fallback: type the PIN at `Enter PIN:`. The long-term PSK is **not** sent as cleartext. After GRANT the thin writes `{home}\dumb\connector.key` and `{home}\dumb\paired.ini` (no PIN, no PSK) and joins the moot. Success line: `joined as <nick> moot=<id> pin=ok`. Ritual: `.grok/skills/invite-airc/SKILL.md`.
 
 Air-gap fallback: copy a 32-byte key off-channel and use `--key` / `--operators` / `--moot` as before. Empty `--operators` is still refused for unattended installs.
 

@@ -46,6 +46,9 @@ int parse_pair_line(const char *body, PairLine *out);
 void pair_offer_line(const char *moot_id, const char *pair_id, unsigned long expires,
                      char *out, int outlen);
 void pair_ack_line(const char *moot_id, const char *pair_id, char *out, int outlen);
+void chair_invite_line(const char *pin, const char *channel, const char *moot_id,
+                       char *out, int outlen);
+void chair_print_banner(const char *pin, const char *channel, const char *moot_id);
 int pair_hello_seal(const uint8_t wrap[32], const char *channel, const char *moot_id,
                     const char *pair_id, const char *nick, uint8_t *out, int outcap, int *out_len);
 int pair_hello_open(const uint8_t wrap[32], const char *channel, const char *moot_id,

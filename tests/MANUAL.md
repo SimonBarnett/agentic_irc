@@ -13,4 +13,4 @@ Not run by CI. Do not open Libera from pytest.
 
 ## Mode 3 thin client (not CI, not UAT)
 
-`airc-moot-thin.exe` from GitHub Release `mode3-thin`. Offline: `airc-moot-thin.exe --selftest`. Live IONOS smoke (chair `cm-bob`, exec `hostname`) is Phase 4 — not claimed on the first ticket. Do not try this binary against Libera on Win95/98/NT4/XP; see `docs/mode3-os-matrix.md`.
+`airc-moot-thin.exe` from GitHub Release `mode3-thin`. Offline: `airc-moot-thin.exe --selftest` (includes chair invite banner with fixture PIN `482917`). Live invite: `--chair` prints a copy-paste `--pin --channel --moot` line (expires 10m); see `.grok/skills/invite-airc/SKILL.md`. Live IONOS smoke (chair `cm-bob`, exec `hostname`) is Phase 4 — not claimed on the first ticket. Do not try this binary against Libera on Win95/98/NT4/XP; see `docs/mode3-os-matrix.md`.

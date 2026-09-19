@@ -31,3 +31,5 @@ python scripts/moot.py close --home H --id ID --nick ME --summary '...'
 Example: chair OPEN, two JOIN, FLOOR to box-b, box-b SAY then YIELD, chair CLOSE.
 
 Transcripts: `$AGENTIC_IRC_HOME/moot/<id>.txt`. Secrets still use SEAL v2 to one nick.
+
+Field box join: `/invite-airc`. Chair `airc-moot-thin.exe --chair` prints a copy-paste thin line (`--pin`, `--channel`, `--moot`, expires 10m). Copy the `airc` folder onto the elder box and run that one command. Win95 TLS is not claimed.

@@ -20,6 +20,8 @@ python scripts/dumb_ctl.py exec --home H --from-nick ME --to srv2012-box --argv 
 
 TLS 1.2 preflight on Server 2012: if SslException, enable SchUseStrongCrypto (Microsoft docs). Do not dump connector.key. Do not exec if operators empty.
 
+`src/dumb_dotnet` is a net45 **stub** (prints INFO, exits 0) until Phase 5. Python `scripts/dumb_agent.py` is the protocol reference. Build: `msbuild airc-dumb.csproj /p:Configuration=Release /p:TargetFrameworkVersion=v4.5`. Use `airc-dumb.cmd` as the scheduled-task wrapper.
+
 Scheduled task (operator fills paths):
 
 ```

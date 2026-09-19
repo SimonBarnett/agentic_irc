@@ -55,4 +55,4 @@ Still a field kit. Still a **private** channel. Unattended public channels stay 
 | `FILE v1` | `/agentic-file` | Tier S = SEAL; M = clear CHUNKs (not secret); L = path drop. |
 | `DUMB v1` / `CAPA v1` | `/agentic-dumb` | Allowlisted connector. `--operators` required. Jail. PSK off-channel. |
 
-Python reference: `scripts/dumb_agent.py`. Server 2012 exe: `src/dumb_dotnet/` (MSBuild net45, TLS 1.2 preflight). CI stays `pytest -q` with no Libera.
+Python reference: `scripts/dumb_agent.py` (job runner + jail; `main` is no-listen — operators use `irc_agent` / `dumb_ctl` on modern boxes). Server 2012 exe: `src/dumb_dotnet/` is a **net45 stub** (INFO + exit 0), not a protocol clone. Documented build: `msbuild airc-dumb.csproj /p:Configuration=Release /p:TargetFrameworkVersion=v4.5`. TLS 1.2 preflight (`SchUseStrongCrypto`) is in the skill and `src/dumb_dotnet/README.md`. Wrapper: `airc-dumb.cmd`. CI stays `pytest -q` with no Libera.

@@ -34,9 +34,7 @@ MAX_N = 64
 BAG_TTL_S = 120.0
 MAX_INDEX_DIGITS = 2  # n <= 64
 MSGID_RE = re.compile(r"^[a-fA-F0-9]{16}$")
-NICK_RE = re.compile(r"^[A-Za-z\[\\\]^`{|}][A-Za-z0-9\[\\\]^`{|_-]{0,31}$")
-
-
+NICK_RE = re.compile(r"^[A-Za-z\[\]^`{|}][A-Za-z0-9\[\]^`{|_-]{0,31}$")
 def home() -> Path:
     raw = os.environ.get("AGENTIC_IRC_HOME")
     return Path(raw).expanduser() if raw else Path.home() / ".agentic-irc"

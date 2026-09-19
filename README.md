@@ -6,12 +6,14 @@ Envelope: two homes, one **private** Libera channel, humans watching the first A
 
 Field kit, not a platform.
 
+Happy path for a field Windows box: chair publishes `airc-invite.json` (or a secret-gist `beacon.url`); the operator double-clicks `airc-moot-thin.exe`. No typed PIN. See `docs/beacon-v1-2026-09-19.md`.
+
 ## Layout
 
 | Path | Role |
 |---|---|
 | `.grok/skills/agentic-irc/SKILL.md` | `/agentic-irc` |
-| `.grok/skills/invite-airc/SKILL.md` | `/invite-airc` — chair `--chair` copy-paste thin invite |
+| `.grok/skills/invite-airc/SKILL.md` | `/invite-airc` — chair publishes invite; thin double-click |
 | `scripts/install_skill.py` | copies SKILL.md + scripts + requirements |
 | `scripts/irc_agent.py` | TLS client: reconnect, flood 0.8s, quiet stdout, SIGINT |
 | `scripts/seal.py` | v2 TOFU-DH-AAD + v1 parser |
@@ -66,9 +68,9 @@ Still a field kit. Still a **private** channel. Unattended public channels stay 
 | `MOOT v1` | `/agentic-moot` | Chair, roster, floor. Do not SAY unless you hold the floor. |
 | `FILE v1` | `/agentic-file` | Tier S = SEAL; M = clear CHUNKs (not secret); L = path drop. |
 | `DUMB v1` / `CAPA v1` | `/agentic-dumb` | Allowlisted connector. `--operators` required. Jail. PSK off-channel. |
-| Mode 3 thin CLI | `airc-moot-thin.exe` | Native Win32 ANSI moot member. Same DUMB jobs. Zero-arg: click the exe / enter PIN (chair `--chair` prints a copy-paste `--pin --channel --moot` line, expires 10m). `--operators` required for unattended `--key` installs. Release tag `mode3-thin`. Win95 TLS **not** claimed. |
-| Invite elder box | `/invite-airc` | Operator copies `airc` and runs the one line `--chair` printed. See `.grok/skills/invite-airc/SKILL.md`. |
+| Mode 3 thin CLI | `airc-moot-thin.exe` | Native Win32 ANSI moot member. Same DUMB jobs. Zero-arg: double-click loads sibling `airc-invite.json` / `beacon.url` (PIN prompt is fallback). Chair `--chair` writes the invite (TTL 10m). `--operators` required for unattended `--key` installs. Release tag `mode3-thin`. Win95 TLS **not** claimed. |
+| Invite elder box | `/invite-airc` | Operator copies `airc` and double-clicks the exe. See `.grok/skills/invite-airc/SKILL.md`. |
 
 Python reference: `scripts/dumb_agent.py` (stdlib socket+ssl listen: connect/join/flood/CAPA/jobs; jail + PSK). Operators drive it with `dumb_ctl.py`. Server 2012 adapter: `src/dumb_dotnet/airc-dumb.exe` is a behaviour-compatible net45 clone (TcpClient + SslStream TLS 1.2, CAPA, PSK DUMB v1 ping/sysinfo/exec/get/put, jail, unknown-operator drop with no result ciphertext, truncated exec spill). Python remains the protocol reference. Empty `--operators` is refused. Build: `src/dumb_dotnet/build.bat` or `msbuild airc-dumb.csproj /p:Configuration=Release /p:TargetFrameworkVersion=v4.5`. No runtime NuGet for crypto. TLS 1.2 preflight (`SchUseStrongCrypto`) is in the skill and `src/dumb_dotnet/README.md`. Wrapper: `airc-dumb.cmd`. Offline pytest: set `DOTNET_DUMB_EXE`. CI does not open Libera. Not claimed ready for human UAT.
 
-Mode 3 native client lives in `src/moot_thin/` (`airc-moot-thin.exe`, GitHub Release `mode3-thin`). Chair `--chair` prints a ready-to-copy thin invite (`--pin`, `--channel`, `--moot`, expires 10m). Field box: copy the `airc` folder and run that one line (or click the exe and enter the PIN). Ritual: `.grok/skills/invite-airc/SKILL.md`. `--key` remains the air-gap path. It is not a Phase 5 .NET port. It does **not** claim Windows 95 TLS; see `docs/mode3-tls-spike.md`, `docs/mode3-os-matrix.md`, and `docs/mode3-zero-config-2026-09-19.md`. Not claimed ready for human UAT on the zero-config path until Bob re-MRBs it.
+Mode 3 native client lives in `src/moot_thin/` (`airc-moot-thin.exe`, GitHub Release `mode3-thin`). Chair `--chair` writes `airc-invite.json` beside the exe (PIN/channel/moot, expires 10m, no PSK). Field box: copy the `airc` folder and double-click. `--pin` remains a fallback. Ritual: `.grok/skills/invite-airc/SKILL.md`. `--key` remains the air-gap path. It is not a Phase 5 .NET port. It does **not** claim Windows 95 TLS; see `docs/mode3-tls-spike.md`, `docs/mode3-os-matrix.md`, and `docs/mode3-zero-config-2026-09-19.md`. Not claimed ready for human UAT on the zero-config path until Bob re-MRBs it.

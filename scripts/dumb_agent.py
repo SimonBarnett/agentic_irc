@@ -17,6 +17,7 @@ import seal
 import wire
 
 DEFAULT_BINS = frozenset({"cmd.exe", "powershell.exe", "hostname.exe", "ipconfig.exe", "whoami.exe", "hostname", "ipconfig", "whoami"})
+META_CHARS = frozenset("&|><^")
 _busy = threading.Lock()
 
 
@@ -29,14 +30,20 @@ def jail_root(allow: str) -> Path:
 
 def in_jail(root: Path, target: Path) -> bool:
     try:
+        raw = str(target)
+        if raw.startswith("\\\\") or raw.startswith("//"):
+            return False
         t = target.resolve()
         r = root.resolve()
+        ts, rs = str(t), str(r)
+        if ts.startswith("\\\\") or ts.startswith("//"):
+            return False
         return r == t or r in t.parents
     except Exception:
         return False
 
 
-def run_job(job: dict, *, operators: set[str], from_nick: str, allow_path: Path, allow_bin: set[str]) -> dict:
+def run_job(job: dict, *, operators: set[str], from_nick: str, allow_path: Path, allow_bin: set[str], allow_meta: bool = False) -> dict:
     if from_nick.lower() not in {x.lower() for x in operators}:
         return {"v": 1, "op": job.get("op"), "id": job.get("id"), "ok": False, "error": "operator"}
     op = job.get("op")
@@ -53,6 +60,8 @@ def run_job(job: dict, *, operators: set[str], from_nick: str, allow_path: Path,
         }
     if op in {"get", "put"}:
         raw = job.get("path") or job.get("cwd") or ""
+        if str(raw).startswith("\\\\") or str(raw).startswith("//"):
+            return {"v": 1, "op": op, "id": jid, "ok": False, "error": "jail"}
         dest = Path(raw)
         if not dest.is_absolute():
             dest = allow_path / dest
@@ -77,14 +86,18 @@ def run_job(job: dict, *, operators: set[str], from_nick: str, allow_path: Path,
             if bin0 not in {x.lower() for x in allow_bin}:
                 return {"v": 1, "op": "exec", "id": jid, "ok": False, "error": "bin"}
             joined = " ".join(str(x) for x in argv)
-            if any(tok in joined for tok in ("..", "\\\\")):
+            if any(tok in joined for tok in ("..", "\\\\", "//")):
                 return {"v": 1, "op": "exec", "id": jid, "ok": False, "error": "jail"}
+            if not allow_meta and any(ch in joined for ch in META_CHARS):
+                return {"v": 1, "op": "exec", "id": jid, "ok": False, "error": "bin"}
             timeout = int(job.get("timeout_s") or 20)
             timeout = max(1, min(60, timeout))
             cwd = job.get("cwd") or str(allow_path)
+            if str(cwd).startswith("\\\\") or str(cwd).startswith("//"):
+                return {"v": 1, "op": "exec", "id": jid, "ok": False, "error": "jail"}
             if not in_jail(allow_path, Path(cwd)):
                 return {"v": 1, "op": "exec", "id": jid, "ok": False, "error": "jail"}
-            runner = job.get("_runner")  # tests inject
+            runner = job.get("_runner") if callable(job.get("_runner")) else None
             if runner:
                 rc, out, err = runner(argv, cwd, timeout)
             else:
@@ -113,10 +126,18 @@ def handle_dumb_payload(
     operators: set[str],
     allow_path: Path,
     allow_bin: set[str] | None = None,
+    allow_meta: bool = False,
 ) -> dict:
     pt = seal.dumb_open_bytes(body, key32, channel, to_nick, from_nick, msg_id)
     job = json.loads(pt.decode("utf-8"))
-    return run_job(job, operators=operators, from_nick=from_nick, allow_path=allow_path, allow_bin=allow_bin or DEFAULT_BINS)
+    return run_job(
+        job,
+        operators=operators,
+        from_nick=from_nick,
+        allow_path=allow_path,
+        allow_bin=allow_bin or DEFAULT_BINS,
+        allow_meta=allow_meta,
+    )
 
 
 def main() -> None:

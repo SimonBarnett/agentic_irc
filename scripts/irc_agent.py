@@ -162,14 +162,41 @@ class Client:
         if fl.verb == "OFFER":
             name = fl.fields[-1] if fl.fields else ""
             nbytes = fl.fields[3] if len(fl.fields) > 3 else ""
+            sha = fl.fields[4] if len(fl.fields) > 4 else ""
+            tier = fl.fields[5] if len(fl.fields) > 5 else ""
+            if not fl.file_id:
+                return
+            if not self.file_bags.note_offer(src, fl.file_id, name, sha, nbytes, tier):
+                info(f"INFO file OFFER id={fl.file_id} ignored (duplicate)")
+                return
             info(f"INFO file OFFER id={fl.file_id} name={name} bytes={nbytes}")
         if fl.verb == "CHUNK" and fl.chunk_b64 and fl.i and fl.n and fl.file_id:
             self.file_bags.add_chunk(src, fl.file_id, fl.i, fl.n, fl.chunk_b64)
+        if fl.verb == "ABORT" and fl.file_id:
+            self.file_bags.abort(fl.file_id)
+            info(f"INFO file ABORT id={fl.file_id}")
+        if fl.verb == "DONE" and fl.file_id:
+            sha = fl.fields[1] if len(fl.fields) > 1 else ""
+            data = self.file_bags.take_assembled(fl.file_id)
+            offer = self.file_bags._offers.get(fl.file_id.lower(), {})
+            name = offer.get("name") or "file.bin"
+            expect = offer.get("sha") or sha
+            if data is None:
+                info(f"INFO file DONE id={fl.file_id} fail (incomplete)")
+                return
+            if filexfer.complete_write(self.home, fl.file_id, name, data, expect):
+                info(f"INFO file DONE id={fl.file_id} ok")
+            else:
+                info(f"INFO file DONE id={fl.file_id} fail")
 
     def handle_dumb(self, src: str, body: str) -> None:
         dl = wire.parse_dumb_line(body)
-        if dl:
-            info(f"INFO dumb job id={dl.msg_id} from={src}")
+        if not dl:
+            return
+        if dl.from_nick and dl.from_nick.lower() != src.lower():
+            info("INFO DUMB prefix != from_nick, drop")
+            return
+        info(f"INFO dumb job id={dl.msg_id} from={src}")
 
     def handle_privmsg(self, prefix: str, target: str, body: str) -> None:
         if target.lower() != self.chan.lower():

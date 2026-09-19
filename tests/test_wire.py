@@ -8,6 +8,29 @@ import seal
 import wire
 
 
+MOOT_TABLE3 = (
+    ("OPEN", "MOOT v1 OPEN 0123456789abcdef grok-box-a floor :cut over file server"),
+    ("JOIN", "MOOT v1 JOIN 0123456789abcdef"),
+    ("PART", "MOOT v1 PART 0123456789abcdef :bye"),
+    ("HANDOFF", "MOOT v1 HANDOFF 0123456789abcdef claude-box"),
+    ("FLOOR", "MOOT v1 FLOOR 0123456789abcdef grok-box-a"),
+    ("SAY", "MOOT v1 SAY 0123456789abcdef 1 :hello"),
+    ("POINT", "MOOT v1 POINT 0123456789abcdef :idle"),
+    ("YIELD", "MOOT v1 YIELD 0123456789abcdef *"),
+    ("ROLL", "MOOT v1 ROLL 0123456789abcdef"),
+    ("ROSTER", "MOOT v1 ROSTER 0123456789abcdef :grok-box-a,claude-box"),
+    ("CLOSE", "MOOT v1 CLOSE 0123456789abcdef :done"),
+)
+
+
+def test_w1_each_table3_verb():
+    for verb, line in MOOT_TABLE3:
+        p = wire.parse_moot_line(line)
+        assert p is not None, verb
+        assert p.verb == verb
+        assert p.moot_id == "0123456789abcdef"
+
+
 def test_capa_happy():
     p = wire.parse_capa_line(
         "CAPA v1 dumb nick=srv2012-box verbs=ping,sysinfo,exec,get,put psk=1 agpk=0 jail=C:\\agent-drop"
@@ -38,6 +61,10 @@ def test_moot_missing_v1():
     assert wire.parse_moot_line("MOOT OPEN 0123456789abcdef grok-box-a floor :x") is None
 
 
+def test_moot_open_extra_tokens():
+    assert wire.parse_moot_line("MOOT v1 OPEN 0123456789abcdef grok-box-a floor extra :x") is None
+
+
 def test_file_offer_pathlike_name():
     mid = "0123456789abcdef"
     assert wire.parse_file_line(f"FILE v1 OFFER bob alice {mid} 10 abc tier M ./x") is None
@@ -54,3 +81,15 @@ def test_seal_v2_still_only_seal_parser():
     assert seal.parse_seal_line(line) is not None
     assert wire.parse_moot_line(line) is None
     assert wire.parse_capa_line(line) is None
+    assert wire.parse_file_line(line) is None
+    assert wire.parse_dumb_line(line) is None
+
+
+def test_tests_do_not_open_libera():
+    root = Path(__file__).resolve().parent
+    host = "irc.libera" + ".chat"
+    for p in root.glob("test_*.py"):
+        text = p.read_text(encoding="utf-8")
+        assert host not in text
+        if p.resolve() != Path(__file__).resolve():
+            assert "create_connection" not in text

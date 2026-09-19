@@ -87,7 +87,7 @@ def parse_moot_line(body: str) -> MootLine | None:
         if len(fields) < 1 or not fields[0].isdigit():
             return None
     if verb == "OPEN":
-        if len(fields) < 2 or fields[1] not in {"floor", "free"}:
+        if len(fields) != 2 or fields[1] not in {"floor", "free"}:
             return None
         if not (seal.NICK_RE.match(fields[0]) or re.match(r"^[A-Za-z][A-Za-z0-9._-]{0,31}$", fields[0])):
             return None

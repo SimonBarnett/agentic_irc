@@ -252,6 +252,71 @@ def test_f1_envelope_jail_name_not_complete(tmp_path, monkeypatch):
     assert not list(c.inbox.glob("*.bin"))
 
 
+def test_outbox_partial_line_held_until_newline(tmp_path):
+    """splitlines()+text seek sent a truncated SEAL when the poll raced a write."""
+    p = tmp_path / "outbox.txt"
+    offer = "FILE v1 OFFER bob alice 0123456789abcdef 3 abcdef S a.txt"
+    p.write_bytes((offer + "\nSEAL v2 bob alice 0123456789abcdef 1 2 ").encode())
+    lines, last = irc_agent.take_outbox_lines(p, 0)
+    assert lines == [offer]
+    p.write_bytes(p.read_bytes() + b"AAAA\nSEAL v2 bob alice 0123456789abcdef 2 2 BBBB\n")
+    lines2, _last2 = irc_agent.take_outbox_lines(p, last)
+    assert lines2 == [
+        "SEAL v2 bob alice 0123456789abcdef 1 2 AAAA",
+        "SEAL v2 bob alice 0123456789abcdef 2 2 BBBB",
+    ]
+
+
+def test_tier_s_partial_outbox_no_done_until_complete(tmp_path, monkeypatch):
+    """Mode-2 flake: first OFFER seen, no DONE if a SEAL line is drained mid-write."""
+    alice_home = tmp_path / "alice"
+    bob_home = tmp_path / "bob"
+    monkeypatch.setenv("AGENTIC_IRC_HOME", str(alice_home))
+    alice = seal.genkey()
+    monkeypatch.setenv("AGENTIC_IRC_HOME", str(bob_home))
+    bob = seal.genkey()
+    monkeypatch.setenv("AGENTIC_IRC_HOME", str(alice_home))
+    seal.save_peers({"bob": {"pk": bob["pk"], "nick": "bob"}})
+    data = b"mode2-file-a"
+    src = alice_home / "mode2-file-a.txt"
+    src.write_bytes(data)
+    ns = argparse.Namespace(
+        home=str(alice_home),
+        infile=str(src),
+        to="bob",
+        from_nick="alice",
+        tier="S",
+        channel="#ops",
+    )
+    filexfer.offer(ns)
+    raw = (alice_home / "outbox.txt").read_bytes()
+    assert raw.endswith(b"\n")
+    cut = raw.rfind(b"\n", 0, len(raw) - 1)
+    assert cut > 0
+    partial = tmp_path / "partial-outbox.txt"
+    # First poll: everything except the last line's tail (OFFER + incomplete last SEAL).
+    partial.write_bytes(raw[: cut + 10])
+    first, off = irc_agent.take_outbox_lines(partial, 0)
+    assert any(x.startswith("FILE v1 OFFER") for x in first)
+    monkeypatch.setenv("AGENTIC_IRC_HOME", str(bob_home))
+    c = irc_agent.Client(_args(bob_home, "bob"))
+    c.ident = bob
+    c.peers = {"alice": {"pk": alice["pk"], "nick": "alice"}}
+    for line in first:
+        c.handle_privmsg("alice!u@h", "#ops", line)
+    complete = bob_home / "files" / "complete"
+    assert not complete.exists() or not list(complete.glob("*"))
+    # Rest of the file lands; second poll delivers the held SEAL line(s).
+    partial.write_bytes(raw)
+    rest, _ = irc_agent.take_outbox_lines(partial, off)
+    assert rest, "held tail must flush once newline is present"
+    for line in rest:
+        c.handle_privmsg("alice!u@h", "#ops", line)
+    written = list(complete.glob("*-mode2-file-a.txt"))
+    assert len(written) == 1
+    assert written[0].read_bytes() == data
+
+
 def test_f1_done_matching_hash_writes_complete(tmp_path, monkeypatch):
     monkeypatch.setenv("AGENTIC_IRC_HOME", str(tmp_path))
     seal.genkey()

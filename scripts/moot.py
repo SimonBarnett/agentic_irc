@@ -38,13 +38,17 @@ def load_state(home: Path, mid: str) -> dict:
 
 def save_state(home: Path, st: dict) -> None:
     jp, _ = _paths(home, st["id"])
-    jp.write_text(json.dumps(st, indent=2) + "\n", encoding="utf-8")
+    payload = json.dumps(st, indent=2) + "\n"
+    tmp = jp.with_name(jp.name + ".tmp")
+    tmp.write_text(payload, encoding="utf-8")
+    tmp.replace(jp)
 
 
 def append_tx(home: Path, mid: str, nick: str, verb: str, text: str) -> None:
     _, tp = _paths(home, mid)
+    extra = f" {text}" if text else ""
     with tp.open("a", encoding="utf-8") as f:
-        f.write(f"{int(time.time())} {nick} {verb} {text}\n")
+        f.write(f"{int(time.time())} {nick} {verb}{extra}\n")
 
 
 def outbox_line(home: Path, line: str) -> None:
@@ -54,7 +58,15 @@ def outbox_line(home: Path, line: str) -> None:
 
 
 def apply_moot(st: dict | None, src: str, line: wire.MootLine, home: Path | None = None) -> dict:
-    """Update state from an observed MOOT line. First OPEN wins."""
+    """Update state from an observed MOOT line. First OPEN wins. Persist when home is set."""
+    out = _apply_moot(st, src, line, home)
+    if home is not None and out.get("id"):
+        save_state(home, out)
+    return out
+
+
+def _apply_moot(st: dict | None, src: str, line: wire.MootLine, home: Path | None = None) -> dict:
+    """In-memory apply. OPEN/JOIN/FLOOR/SAY/YIELD/CLOSE go to transcript when home is set."""
     st = dict(st or {})
     if line.verb == "OPEN":
         if st.get("id") and st.get("state") != "closed":
@@ -74,6 +86,8 @@ def apply_moot(st: dict | None, src: str, line: wire.MootLine, home: Path | None
             "seq_by_nick": {},
             "topic": line.text,
         }
+        if home:
+            append_tx(home, st["id"], src, "OPEN", line.text)
         return st
     if not st or st.get("id") != line.moot_id or st.get("state") == "closed":
         if line.verb == "CLOSE" and st.get("id") == line.moot_id:
@@ -88,6 +102,8 @@ def apply_moot(st: dict | None, src: str, line: wire.MootLine, home: Path | None
             if len(roster) < MOOT_ROSTER_MAX:
                 roster.append(src)
         st["roster"] = roster
+        if home:
+            append_tx(home, st["id"], src, "JOIN", line.text)
     elif line.verb == "PART":
         st["roster"] = [x for x in roster if x.lower() != src_l]
         if st.get("floor") and st["floor"].lower() == src_l:
@@ -104,6 +120,8 @@ def apply_moot(st: dict | None, src: str, line: wire.MootLine, home: Path | None
             return st
         nick = line.fields[0] if line.fields else ""
         st["floor"] = nick
+        if home:
+            append_tx(home, st["id"], src, "FLOOR", nick)
     elif line.verb == "YIELD":
         if not st.get("floor") or src.lower() != str(st["floor"]).lower():
             return st
@@ -114,6 +132,8 @@ def apply_moot(st: dict | None, src: str, line: wire.MootLine, home: Path | None
             st["floor"] = to
         else:
             st["floor"] = None
+        if home:
+            append_tx(home, st["id"], src, "YIELD", to)
     elif line.verb == "SAY":
         if st.get("mode") == "floor":
             fl = st.get("floor")
@@ -203,6 +223,8 @@ def main() -> None:
         outbox_line(home, line)
         parsed = wire.parse_moot_line(line)
         if parsed:
+            if args.cmd != "open":
+                st = load_state(home, parsed.moot_id) or st
             st = apply_moot(st, nick, parsed, home)
             if st:
                 save_state(home, st)

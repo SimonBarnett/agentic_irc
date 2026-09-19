@@ -128,3 +128,51 @@ def test_seq_must_increase(tmp_path, monkeypatch):
     st = moot.apply_moot(st, "grok-box-a", wire.parse_moot_line(f"MOOT v1 SAY {MID} 2 :b"), tmp_path)
     tx = (tmp_path / "moot" / f"{MID}.txt").read_text()
     assert tx.count("SAY") == 1
+
+
+def test_chair_roster_and_transcript_without_own_privmsg_echo(tmp_path, monkeypatch):
+    """Libera does not echo own PRIVMSG. Chair CLI writes OPEN/FLOOR/CLOSE to disk;
+    JOINA from other nicks arrives only via handle_privmsg on an empty in-memory _moot."""
+    monkeypatch.setenv("AGENTIC_IRC_HOME", str(tmp_path))
+    seal.genkey()
+    parsed = wire.parse_moot_line(f"MOOT v1 OPEN {MID} grok-box-a floor :mode2 SEAL+FILE probe")
+    st = moot.apply_moot({}, "grok-box-a", parsed, tmp_path)
+    assert st["roster"] == ["grok-box-a"]
+
+    c = irc_agent.Client(_args(tmp_path, "grok-box-a"))
+    assert c._moot == {}
+    c.handle_privmsg("claude-box!u@h", "#ops", f"MOOT v1 JOIN {MID}")
+    c.handle_privmsg("srv2012-box!u@h", "#ops", f"MOOT v1 JOIN {MID}")
+    disk = moot.load_state(tmp_path, MID)
+    assert disk["roster"] == ["grok-box-a", "claude-box", "srv2012-box"]
+    assert disk["state"] == "open"
+
+    parsed = wire.parse_moot_line(f"MOOT v1 FLOOR {MID} claude-box")
+    st = moot.apply_moot(moot.load_state(tmp_path, MID), "grok-box-a", parsed, tmp_path)
+    assert st["floor"] == "claude-box"
+    disk = moot.load_state(tmp_path, MID)
+    assert disk["floor"] == "claude-box"
+    assert disk["roster"] == ["grok-box-a", "claude-box", "srv2012-box"]
+
+    c.handle_privmsg("claude-box!u@h", "#ops", f"MOOT v1 SAY {MID} 1 :speaker")
+    disk = moot.load_state(tmp_path, MID)
+    assert disk["seq_by_nick"]["claude-box"] == 1
+    assert disk["floor"] == "claude-box"
+
+    c.handle_privmsg("claude-box!u@h", "#ops", f"MOOT v1 YIELD {MID} *")
+    disk = moot.load_state(tmp_path, MID)
+    assert disk["floor"] is None
+
+    parsed = wire.parse_moot_line(f"MOOT v1 CLOSE {MID} :mode2 moot exercised")
+    st = moot.apply_moot(moot.load_state(tmp_path, MID), "grok-box-a", parsed, tmp_path)
+    disk = moot.load_state(tmp_path, MID)
+    assert disk["state"] == "closed"
+    assert disk["floor"] is None
+    assert disk["roster"] == ["grok-box-a", "claude-box", "srv2012-box"]
+    assert disk["seq_by_nick"]["claude-box"] == 1
+
+    tx = (tmp_path / "moot" / f"{MID}.txt").read_text()
+    for verb in ("OPEN", "JOIN", "FLOOR", "SAY", "YIELD", "CLOSE"):
+        assert verb in tx, verb
+    assert "speaker" in tx
+    assert tx.count("JOIN") == 2

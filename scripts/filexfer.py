@@ -194,11 +194,7 @@ def offer(args: argparse.Namespace) -> None:
     if not name_allowed(name):
         raise SystemExit("bad name")
     line = f"FILE v1 OFFER {args.to} {args.from_nick} {fid} {len(data)} {h} {tier} {name}"
-    (home / "outbox.txt").open("a", encoding="utf-8").write(line + "\n")
-    meta = home / "files" / "outgoing" / fid
-    meta.mkdir(parents=True, exist_ok=True)
-    (meta / "manifest.json").write_text(json.dumps({"id": fid, "name": name, "sha256": h, "bytes": len(data)}) + "\n")
-    (meta / "data.bin").write_bytes(data)
+    out_lines = [line]
     if tier == "S":
         ident = seal.load_ident()
         peers = seal.load_peers()
@@ -207,8 +203,7 @@ def offer(args: argparse.Namespace) -> None:
             raise SystemExit("no AGPK pin for recipient")
         env = encode_airc_file(name, data)
         blob = seal.seal_bytes_v2(env, pk, ident, args.channel, args.to, args.from_nick, fid)
-        for ln in seal.irc_lines_v2(blob, args.to, args.from_nick, fid):
-            (home / "outbox.txt").open("a", encoding="utf-8").write(ln + "\n")
+        out_lines.extend(seal.irc_lines_v2(blob, args.to, args.from_nick, fid))
     elif tier == "M":
         b64 = seal.b64(data)
         parts = [b64[i : i + seal.CHUNK] for i in range(0, len(b64), seal.CHUNK)] or [""]
@@ -216,8 +211,16 @@ def offer(args: argparse.Namespace) -> None:
         if n > MAX_N_FILE:
             raise SystemExit("too many chunks")
         for i, part in enumerate(parts, 1):
-            (home / "outbox.txt").open("a", encoding="utf-8").write(f"FILE v1 CHUNK {fid} {i} {n} {part}\n")
-        (home / "outbox.txt").open("a", encoding="utf-8").write(f"FILE v1 DONE {fid} {h}\n")
+            out_lines.append(f"FILE v1 CHUNK {fid} {i} {n} {part}")
+        out_lines.append(f"FILE v1 DONE {fid} {h}")
+    meta = home / "files" / "outgoing" / fid
+    meta.mkdir(parents=True, exist_ok=True)
+    (meta / "manifest.json").write_text(json.dumps({"id": fid, "name": name, "sha256": h, "bytes": len(data)}) + "\n")
+    (meta / "data.bin").write_bytes(data)
+    # One append so OFFER is never stranded if SEAL/CHUNK prep fails, and the
+    # outbox poller sees a complete newline-terminated batch when the write lands.
+    with (home / "outbox.txt").open("a", encoding="utf-8") as f:
+        f.write("\n".join(out_lines) + "\n")
     print(fid)
 
 

@@ -27,6 +27,33 @@ import wire  # noqa: E402
 FLOOD_S = 0.8
 
 
+def take_outbox_lines(path: Path, last: int) -> tuple[list[str], int]:
+    """Complete newline-terminated outbox lines from byte offset `last`.
+
+    A poll that lands mid-write must not send a truncated SEAL/FILE line
+    (mode-2 flake: first OFFER seen, no DONE). Partial tail stays unconsumed.
+    """
+    try:
+        data = path.read_bytes()
+    except OSError:
+        return [], last
+    if last > len(data):
+        last = 0
+    buf = data[last:]
+    lines: list[str] = []
+    consumed = 0
+    while True:
+        nl = buf.find(b"\n", consumed)
+        if nl < 0:
+            break
+        raw = buf[consumed:nl].rstrip(b"\r")
+        text = raw.decode("utf-8", "replace").strip()
+        if text:
+            lines.append(text)
+        consumed = nl + 1
+    return lines, last + consumed
+
+
 def info(msg: str) -> None:
     print(msg, flush=True)
 
@@ -152,7 +179,16 @@ class Client:
         ml = wire.parse_moot_line(body)
         if not ml:
             return
-        self._moot = moot.apply_moot(self._moot, src, ml, self.home)
+        # IRC does not echo own PRIVMSG. Chair OPEN/FLOOR/CLOSE live on disk via CLI;
+        # incoming JOIN/SAY/YIELD must load that snapshot or roster stays {chair}.
+        disk = moot.load_state(self.home, ml.moot_id)
+        if disk.get("id") == ml.moot_id:
+            base = disk
+        elif self._moot.get("id") == ml.moot_id:
+            base = self._moot
+        else:
+            base = {}
+        self._moot = moot.apply_moot(base, src, ml, self.home)
         if ml.verb == "OPEN":
             info(f"INFO moot OPEN id={ml.moot_id} chair={src}")
 
@@ -349,13 +385,9 @@ class Client:
                 last = 0
             if sz <= last:
                 continue
-            with path.open("r", encoding="utf-8", errors="replace") as f:
-                f.seek(last)
-                chunk = f.read()
-                last = f.tell()
-            for line in chunk.splitlines():
-                line = line.strip()
-                if line and self.sock is not None:
+            lines, last = take_outbox_lines(path, last)
+            for line in lines:
+                if self.sock is not None:
                     try:
                         self.say(line)
                     except OSError:

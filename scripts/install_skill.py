@@ -1,32 +1,54 @@
 #!/usr/bin/env python3
-"""Vendor SKILL.md + scripts/ into ~/.grok/skills/agentic-irc (or $GROK_HOME)."""
+"""Vendor skills + scripts into $GROK_HOME/skills/."""
 from __future__ import annotations
 
+import argparse
 import os
 import shutil
 from pathlib import Path
 
+SCRIPTS = (
+    "seal.py",
+    "irc_agent.py",
+    "protect.py",
+    "install_skill.py",
+    "wire.py",
+    "moot.py",
+    "filexfer.py",
+    "dumb_agent.py",
+    "dumb_ctl.py",
+)
+SKILLS = ("agentic-irc", "agentic-moot", "agentic-file", "agentic-dumb")
+
 
 def main() -> None:
+    p = argparse.ArgumentParser()
+    p.add_argument("--list", action="store_true")
+    args = p.parse_args()
     grok = Path(os.environ.get("GROK_HOME", Path.home() / ".grok")).expanduser()
-    dest = grok / "skills" / "agentic-irc"
-    dest.mkdir(parents=True, exist_ok=True)
     root = Path(__file__).resolve().parents[1]
-    src_skill = root / ".grok" / "skills" / "agentic-irc" / "SKILL.md"
-    if not src_skill.exists():
-        raise SystemExit(f"missing {src_skill}")
-    shutil.copy2(src_skill, dest / "SKILL.md")
-    scripts_dest = dest / "scripts"
-    scripts_dest.mkdir(parents=True, exist_ok=True)
-    for name in ("seal.py", "irc_agent.py", "protect.py", "install_skill.py"):
-        src = root / "scripts" / name
-        if not src.exists():
-            raise SystemExit(f"missing {src}")
-        shutil.copy2(src, scripts_dest / name)
+    if args.list:
+        for s in SKILLS:
+            print(s)
+        for n in SCRIPTS:
+            print(n)
+        return
+    for skill in SKILLS:
+        dest = grok / "skills" / skill
+        dest.mkdir(parents=True, exist_ok=True)
+        src = root / ".grok" / "skills" / skill / "SKILL.md"
+        shutil.copy2(src, dest / "SKILL.md")
+        print(dest / "SKILL.md")
+        scripts_dest = dest / "scripts"
+        scripts_dest.mkdir(parents=True, exist_ok=True)
+        for name in SCRIPTS:
+            sp = root / "scripts" / name
+            if sp.exists():
+                shutil.copy2(sp, scripts_dest / name)
+                print(scripts_dest / name)
     req = root / "requirements.txt"
     if req.exists():
-        shutil.copy2(req, dest / "requirements.txt")
-    print(f"installed {dest}")
+        shutil.copy2(req, grok / "skills" / "agentic-irc" / "requirements.txt")
 
 
 if __name__ == "__main__":

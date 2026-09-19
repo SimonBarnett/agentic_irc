@@ -18,8 +18,11 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import filexfer  # noqa: E402
+import moot  # noqa: E402
 import protect  # noqa: E402
 import seal  # noqa: E402
+import wire  # noqa: E402
 
 FLOOD_S = 0.8
 
@@ -57,6 +60,8 @@ class Client:
         self.ident = seal.load_ident() if seal.ident_path().exists() else None
         self.peers = seal.load_peers()
         self.fragments = seal.FragmentStore()
+        self._moot: dict = {}
+        self.file_bags = filexfer.FileBag()
         self.lock = threading.Lock()
         self.sock: ssl.SSLSocket | None = None
         self.ready = threading.Event()
@@ -137,6 +142,35 @@ class Client:
             self.send("CAP END")
             return
 
+    def handle_capa(self, src: str, body: str) -> None:
+        p = wire.parse_capa_line(body)
+        if p:
+            info(f"INFO capa from={src}")
+
+    def handle_moot(self, src: str, body: str) -> None:
+        ml = wire.parse_moot_line(body)
+        if not ml:
+            return
+        self._moot = moot.apply_moot(self._moot, src, ml, self.home)
+        if ml.verb == "OPEN":
+            info(f"INFO moot OPEN id={ml.moot_id} chair={src}")
+
+    def handle_file(self, src: str, body: str) -> None:
+        fl = wire.parse_file_line(body)
+        if not fl:
+            return
+        if fl.verb == "OFFER":
+            name = fl.fields[-1] if fl.fields else ""
+            nbytes = fl.fields[3] if len(fl.fields) > 3 else ""
+            info(f"INFO file OFFER id={fl.file_id} name={name} bytes={nbytes}")
+        if fl.verb == "CHUNK" and fl.chunk_b64 and fl.i and fl.n and fl.file_id:
+            self.file_bags.add_chunk(src, fl.file_id, fl.i, fl.n, fl.chunk_b64)
+
+    def handle_dumb(self, src: str, body: str) -> None:
+        dl = wire.parse_dumb_line(body)
+        if dl:
+            info(f"INFO dumb job id={dl.msg_id} from={src}")
+
     def handle_privmsg(self, prefix: str, target: str, body: str) -> None:
         if target.lower() != self.chan.lower():
             return
@@ -152,6 +186,10 @@ class Client:
             return
         parsed = seal.parse_seal_line(body)
         if parsed is None:
+            self.handle_capa(src, body)
+            self.handle_moot(src, body)
+            self.handle_file(src, body)
+            self.handle_dumb(src, body)
             return
         if parsed.version == 2 and parsed.from_nick and parsed.from_nick.lower() != src.lower():
             info("INFO SEAL prefix != from_nick, drop")

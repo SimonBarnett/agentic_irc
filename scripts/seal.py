@@ -28,6 +28,7 @@ import protect  # noqa: E402
 
 INFO_V1 = b"agentic-irc-seal-v1"
 INFO_V2 = b"agentic-irc-seal-v2"
+INFO_DUMB = b"dumb-v1"
 CHUNK = 300
 MAX_N = 64
 BAG_TTL_S = 120.0
@@ -102,6 +103,32 @@ def aad_v2(channel: str, to_nick: str, from_nick: str, msg_id: str) -> bytes:
         raise ValueError("pipe in AAD field")
     ch, to, fr, mid = (f.lower() for f in fields)
     return f"{ch}|{to}|{fr}|{mid}".encode("utf-8")
+
+
+def dumb_aad(channel: str, to_nick: str, from_nick: str, msg_id: str) -> bytes:
+    return f"{channel.lower()}|{to_nick.lower()}|{from_nick.lower()}|{msg_id.lower()}|dumb-v1".encode()
+
+
+def dumb_seal_bytes(plaintext: bytes, key32: bytes, channel: str, to_nick: str, from_nick: str, msg_id: str) -> bytes:
+    nonce = secrets.token_bytes(12)
+    ct = AESGCM(key32).encrypt(nonce, plaintext, dumb_aad(channel, to_nick, from_nick, msg_id))
+    return nonce + ct
+
+
+def dumb_open_bytes(blob: bytes, key32: bytes, channel: str, to_nick: str, from_nick: str, msg_id: str) -> bytes:
+    if len(blob) < 12 + 16:
+        raise ValueError("ciphertext too short")
+    return AESGCM(key32).decrypt(blob[:12], blob[12:], dumb_aad(channel, to_nick, from_nick, msg_id))
+
+
+def dumb_irc_lines(blob: bytes, to_nick: str, from_nick: str, msg_id: str | None = None) -> list[str]:
+    payload = b64(blob)
+    parts = [payload[i : i + CHUNK] for i in range(0, len(payload), CHUNK)] or [""]
+    n = len(parts)
+    if n > MAX_N:
+        raise ValueError("too many chunks")
+    msg_id = msg_id or secrets.token_hex(8)
+    return [f"DUMB v1 {to_nick} {from_nick} {msg_id} {i + 1} {n} {part}" for i, part in enumerate(parts)]
 
 
 def seal_bytes_v1(plaintext: bytes, recip_pk_b64: str) -> bytes:
@@ -345,6 +372,8 @@ def main() -> None:
     sub = p.add_subparsers(dest="cmd", required=True)
     sub.add_parser("genkey", help="create identity (DPAPI on Windows)")
     sub.add_parser("pubkey", help="print AGPK v1 line for IRC")
+    dk = sub.add_parser("dumb-key", help="write 32-byte connector.key (fingerprint on stderr)")
+    dk.add_argument("--home", default="")
 
     sp = sub.add_parser("seal", help="encrypt to SEAL v2 IRC lines")
     sp.add_argument("--to", required=True, help="recipient X25519 public key (base64)")
@@ -371,6 +400,17 @@ def main() -> None:
         return
     if args.cmd == "pubkey":
         print(f"AGPK v1 {load_ident()['pk']}")
+        return
+    if args.cmd == "dumb-key":
+        if args.home:
+            os.environ["AGENTIC_IRC_HOME"] = str(Path(args.home).expanduser())
+        d = home() / "dumb"
+        d.mkdir(parents=True, exist_ok=True)
+        key = secrets.token_bytes(32)
+        dest = d / "connector.key"
+        protect.write_secret_bytes(dest, key)
+        import hashlib
+        print(hashlib.sha256(key).hexdigest(), file=sys.stderr)
         return
     if args.cmd == "seal":
         if "|" in args.channel or "|" in args.to_nick or "|" in args.from_nick:

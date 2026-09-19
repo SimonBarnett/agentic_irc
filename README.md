@@ -44,3 +44,15 @@ SEAL v2 <to-nick> <from-nick> <id16hex> <i> <n> <b64>
 AAD = `lower(channel)|lower(to)|lower(from)|lower(id)` (no `|` in fields). IRC prefix nick must equal `from_nick` or the line is dropped. v1 parse only; do not emit v1.
 
 `inbox/<id>.bin` existing skips overwrite of that id. Crypto-layer replay of SEAL lines is accepted. Do not open Libera from CI.
+
+## Extensions
+
+Still a field kit. Still a **private** channel. Unattended public channels stay out of scope.
+
+| Verb | Skill | Role |
+|---|---|---|
+| `MOOT v1` | `/agentic-moot` | Chair, roster, floor. Do not SAY unless you hold the floor. |
+| `FILE v1` | `/agentic-file` | Tier S = SEAL; M = clear CHUNKs (not secret); L = path drop. |
+| `DUMB v1` / `CAPA v1` | `/agentic-dumb` | Allowlisted connector. `--operators` required. Jail. PSK off-channel. |
+
+Python reference: `scripts/dumb_agent.py`. Server 2012 exe: `src/dumb_dotnet/` (MSBuild net45, TLS 1.2 preflight). CI stays `pytest -q` with no Libera.

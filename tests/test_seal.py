@@ -132,3 +132,52 @@ def test_fragment_key_includes_from_nick():
     assert store.add(a) is None
     assert store.add(b) is None
     assert len(store._bags) == 2
+
+
+def test_nick_re_matches_hyphenated_nicks():
+    """Hyphen must not form a character-class range (cm-oscar / cm-bob)."""
+    for nick in ("cm-oscar", "cm-bob"):
+        assert seal.NICK_RE.match(nick), nick
+    parsed = seal.parse_seal_line(
+        "SEAL v2 cm-oscar cm-bob abcdabcdabcdabcd 1 1 QUJDRA=="
+    )
+    assert parsed is not None
+    assert parsed.version == 2
+    assert parsed.to_nick == "cm-oscar"
+    assert parsed.from_nick == "cm-bob"
+    assert parsed.msg_id == "abcdabcdabcdabcd"
+
+
+def test_hyphenated_nick_seal_roundtrip(tmp_path: Path):
+    """seal → parse_seal_line → FragmentStore → open_bytes_v2. No network."""
+    a, b = _pair(tmp_path)
+    msg_id = "1e2eff866b63b790"
+    blob = seal.seal_bytes_v2(
+        b"MODE1_SECRET_OK7",
+        b["pk"],
+        a,
+        "#cm-bob-oscar",
+        "cm-oscar",
+        "cm-bob",
+        msg_id,
+    )
+    lines = seal.irc_lines_v2(blob, "cm-oscar", "cm-bob", msg_id)
+    store = seal.FragmentStore()
+    got = None
+    for ln in lines:
+        parsed = seal.parse_seal_line(ln)
+        assert parsed is not None
+        assert parsed.to_nick == "cm-oscar"
+        assert parsed.from_nick == "cm-bob"
+        got = store.add(parsed) or got
+    assert got is not None
+    pt = seal.open_bytes_v2(
+        seal.b64d(got),
+        b,
+        "#cm-bob-oscar",
+        "cm-oscar",
+        "cm-bob",
+        msg_id,
+        a["pk"],
+    )
+    assert pt == b"MODE1_SECRET_OK7"

@@ -149,6 +149,18 @@ def test_sasl_nak_is_not_ack(tmp_path: Path, monkeypatch):
     assert not c.sasl_ack.is_set()
 
 
+def test_sasl_plain_sends_cap_end_when_env_unset(tmp_path: Path, monkeypatch):
+    monkeypatch.delenv("AGENTIC_IRC_SASL_USER", raising=False)
+    monkeypatch.delenv("AGENTIC_IRC_SASL_PASSWORD", raising=False)
+    monkeypatch.setenv("AGENTIC_IRC_HOME", str(tmp_path / "sasl"))
+    c = irc_agent.Client(_args(tmp_path / "sasl", "n"))
+    assert c.sasl_token() is None
+    sent: list[str] = []
+    monkeypatch.setattr(c, "send", lambda line: sent.append(line))
+    c.sasl_plain()
+    assert sent == ["CAP END"]
+
+
 def test_v1_not_written_to_inbox(tmp_path: Path, monkeypatch):
     monkeypatch.setenv("AGENTIC_IRC_HOME", str(tmp_path / "alice"))
     alice = seal.genkey()

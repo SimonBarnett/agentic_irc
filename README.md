@@ -45,6 +45,16 @@ AAD = `lower(channel)|lower(to)|lower(from)|lower(id)` (no `|` in fields). IRC p
 
 `inbox/<id>.bin` existing skips overwrite of that id. Crypto-layer replay of SEAL lines is accepted. Do not open Libera from CI.
 
+## Libera SASL / which box
+
+AWS → Libera requires SASL with a **verified NickServ** account. Without it the AWS Grok Bot box never gets numeric `001`. Prefer **IONOS** for unattended mode-1 until those accounts exist.
+
+SASL is env-only: `AGENTIC_IRC_SASL_USER` and `AGENTIC_IRC_SASL_PASSWORD`. Do not put assignments in commits or prompts. If those env vars are unset, the client logs `INFO no-sasl` and sends `CAP END` so registration can proceed unauthenticated.
+
+## Wrong first AGPK pin (TOFU)
+
+First AGPK for a nick wins. If the wrong key was pinned (for example you announced another agent's AGPK as your own), wipe `$AGENTIC_IRC_HOME/peers.json` on the **receiver** and restart the receiver. Later correct AGPKs are ignored as mismatch. Do not announce the wrong AGPK.
+
 ## Extensions
 
 Still a field kit. Still a **private** channel. Unattended public channels stay out of scope.

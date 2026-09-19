@@ -116,6 +116,7 @@ class FileBag:
         self._offers: dict[str, dict] = {}
         self._assembled: dict[str, bytes] = {}
         self._aborted: set[str] = set()
+        self._pending_done: dict[str, str] = {}
 
     def note_offer(self, src: str, fid: str, name: str, sha: str, nbytes: str | int, tier: str) -> bool:
         """First OFFER for an id wins. Second OFFER same id is ignored (PDF F6)."""
@@ -142,9 +143,20 @@ class FileBag:
         for k in [k for k in self._bags if k[1] == fid_l]:
             del self._bags[k]
         self._assembled.pop(fid_l, None)
+        self._pending_done.pop(fid_l, None)
+
+    def peek_assembled(self, fid: str) -> bytes | None:
+        return self._assembled.get(fid.lower())
 
     def take_assembled(self, fid: str) -> bytes | None:
         return self._assembled.pop(fid.lower(), None)
+
+    def note_done(self, fid: str, sha: str) -> None:
+        """DONE arrived before the bag was complete; finish when the last CHUNK lands."""
+        self._pending_done[fid.lower()] = sha
+
+    def take_pending_done(self, fid: str) -> str | None:
+        return self._pending_done.pop(fid.lower(), None)
 
     def add_chunk(self, from_nick: str, fid: str, i: int, n: int, b64: str, now: float | None = None) -> bytes | None:
         now = time.time() if now is None else now

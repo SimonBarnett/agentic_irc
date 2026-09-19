@@ -186,6 +186,49 @@ def test_wrong_channel_dropped(tmp_path: Path, monkeypatch):
     assert not (c.inbox / "dd11dd11dd11dd11.bin").exists()
 
 
+def test_outbox_restart_sends_preexisting_join(tmp_path: Path, monkeypatch):
+    """After client restart, unread JOIN already in outbox.txt must hit the wire."""
+    monkeypatch.setenv("AGENTIC_IRC_HOME", str(tmp_path))
+    monkeypatch.setattr(irc_agent, "FLOOD_S", 0)
+    join = "MOOT v1 JOIN 0123456789abcdef"
+    (tmp_path / "outbox.txt").write_text(join + "\n", encoding="utf-8")
+    c = irc_agent.Client(_args(tmp_path, "cm-bob"))
+    sent: list[str] = []
+    c.say = lambda msg: sent.append(msg)  # type: ignore[method-assign]
+    c.sock = object()  # type: ignore[assignment]
+    assert c.drain_outbox_once() == [join]
+    assert sent == [join]
+    assert irc_agent.load_outbox_pos(c.outbox) > 0
+
+    c2 = irc_agent.Client(_args(tmp_path, "cm-bob"))
+    sent2: list[str] = []
+    c2.say = lambda msg: sent2.append(msg)  # type: ignore[method-assign]
+    c2.sock = object()  # type: ignore[assignment]
+    assert c2.drain_outbox_once() == []
+    assert sent2 == []
+
+    extra = "MOOT v1 JOIN deadbeefdeadbeef"
+    with (tmp_path / "outbox.txt").open("a", encoding="utf-8") as f:
+        f.write(extra + "\n")
+    assert c2.drain_outbox_once() == [extra]
+
+
+def test_outbox_incomplete_line_held_across_polls(tmp_path: Path, monkeypatch):
+    monkeypatch.setenv("AGENTIC_IRC_HOME", str(tmp_path))
+    monkeypatch.setattr(irc_agent, "FLOOD_S", 0)
+    p = tmp_path / "outbox.txt"
+    p.write_bytes(b"MOOT v1 JOIN 0123456789abcdef")
+    c = irc_agent.Client(_args(tmp_path, "cm-bob"))
+    sent: list[str] = []
+    c.say = lambda msg: sent.append(msg)  # type: ignore[method-assign]
+    c.sock = object()  # type: ignore[assignment]
+    assert c.drain_outbox_once() == []
+    assert sent == []
+    with p.open("ab") as f:
+        f.write(b"\n")
+    assert c.drain_outbox_once() == ["MOOT v1 JOIN 0123456789abcdef"]
+
+
 def test_prefix_must_match_from_nick(tmp_path: Path, monkeypatch):
     monkeypatch.setenv("AGENTIC_IRC_HOME", str(tmp_path / "alice"))
     alice = seal.genkey()

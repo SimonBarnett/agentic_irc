@@ -317,6 +317,36 @@ def test_tier_s_partial_outbox_no_done_until_complete(tmp_path, monkeypatch):
     assert written[0].read_bytes() == data
 
 
+def test_done_before_last_chunk_still_completes(tmp_path, monkeypatch):
+    """DONE may race ahead of the last CHUNK; do not drop the bag."""
+    monkeypatch.setenv("AGENTIC_IRC_HOME", str(tmp_path))
+    seal.genkey()
+    c = irc_agent.Client(_args(tmp_path, "bob"))
+    data = os.urandom(80)
+    b64 = seal.b64(data)
+    parts = [b64[:40], b64[40:]]
+    sha = hashlib.sha256(data).hexdigest()
+    c.handle_privmsg("alice!u@h", "#ops", f"FILE v1 OFFER bob alice {FID} {len(data)} {sha} M note.txt")
+    c.handle_privmsg("alice!u@h", "#ops", f"FILE v1 CHUNK {FID} 1 2 {parts[0]}")
+    c.handle_privmsg("alice!u@h", "#ops", f"FILE v1 DONE {FID} {sha}")
+    complete = tmp_path / "files" / "complete"
+    assert not complete.exists() or not list(complete.glob("*"))
+    c.handle_privmsg("alice!u@h", "#ops", f"FILE v1 CHUNK {FID} 2 2 {parts[1]}")
+    dest = complete / f"{FID}-note.txt"
+    assert dest.read_bytes() == data
+
+
+def test_offer_auto_accept_under_cap(tmp_path, monkeypatch):
+    monkeypatch.setenv("AGENTIC_IRC_HOME", str(tmp_path))
+    seal.genkey()
+    c = irc_agent.Client(_args(tmp_path, "bob"))
+    sha = "ab" * 32
+    c.handle_privmsg("alice!u@h", "#ops", f"FILE v1 OFFER bob alice {FID} 3 {sha} M note.txt")
+    out = (tmp_path / "outbox.txt").read_text()
+    assert f"FILE v1 ACCEPT {FID}" in out
+    assert "REFUSE" not in out
+
+
 def test_f1_done_matching_hash_writes_complete(tmp_path, monkeypatch):
     monkeypatch.setenv("AGENTIC_IRC_HOME", str(tmp_path))
     seal.genkey()

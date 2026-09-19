@@ -54,6 +54,26 @@ def take_outbox_lines(path: Path, last: int) -> tuple[list[str], int]:
     return lines, last + consumed
 
 
+def outbox_pos_path(outbox: Path) -> Path:
+    return Path(str(outbox) + ".pos")
+
+
+def load_outbox_pos(outbox: Path) -> int:
+    """Byte offset of last successfully drained complete line. Missing → 0 (restart sends JOIN)."""
+    p = outbox_pos_path(outbox)
+    if not p.exists():
+        return 0
+    try:
+        n = int(p.read_text(encoding="utf-8").strip() or "0")
+    except (ValueError, OSError):
+        return 0
+    return n if n >= 0 else 0
+
+
+def save_outbox_pos(outbox: Path, pos: int) -> None:
+    outbox_pos_path(outbox).write_text(str(int(pos)) + "\n", encoding="utf-8")
+
+
 def info(msg: str) -> None:
     print(msg, flush=True)
 
@@ -91,6 +111,7 @@ class Client:
         self.file_bags = filexfer.FileBag()
         self.lock = threading.Lock()
         self.sock: ssl.SSLSocket | None = None
+        self._outbox_gen = 0
         self.ready = threading.Event()
         self.joined = threading.Event()
         self.dead = threading.Event()
@@ -207,24 +228,48 @@ class Client:
                 info(f"INFO file OFFER id={fl.file_id} ignored (duplicate)")
                 return
             info(f"INFO file OFFER id={fl.file_id} name={name} bytes={nbytes}")
+            extra = 0
+            try:
+                extra = int(nbytes or 0)
+            except (TypeError, ValueError):
+                extra = 0
+            if filexfer.would_exceed_cap(self.home, extra=extra):
+                self._file_outbox(f"FILE v1 REFUSE {fl.file_id} :disk")
+            else:
+                self._file_outbox(f"FILE v1 ACCEPT {fl.file_id}")
         if fl.verb == "CHUNK" and fl.chunk_b64 and fl.i and fl.n and fl.file_id:
-            self.file_bags.add_chunk(src, fl.file_id, fl.i, fl.n, fl.chunk_b64)
+            data = self.file_bags.add_chunk(src, fl.file_id, fl.i, fl.n, fl.chunk_b64)
+            if data is not None:
+                pending = self.file_bags.take_pending_done(fl.file_id)
+                if pending is not None:
+                    self._finish_file(fl.file_id, pending, self.file_bags.take_assembled(fl.file_id) or data)
         if fl.verb == "ABORT" and fl.file_id:
             self.file_bags.abort(fl.file_id)
             info(f"INFO file ABORT id={fl.file_id}")
         if fl.verb == "DONE" and fl.file_id:
             sha = fl.fields[1] if len(fl.fields) > 1 else ""
-            data = self.file_bags.take_assembled(fl.file_id)
-            offer = self.file_bags._offers.get(fl.file_id.lower(), {})
-            name = offer.get("name") or "file.bin"
-            expect = offer.get("sha") or sha
+            data = self.file_bags.peek_assembled(fl.file_id)
             if data is None:
-                info(f"INFO file DONE id={fl.file_id} fail (incomplete)")
+                self.file_bags.note_done(fl.file_id, sha)
+                info(f"INFO file DONE id={fl.file_id} wait (incomplete)")
                 return
-            if filexfer.complete_write(self.home, fl.file_id, name, data, expect):
-                info(f"INFO file DONE id={fl.file_id} ok")
-            else:
-                info(f"INFO file DONE id={fl.file_id} fail")
+            self._finish_file(fl.file_id, sha, self.file_bags.take_assembled(fl.file_id))
+
+    def _file_outbox(self, line: str) -> None:
+        with self.outbox.open("a", encoding="utf-8") as f:
+            f.write(line + "\n")
+
+    def _finish_file(self, fid: str, sha: str, data: bytes | None) -> None:
+        if data is None:
+            info(f"INFO file DONE id={fid} fail (incomplete)")
+            return
+        offer = self.file_bags._offers.get(fid.lower(), {})
+        name = offer.get("name") or "file.bin"
+        expect = offer.get("sha") or sha
+        if filexfer.complete_write(self.home, fid, name, data, expect):
+            info(f"INFO file DONE id={fid} ok")
+        else:
+            info(f"INFO file DONE id={fid} fail")
 
     def handle_dumb(self, src: str, body: str) -> None:
         dl = wire.parse_dumb_line(body)
@@ -371,36 +416,45 @@ class Client:
         finally:
             self.dead.set()
 
-    def outbox_loop(self) -> None:
+    def drain_outbox_once(self) -> list[str]:
+        """Send complete unread outbox lines. Offset persisted; restart does not skip JOIN."""
         path = self.outbox
-        last = path.stat().st_size if path.exists() else 0
+        if not path.exists() or self.sock is None:
+            return []
+        last = load_outbox_pos(path)
+        lines, new_last = take_outbox_lines(path, last)
+        sent: list[str] = []
+        for line in lines:
+            self.say(line)
+            sent.append(line)
+        if new_last != last:
+            save_outbox_pos(path, new_last)
+        return sent
+
+    def outbox_loop(self, gen: int | None = None) -> None:
         while not self.stop.is_set() and not self.dead.is_set():
+            if gen is not None and gen != self._outbox_gen:
+                return
             if not self.joined.wait(timeout=1):
                 continue
+            if gen is not None and gen != self._outbox_gen:
+                return
+            try:
+                self.drain_outbox_once()
+            except OSError:
+                return
             time.sleep(1)
-            if not path.exists():
-                continue
-            sz = path.stat().st_size
-            if sz < last:
-                last = 0
-            if sz <= last:
-                continue
-            lines, last = take_outbox_lines(path, last)
-            for line in lines:
-                if self.sock is not None:
-                    try:
-                        self.say(line)
-                    except OSError:
-                        return
 
     def session(self) -> None:
         self.ready.clear()
         self.joined.clear()
         self.dead.clear()
         self.live_nick = self.original_nick
+        self._outbox_gen += 1
+        gen = self._outbox_gen
         self.sock = self.connect()
         threading.Thread(target=self.reader, daemon=True).start()
-        threading.Thread(target=self.outbox_loop, daemon=True).start()
+        threading.Thread(target=self.outbox_loop, args=(gen,), daemon=True).start()
         self.send("CAP LS 302")
         self.send("NICK " + self.live_nick)
         self.send(f"USER {self.live_nick} 0 * :{self.args.realname}")

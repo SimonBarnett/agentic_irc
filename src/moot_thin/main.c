@@ -506,9 +506,8 @@ int main(int argc, char **argv)
             info("INFO %s", err);
             return 2;
         }
-        /* CLI again so flags win over ini */
-        config_defaults(&cfg);
-        config_load_ini(&cfg, cfg.config_path, err, sizeof(err));
+        /* CLI again so flags win over ini. Do NOT config_defaults here:
+         * that wiped nick/home and the second load_ini used a cleared path. */
         config_parse_argv(&cfg, argc, argv, err, sizeof(err));
     }
     if (cfg.offline)

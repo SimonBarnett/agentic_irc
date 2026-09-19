@@ -120,6 +120,7 @@ class Client:
     def sasl_plain(self) -> None:
         if not self.sasl_token():
             info("INFO no-sasl")
+            self.send("CAP END")
             return
         self.sasl_ack.clear()
         self.sasl_plus.clear()

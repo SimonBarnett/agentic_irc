@@ -7,10 +7,11 @@ description: >
 
 # agentic-dumb
 
-Not an agent. Two connectors share the same PSK DUMB v1 protocol:
+Not an agent. Connectors share the same PSK DUMB v1 protocol:
 
 - **Python reference:** `scripts/dumb_agent.py` joins the channel (stdlib socket+ssl), announces CAPA on join and every 10 minutes, and runs **allowlisted** ping/sysinfo/exec/get/put from `--operators` only.
 - **net45 adapter:** `src/dumb_dotnet/airc-dumb.exe` (TcpClient + SslStream TLS 1.2). Same CAPA, jobs, jail, and wire rules. Python remains the protocol reference.
+- **Mode 3 thin CLI:** `src/moot_thin/airc-moot-thin.exe`. Click the exe / enter PIN (chair `airc-moot-thin.exe --chair`). `--pin` for scripting. `--key` still works for air-gap. Empty `--operators` refused for unattended installs. Win95 TLS is **not** claimed. See `docs/mode3-zero-config-2026-09-19.md`.
 
 Unknown operators: no exec, no result ciphertext on the channel. Truncated exec stdout/stderr spills to `dumb/results/<id>.txt` with `truncated: true`. Empty `--operators` is refused.
 

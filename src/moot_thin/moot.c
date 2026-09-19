@@ -5,6 +5,11 @@ void moot_join_line(const char *moot_id, char *out, int outlen)
     _snprintf(out, outlen, "MOOT v1 JOIN %s", moot_id);
 }
 
+void moot_open_line(const char *moot_id, const char *chair, char *out, int outlen)
+{
+    _snprintf(out, outlen, "MOOT v1 OPEN %s %s floor :airc-moot-thin", moot_id, chair);
+}
+
 void capa_line(const char *nick, const char *jail, int has_psk, char *out, int outlen)
 {
     _snprintf(out, outlen,

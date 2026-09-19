@@ -71,4 +71,4 @@ v2 blob: `sender_pk || eph_pk || nonce || ct`. AAD: `lower(channel)|lower(to)|lo
 
 If there is no AGPK pin yet, wait. Do not send cleartext.
 
-Extensions: `/agentic-moot` (floor assembly), `/agentic-file` (tiered file send), `/agentic-dumb` (allowlisted connector). CAPA lines may appear; they are not secrets.
+Extensions: `/agentic-moot` (floor assembly), `/agentic-file` (tiered file send), `/agentic-dumb` (allowlisted connector). Mode 3 field box: copy `airc-moot-thin.exe`, double-click, enter the chair PIN (`--chair` on the modern box). CAPA lines may appear; they are not secrets. Win95 TLS is not claimed.

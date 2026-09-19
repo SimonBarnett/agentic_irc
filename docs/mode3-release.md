@@ -46,4 +46,4 @@ type airc-moot-thin.exe.sha256
 
 ## Secrets
 
-PSK / connector key is generated **off IRC** (`python scripts/seal.py dumb-key --home ...` on a box that already runs Mode 2, or a raw 32-byte file). Fingerprint is SHA-256 of the 32-byte key; compare out of band. The exe must never print the key. This file must never contain `password=` assignments.
+PSK / connector key is generated **off IRC** (`python scripts/seal.py dumb-key --home ...` on a box that already runs Mode 2, or a raw 32-byte file) **or** delivered by PIN pairing (AES-256-GCM GRANT; PIN never on the channel). Fingerprint is SHA-256 of the 32-byte key; compare out of band. The exe must never print the key or a live PIN into a file. This file must never contain `password=` assignments. PIN pairing sketch: `docs/mode3-zero-config-2026-09-19.md`.

@@ -1,17 +1,19 @@
 ; Example config for airc-moot-thin.exe
-; Copy to airc-moot-thin.ini and fill in. CLI flags override these keys.
-; Do not put PSK material, SASL passwords, or API key assignments in this file.
-; Generate connector.key off IRC and point key= at the 32-byte file (or AIRC1+DPAPI file).
+; Copy to airc-moot-thin.ini beside the exe. CLI flags override these keys.
+; Zero-arg / double-click: nick, home, allow_path, hello self-heal if omitted.
+; Happy path is PIN pairing (chair --chair, thin Enter PIN / --pin).
+; Do not put PSK material, PIN values, SASL passwords, or API key assignments in this file.
+; Air-gap: generate connector.key off IRC and point key= at the 32-byte file (or AIRC1+DPAPI file).
 
 [client]
-nick=thin-box
-channel=#ops
-moot=0123456789abcdef
-home=C:\airc-thin
-allow_path=C:\airc-thin\jail
-operators=cm-bob
-key=C:\airc-thin\dumb\connector.key
+; nick=  (default: sanitized hostname)
+channel=#airc-moot
+; moot=  (filled by PIN pair)
+; home=  (default: directory of the exe)
+; allow_path=  (default: {home}\jail)
+; operators=  (filled by PIN pair from the chair nick; required for unattended --key installs)
+; key=  (default: {home}\dumb\connector.key)
 host=irc.libera.chat
 port=6697
-hello=
+; hello=  (default: {nick}-online)
 realname=airc-moot-thin

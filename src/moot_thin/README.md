@@ -29,7 +29,24 @@ Optional: MinGW-w64 i686 (`make` / `gcc -m32`).
 
 **Windows 95/98/NT4 will not load this PE.** **Windows ME excluded.** Live Libera needs Schannel TLS 1.2: expected **Windows 8 / Server 2012+**. See `docs/mode3-tls-spike.md`. This README does **not** claim a Win95 pass.
 
-## CLI
+## First run (zero-config)
+
+Click the exe, or run it with no flags. It fills `home` from the exe directory, `allow_path` from `{home}\jail`, `nick` from the hostname, and `hello` from `{nick}-online`. If `airc-moot-thin.ini` sits beside the exe it is loaded **without** wiping those values; CLI still wins.
+
+Chair (modern box):
+
+```
+airc-moot-thin.exe --chair
+-> PIN 482917   moot=<16hex>   channel=#airc-moot   expires 10m
+```
+
+Thin (field box): type the PIN at `Enter PIN:`, or pass `--pin 482917`. The long-term PSK is **not** sent as cleartext. After GRANT the thin writes `{home}\dumb\connector.key` and `{home}\dumb\paired.ini` (no PIN, no PSK) and joins the moot. Success line: `joined as <nick> moot=<id> pin=ok`.
+
+Air-gap fallback: copy a 32-byte key off-channel and use `--key` / `--operators` / `--moot` as before. Empty `--operators` is still refused for unattended installs.
+
+Default pairing channel is `#airc-moot` when none is set. Put `channel=#your-private-chan` in a sibling ini for a real room. See `docs/mode3-zero-config-2026-09-19.md`.
+
+## CLI (advanced / air-gap)
 
 ```
 airc-moot-thin.exe --nick thin-box --channel #ops --moot 0123456789abcdef ^
@@ -37,7 +54,7 @@ airc-moot-thin.exe --nick thin-box --channel #ops --moot 0123456789abcdef ^
   --key C:\airc-thin\dumb\connector.key
 ```
 
-`--config airc-moot-thin.ini` may supply the same keys; CLI wins. Empty `--operators` is refused (no exec, no result ciphertext). `--selftest` and `--offline` never open a socket.
+`--config airc-moot-thin.ini` may supply the same keys; CLI wins. Empty `--operators` is refused (no exec, no result ciphertext). `--selftest` and `--offline` never open a socket. `--once` is one session (no reconnect); chair `--once` exits after GRANT.
 
 ## Protocol
 

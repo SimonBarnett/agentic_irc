@@ -17,6 +17,8 @@ src/moot_thin/*.ilk
 src/moot_thin/*.sha256
 src/moot_thin/*.exp
 src/moot_thin/*.lib
+src/moot_thin/jail/
+src/moot_thin/dumb/
 src/dumb_dotnet/*.exe
 src/dumb_dotnet/*.pdb
 src/dumb_dotnet/bin/

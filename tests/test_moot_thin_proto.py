@@ -143,7 +143,7 @@ def test_version_sync():
     ver = (ROOT / "src" / "moot_thin" / "VERSION").read_text(encoding="utf-8").strip()
     main = (ROOT / "src" / "moot_thin" / "main.c").read_text(encoding="utf-8")
     assert f'"{ver}"' in main
-    assert ver == "0.1.0"
+    assert ver == "0.2.0"
 
 
 def test_live_tls_contracts_in_source():
@@ -242,6 +242,166 @@ def test_c_exe_offline_operator_drop(tmp_path):
     doc = json.loads(outp.read_text(encoding="utf-8"))
     assert doc["ok"] is False
     assert doc["error"] == "operator"
+
+
+@pytest.mark.skipif(_exe() is None, reason="airc-moot-thin.exe not built")
+def test_c_exe_selfheal_omits_nick_home(tmp_path):
+    exe = _exe()
+    outp = tmp_path / "r.json"
+    r = subprocess.run(
+        [
+            exe,
+            "--offline",
+            "--channel",
+            "#ops",
+            "--moot",
+            JID,
+            "--operators",
+            "alice",
+            "--from-nick",
+            "alice",
+            "--job-in",
+            str(FIX / "job_ping.json"),
+            "--job-out",
+            str(outp),
+        ],
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    assert r.returncode == 0, r.stdout + r.stderr
+    doc = json.loads(outp.read_text(encoding="utf-8"))
+    assert doc["ok"] is True
+    assert doc["op"] == "ping"
+
+
+@pytest.mark.skipif(_exe() is None, reason="airc-moot-thin.exe not built")
+def test_c_exe_missing_channel_one_line(tmp_path):
+    exe = _exe()
+    r = subprocess.run(
+        [
+            exe,
+            "--offline",
+            "--nick",
+            "box",
+            "--moot",
+            JID,
+            "--home",
+            str(tmp_path),
+            "--allow-path",
+            str(tmp_path),
+            "--operators",
+            "alice",
+            "--from-nick",
+            "alice",
+            "--job-in",
+            str(FIX / "job_ping.json"),
+        ],
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    assert r.returncode != 0
+    text = (r.stdout or "") + (r.stderr or "")
+    assert "channel" in text.lower()
+    assert "usage:" not in text.lower()
+
+
+@pytest.mark.skipif(_exe() is None, reason="airc-moot-thin.exe not built")
+def test_c_exe_selftest_zero_config_lines():
+    exe = _exe()
+    r = subprocess.run([exe, "--selftest"], capture_output=True, text=True, timeout=60)
+    assert r.returncode == 0, r.stdout + r.stderr
+    out = r.stdout or ""
+    assert "self-heal nick=" in out
+    assert "sibling ini kept nick=keep-me" in out
+    assert "pin wrap ok" in out
+    assert "pin mismatch refused" in out
+    assert "pair grant operators=alice" in out
+
+
+def test_sanitize_hostname_and_self_heal():
+    assert thin.sanitize_hostname("WALRUS") == "walrus"
+    assert thin.sanitize_hostname("2012-BOX") == "n2012-box"
+    assert thin.sanitize_hostname("!!!") == "thin-box"
+    longn = thin.sanitize_hostname("A" * 40)
+    assert len(longn) <= 32
+    cfg = thin.merge_self_heal(
+        {"channel": "#ops", "nick": "keep-me"},
+        {"once": True},
+        exe_dir=r"C:\airc",
+        hostname="WALRUS",
+    )
+    assert cfg.nick == "keep-me"
+    assert cfg.home == r"C:\airc"
+    assert cfg.allow_path.lower().endswith("jail")
+    cfg2 = thin.merge_self_heal(None, None, exe_dir=r"C:\airc", hostname="WALRUS")
+    assert cfg2.nick == "walrus"
+    assert cfg2.hello == "walrus-online"
+
+
+def test_pin_wrap_and_grant_roundtrip():
+    vec = json.loads((FIX / "pin_wrap_vector.json").read_text(encoding="utf-8"))
+    wrap = thin.wrap_key(vec["pin"], vec["pair_id"], vec["channel"], vec["moot_id"])
+    assert wrap.hex() == vec["wrap_key_hex"]
+    bad = thin.wrap_key("000000", vec["pair_id"], vec["channel"], vec["moot_id"])
+    hello = thin.pair_hello_seal(wrap, vec["channel"], vec["moot_id"], vec["pair_id"], vec["thin_nick"])
+    assert thin.pair_hello_open(wrap, vec["channel"], vec["moot_id"], vec["pair_id"], hello) == vec["thin_nick"]
+    with pytest.raises(Exception):
+        thin.pair_hello_open(bad, vec["channel"], vec["moot_id"], vec["pair_id"], hello)
+    psk = bytes.fromhex(vec["psk_hex"])
+    grant = thin.pair_grant_seal(
+        wrap, vec["channel"], vec["moot_id"], vec["pair_id"], vec["thin_nick"], vec["chair_nick"], psk
+    )
+    got, chair, moot = thin.pair_grant_open(
+        wrap, vec["channel"], vec["moot_id"], vec["pair_id"], vec["thin_nick"], grant
+    )
+    assert got == psk
+    assert chair == vec["chair_nick"]
+    assert moot == vec["moot_id"]
+    ops = thin.operators_add("", chair)
+    assert "alice" in thin.operators_set(ops)
+    offer = thin.pair_offer_line(vec["moot_id"], vec["pair_id"], 1710000000)
+    assert offer.startswith("PAIR v1 OFFER ")
+    assert "1710000000" in offer
+
+
+def test_zero_config_docs_z0_z8():
+    doc = (ROOT / "docs" / "mode3-zero-config-2026-09-19.md").read_text(encoding="utf-8")
+    for zid in ("Z0", "Z1", "Z2", "Z3", "Z4", "Z5", "Z6", "Z7", "Z8"):
+        assert zid in doc
+    assert "state machine" in doc.lower() or "WAIT_HELLO" in doc
+    low = doc.lower()
+    assert "win95" in low
+    assert "not claimed" in low or "still not claimed" in low
+    assert "not** ready for human uat" in low or "not ready for human uat" in low
+    assert "cleartext" in low
+    src = (ROOT / "src" / "moot_thin" / "main.c").read_text(encoding="utf-8")
+    assert "PAIR v1" in src or "pair.h" in src
+    assert "Does not claim Windows 95 TLS" in src
+
+
+def test_pairing_validate_skips_operators_unattended_still_refuses():
+    cfg = thin.ThinConfig(
+        nick="walrus",
+        channel="#airc-moot",
+        home=".",
+        allow_path=".",
+        pairing=True,
+        pin="482917",
+    )
+    thin.validate_config(cfg)
+    with pytest.raises(ValueError, match="operators"):
+        thin.validate_config(
+            thin.ThinConfig(
+                nick="box",
+                channel="#ops",
+                moot_id=JID,
+                home=".",
+                allow_path=".",
+                operators="",
+            )
+        )
 
 
 def test_default_bins_powershell_optional():

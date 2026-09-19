@@ -1,0 +1,10 @@
+{
+  "pin": "482917",
+  "pair_id": "aabbccddeeff0011",
+  "channel": "#ops",
+  "moot_id": "0123456789abcdef",
+  "wrap_key_hex": "eb596292f71481efcbadb09ff76b893a5513505d58570f1fa7a3904190b40245",
+  "thin_nick": "walrus",
+  "chair_nick": "alice",
+  "psk_hex": "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff"
+}

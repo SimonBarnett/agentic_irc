@@ -22,10 +22,14 @@ Compile target: 32-bit Win32 **ANSI** console PE, `_WIN32_WINNT=0x0501`. TLS: Sc
 
 XP **cannot** be told to open Libera with this binary. On a Win8+ box:
 
+Zero-config (PIN): `airc-moot-thin.exe --chair` on the modern box prints PIN + moot + channel. On the field box, double-click `airc-moot-thin.exe` (or `--pin NNNNNN`). Nick/home/jail self-heal. Long-term PSK is not sent as cleartext. See `docs/mode3-zero-config-2026-09-19.md`. Zero-config is **not** a Win95 TLS claim and is **not** ready for human UAT until Bob re-MRBs it.
+
+Air-gap (`--key`) still works:
+
 1. Download `airc-moot-thin.exe` + `.sha256` from the `mode3-thin` GitHub Release.
 2. Generate a 32-byte connector key **off channel**. On a Mode 2 box: `python scripts/seal.py dumb-key --home <dir>`. Copy `connector.key` via USB/RDP. Compare SHA-256 fingerprint out of band. If the key was written by Python on Windows it starts with `AIRC1` + DPAPI; the thin client will unprotect it on the **same user/machine**. A raw 32-byte file also works (portable across boxes).
-3. Copy `airc-moot-thin.ini.example` to `airc-moot-thin.ini`. Fill nick, channel, 16-hex moot id, home, `--allow-path` jail, `--operators` (chair nick). **Do not leave operators empty.**
-4. Chair (Python `moot.py` / agent) **OPEN**s the moot first, then start the exe. It JOIN-s the channel, emits `CAPA v1 dumb`, then `MOOT v1 JOIN <id>`.
+3. Copy `airc-moot-thin.ini.example` to `airc-moot-thin.ini`. Fill channel (and optionally moot, operators). Nick/home/jail may be omitted (self-heal). **Do not leave operators empty** on the unattended `--key` path.
+4. Chair (thin `--chair`, or Python `moot.py` / agent) **OPEN**s the moot first, then start the exe. It JOIN-s the channel, emits `CAPA v1 dumb`, then `MOOT v1 JOIN <id>`.
 5. Operator on the allowlist sends a DUMB v1 sealed `exec` (same as Mode 2 `dumb_ctl.py`). Thin client returns stdout/stderr/rc as a sealed DUMB result. Floor alone is **not** enough.
 
 Live IONOS smoke (hostname visible to `cm-bob`) is **Phase 4**, not claimed here.

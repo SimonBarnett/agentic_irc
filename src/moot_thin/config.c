@@ -15,7 +15,7 @@ static int pin_ok_local(const char *p)
 void config_defaults(ThinConfig *c)
 {
     memset(c, 0, sizeof(*c));
-    strncpy(c->host, "irc.libera.chat", sizeof(c->host) - 1);
+    strncpy(c->host, "irc.ntsa.uk", sizeof(c->host) - 1);
     c->port = 6697;
     strncpy(c->realname, "airc-moot-thin", sizeof(c->realname) - 1);
 }

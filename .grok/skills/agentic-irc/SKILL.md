@@ -13,7 +13,7 @@ TLS IRC. Status in clear. Secrets only as `SEAL v2` lines.
 
 Fleet builders (`#bobiverse`): `irc.ntsa.uk:6697` (Let's Encrypt). PASS from env `AGENTIC_IRC_PASSWORD` or `~\.grok\ergo\connect.password`. Host/port live in `agentic_build/config/bobiverse.json`. See `agentic_build/docs/bobiverse.md`. Do not point `bob-ionos` at Libera.
 
-Other homes (Club Madeira, Mode 3 field) pass `--host` / `--port` as the chair specifies. `irc_agent.py` still defaults to Libera if `--host` is omitted; fleet Watch-Bobiverse always passes host.
+Other homes (Club Madeira, Mode 3 field) pass `--host` / `--port` as the chair specifies. `irc_agent.py` defaults to `irc.ntsa.uk:6697` if `--host` is omitted. Fleet Watch-Bobiverse always passes host/port from `bobiverse.json`.
 
 `--nick` on `seal.py` is the **recipient** IRC nick, not yours.
 

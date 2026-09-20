@@ -47,7 +47,7 @@ SEAL v2 <to-nick> <from-nick> <id16hex> <i> <n> <b64>
 
 AAD = `lower(channel)|lower(to)|lower(from)|lower(id)` (no `|` in fields). IRC prefix nick must equal `from_nick` or the line is dropped. v1 parse only; do not emit v1.
 
-`inbox/<id>.bin` existing skips overwrite of that id. Crypto-layer replay of SEAL lines is accepted. Do not open Libera from CI.
+`inbox/<id>.bin` existing skips overwrite of that id. Crypto-layer replay of SEAL lines is accepted. Do not open IRC from CI.
 
 ## Libera SASL / which box
 

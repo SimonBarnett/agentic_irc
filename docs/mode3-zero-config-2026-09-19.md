@@ -157,7 +157,7 @@ The product remains a **private-channel field kit**. PIN pairing removes USB key
 | `nick` | Sanitized `GetComputerNameA` (lowercase, IRC-safe, <=32; prefix `n` if the name would start with a digit; `thin-box` if empty) |
 | `hello` | `{nick}-online` |
 | `channel` | Sibling ini / CLI / previous `paired.ini`, else `#airc-moot` on the pairing path |
-| `host` / `port` | `irc.libera.chat:6697` |
+| `host` / `port` | `irc.ntsa.uk:6697` |
 | sibling ini | `{exeDir}\airc-moot-thin.ini` loaded if present; **not** wiped after load; CLI wins |
 | previous pair | `{exeDir}\dumb\paired.ini` (no PSK) fills empty fields before sibling ini |
 | PSK file | `{home}\dumb\connector.key` (raw 32 or AIRC1+DPAPI). `--key` still works. |

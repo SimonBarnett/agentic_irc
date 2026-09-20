@@ -16,7 +16,7 @@ from typing import Any
 import moot_thin_proto as thin
 
 KIND = "airc-invite"
-DEFAULT_HOST = "irc.libera.chat"
+DEFAULT_HOST = "irc.ntsa.uk"
 DEFAULT_PORT = 6697
 DEFAULT_TTL_S = 600
 FORBIDDEN = ("psk", "connector.key", "sasl", "identity.json", "password=")

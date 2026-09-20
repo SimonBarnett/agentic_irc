@@ -401,7 +401,7 @@ def main() -> None:
     p.add_argument("--operators", required=True)
     p.add_argument("--allow-path", required=True)
     p.add_argument("--hello", default="")
-    p.add_argument("--host", default="irc.libera.chat")
+    p.add_argument("--host", default="irc.ntsa.uk")
     p.add_argument("--port", type=int, default=6697)
     p.add_argument("--realname", default="airc-dumb")
     p.add_argument("--once", action="store_true", help="no reconnect (tests)")

@@ -95,7 +95,7 @@ def test_sasl_state_machine_waits(tmp_path: Path, monkeypatch):
     monkeypatch.setenv("AGENTIC_IRC_HOME", str(tmp_path / "sasl"))
     ns = argparse.Namespace(
         nick="n", channel="#c", home=str(tmp_path / "sasl"), outbox="", hello="",
-        announce_key=False, host="h", port=1, realname="r", once=True,
+        announce_key=False, host="h", port=1, realname="r", once=True, password="",
     )
     c = irc_agent.Client(ns)
     out = c.sasl_on_line("CAP", ["ACK"], "sasl")

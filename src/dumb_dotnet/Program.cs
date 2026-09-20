@@ -126,7 +126,7 @@ namespace AircDumb
         private static string DefaultHost()
         {
             // Production default matches Python dumb_agent.py. Tests must pass --host explicitly.
-            return "irc." + "libera" + ".chat";
+            return "irc.ntsa.uk";
         }
 
         private static int Offline(Args a)

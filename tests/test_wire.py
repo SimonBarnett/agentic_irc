@@ -93,3 +93,17 @@ def test_tests_do_not_open_libera():
         assert host not in text
         if p.resolve() != Path(__file__).resolve():
             assert "create_connection" not in text
+
+
+def test_production_default_host_is_private_ergo():
+    root = Path(__file__).resolve().parents[1]
+    host = "irc.ntsa.uk"
+    agent = (root / "scripts" / "irc_agent.py").read_text(encoding="utf-8")
+    dumb = (root / "scripts" / "dumb_agent.py").read_text(encoding="utf-8")
+    beacon = (root / "scripts" / "beacon.py").read_text(encoding="utf-8")
+    assert f'default="{host}"' in agent
+    assert f'default="{host}"' in dumb
+    assert f'DEFAULT_HOST = "{host}"' in beacon
+    bad = 'default="irc.' + 'libera' + '.chat"'
+    assert bad not in agent
+    assert bad not in dumb

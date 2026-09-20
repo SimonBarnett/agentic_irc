@@ -511,7 +511,7 @@ def main() -> None:
     import signal
 
     p = argparse.ArgumentParser(description="agentic TLS IRC")
-    p.add_argument("--host", default="irc.libera.chat")
+    p.add_argument("--host", default="irc.ntsa.uk")
     p.add_argument("--port", type=int, default=6697)
     p.add_argument("--password", default="", help="IRC PASS (or env AGENTIC_IRC_PASSWORD)")
     p.add_argument("--nick", required=True)

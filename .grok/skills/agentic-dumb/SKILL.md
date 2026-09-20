@@ -26,7 +26,7 @@ python scripts/dumb_ctl.py exec --home H --from-nick ME --to srv2012-box --argv 
 
 TLS 1.2 preflight on Server 2012: if SslException, enable SchUseStrongCrypto (Microsoft docs). Do not dump connector.key. Do not exec if operators empty.
 
-Build the net45 exe: `src/dumb_dotnet/build.bat` or `msbuild airc-dumb.csproj /p:Configuration=Release /p:TargetFrameworkVersion=v4.5`. No runtime NuGet for crypto. Use `airc-dumb.cmd` as the scheduled-task wrapper. `--tls-insecure` is lab/offline only. Offline pytest: `DOTNET_DUMB_EXE`. Not ready for human UAT (no live Server 2012 claim from this tree). Production fleet IRC is Ergo `irc.ntsa.uk:6697`; pass `--host` (do not omit or the Python/net45 default is still Libera).
+Build the net45 exe: `src/dumb_dotnet/build.bat` or `msbuild airc-dumb.csproj /p:Configuration=Release /p:TargetFrameworkVersion=v4.5`. No runtime NuGet for crypto. Use `airc-dumb.cmd` as the scheduled-task wrapper. `--tls-insecure` is lab/offline only. Offline pytest: `DOTNET_DUMB_EXE`. Not ready for human UAT (no live Server 2012 claim from this tree). Production fleet IRC is Ergo `irc.ntsa.uk:6697` (Python/net45 default). Pass `--host` for any other network.
 
 Scheduled task (operator fills paths):
 

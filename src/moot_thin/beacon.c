@@ -38,7 +38,7 @@ static int invite_fill_from_json(const char *text, InviteDoc *out)
     if (out->v != 1)
         return -1;
     if (json_get_string(text, "host", out->host, sizeof(out->host)) < 0)
-        strncpy(out->host, "irc.libera.chat", sizeof(out->host) - 1);
+        strncpy(out->host, "irc.ntsa.uk", sizeof(out->host) - 1);
     if (json_get_int(text, "port", &port) == 0 && port > 0)
         out->port = port;
     else
@@ -74,7 +74,7 @@ static int invite_parse_ini_text(char *buf, InviteDoc *out)
     char *line, *save;
     memset(out, 0, sizeof(*out));
     out->port = 6697;
-    strncpy(out->host, "irc.libera.chat", sizeof(out->host) - 1);
+    strncpy(out->host, "irc.ntsa.uk", sizeof(out->host) - 1);
     line = buf;
     while (line && *line) {
         char *nl = strchr(line, '\n');

@@ -1,5 +1,12 @@
 # Skill harvest log
 
+## 2026-09-21 — Ergo service BobIrcd
+
+Ionos ircd is Windows service `BobIrcd` (`Start-Service BobIrcd`), not
+task `BobIrcd-ionos`. NSSM + Automatic + LocalSystem. Recovery lives in
+`.grok/skills/bob-irc`. `invite-airc` points at that service. Cert
+recycle is `C:\ai\ergo\install-cert.ps1` (service, not the old task).
+
 ## 2026-09-20 — bob-irc lives here
 
 Fleet Ergo playbook (`irc.ntsa.uk:6697`, connect.password, Watch-Bobiverse

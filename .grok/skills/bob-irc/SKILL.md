@@ -10,7 +10,7 @@ description: >
 # Bobiverse IRC (private Ergo)
 
 Canonical facts: `agentic_build/docs/bobiverse.md` (nicks, POINT, tray),
-`agentic_build/docs/bobiverse-ionos-ircd.md` (Ergo, cert, task),
+`agentic_build/docs/bobiverse-ionos-ircd.md` (Ergo, cert, service),
 `agentic_build/config/bobiverse.json` (`host` / `port` / `nicks`).
 This repo is the protocol kit (`irc_agent.py` default `irc.ntsa.uk:6697`).
 
@@ -48,15 +48,16 @@ Human monitor (flamingo): Halloy, nick not `bob-*` (e.g. `simon`).
 `password_file` = connect.password, channel `#bobiverse`.
 
 One-shot: `agentic_build\tools\Install-BobIrc.ps1 -MachineId <id>`.
-Ircd on ionos: `Install-BobIrcd.ps1` / task `BobIrcd-ionos`.
+Ircd on ionos: `Install-BobIrcd.ps1` / service `BobIrcd`.
 
 ## Ionos Ergo down
 
-Task `BobIrcd-ionos` runs `C:\ai\ergo\ergo.exe` (AtLogOn, not a service).
-State Ready with no `ergo.exe` means the daemon is down.
+Service `BobIrcd` runs `C:\ai\ergo\ergo.exe` via NSSM (Automatic, LocalSystem).
+Stopped with no `ergo.exe` means the daemon is down. The old task
+`BobIrcd-ionos` is gone; do not start it.
 
 ```powershell
-Start-ScheduledTask -TaskName 'BobIrcd-ionos'
+Start-Service BobIrcd
 ```
 
 Confirm dual-stack LISTEN on 6697 and TLS handshake `CN=irc.ntsa.uk`.

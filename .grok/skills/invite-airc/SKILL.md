@@ -24,7 +24,7 @@ Those remain fallbacks.
 ## Agent steps (chair / modern box)
 
 1. Prefer release `mode3-thin` / `airc-moot-thin.exe` >= 0.3.0.
-2. Start chair on the modern box (fleet: IONOS Ergo; else pass `--host`). If `:6697` is down, skill `agentic-irc` (task `BobIrcd-ionos`, firewall TCP 6697):
+2. Start chair on the modern box (fleet: IONOS Ergo; else pass `--host`). If `:6697` is down, skill `bob-irc` (service `BobIrcd`, firewall TCP 6697):
 
 ```bat
 airc-moot-thin.exe --chair --channel "#YOUR-PRIVATE-CHAN" --nick cm-bob --host irc.ntsa.uk

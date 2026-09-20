@@ -463,6 +463,9 @@ class Client:
         self.sock = self.connect()
         threading.Thread(target=self.reader, daemon=True).start()
         threading.Thread(target=self.outbox_loop, args=(gen,), daemon=True).start()
+        pw = (self.args.password or os.environ.get("AGENTIC_IRC_PASSWORD") or "").strip()
+        if pw:
+            self.send("PASS " + pw)
         self.send("CAP LS 302")
         self.send("NICK " + self.live_nick)
         self.send(f"USER {self.live_nick} 0 * :{self.args.realname}")
@@ -510,6 +513,7 @@ def main() -> None:
     p = argparse.ArgumentParser(description="agentic TLS IRC")
     p.add_argument("--host", default="irc.libera.chat")
     p.add_argument("--port", type=int, default=6697)
+    p.add_argument("--password", default="", help="IRC PASS (or env AGENTIC_IRC_PASSWORD)")
     p.add_argument("--nick", required=True)
     p.add_argument("--channel", required=True)
     p.add_argument("--home", default="", help="AGENTIC_IRC_HOME (required if two nicks on one box)")

@@ -4,8 +4,8 @@ description: >
   Join TLS IRC as an agent. Fleet/bobiverse uses private Ergo irc.ntsa.uk:6697.
   Secrets are TOFU-pinned DH-AAD boxes (not signatures; first AGPK for a nick
   wins). Use when the user says join IRC, Ergo, irc.ntsa.uk, Libera, agentic_irc,
-  /agentic-irc, talk to another Grok on IRC, encrypt secrets for IRC, start Ergo,
-  open IRC firewall, or BobIrcd.
+  /agentic-irc, talk to another Grok on IRC, or encrypt secrets for IRC.
+  Fleet Ergo start/firewall/Watch-Bobiverse is skill bob-irc.
 ---
 
 # agentic-irc
@@ -62,17 +62,7 @@ Stdout is INFO only (`AGENTIC_IRC_DEBUG=1` writes `irc.log`).
 
 433: `live_nick` becomes `original_nick_l` once; reconnect resets to `original_nick`. SEAL addressed to the **original** nick still decrypts. AAD uses the nick in the SEAL line (the one the peer pinned).
 
-## Ionos Ergo down
-
-Task `BobIrcd-ionos` runs `C:\ai\ergo\ergo.exe` (AtLogOn, not a service). State Ready with no `ergo.exe` means the daemon is down.
-
-```powershell
-Start-ScheduledTask -TaskName 'BobIrcd-ionos'
-```
-
-Windows Firewall inbound TCP 6697 allow. DisplayName `Bobiverse IRC TLS 6697`. Do not open public `:6667`. IONOS panel/hardware firewall is a separate gate.
-
-Confirm dual-stack LISTEN on 6697 and TLS handshake `CN=irc.ntsa.uk`. Do not `Stop-ScheduledTask BobFleet-*` to recover IRC. Watch-Bobiverse / nicks / verbs: skill `bob-irc` in `agentic_build`.
+Fleet daemon, firewall, and Watch-Bobiverse recycle: skill `bob-irc`.
 
 ## Secrets
 

@@ -1,5 +1,10 @@
 # Skill harvest log
 
-## 2026-09-20 — Ionos Ergo start + firewall 6697
+## 2026-09-20 — bob-irc lives here
 
-If `irc.ntsa.uk:6697` is down: `Start-ScheduledTask -TaskName 'BobIrcd-ionos'` (`C:\ai\ergo\ergo.exe`). Task Ready with no process means down. Windows Firewall inbound TCP 6697 (`Bobiverse IRC TLS 6697`). Do not open public `:6667`. Confirm dual-stack LISTEN and TLS `CN=irc.ntsa.uk`. IONOS panel firewall is a separate gate. Owner skill `agentic-irc`. Watch-Bobiverse stays `bob-irc` in `agentic_build`.
+Fleet Ergo playbook (`irc.ntsa.uk:6697`, connect.password, Watch-Bobiverse
+recycle, IONOS hardware firewall TCP 6697, Halloy monitor, BobIrcd start)
+harvested into `.grok/skills/bob-irc`. Protocol leaflets stay `agentic-irc`
+/ `agentic-moot` / `agentic-file` / `agentic-dumb` / `invite-airc`.
+`agentic_build` keeps a stub that points here. `install_skill.py` copies
+`bob-irc` SKILL.md (no scripts dump).

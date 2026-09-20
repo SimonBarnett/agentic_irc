@@ -107,3 +107,22 @@ def test_production_default_host_is_private_ergo():
     bad = 'default="irc.' + 'libera' + '.chat"'
     assert bad not in agent
     assert bad not in dumb
+
+
+def test_irc_skill_leaflets_exist():
+    root = Path(__file__).resolve().parents[1]
+    names = (
+        "agentic-irc",
+        "agentic-moot",
+        "agentic-file",
+        "agentic-dumb",
+        "invite-airc",
+        "bob-irc",
+    )
+    import install_skill as inst
+
+    assert inst.SKILLS == names
+    for name in names:
+        text = (root / ".grok" / "skills" / name / "SKILL.md").read_text(encoding="utf-8")
+        assert ("name: " + name) in text
+    assert "bob-irc" not in inst.COPY_SCRIPTS

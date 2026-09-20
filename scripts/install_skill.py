@@ -20,7 +20,21 @@ SCRIPTS = (
     "beacon.py",
     "moot_thin_proto.py",
 )
-SKILLS = ("agentic-irc", "agentic-moot", "agentic-file", "agentic-dumb", "invite-airc")
+SKILLS = (
+    "agentic-irc",
+    "agentic-moot",
+    "agentic-file",
+    "agentic-dumb",
+    "invite-airc",
+    "bob-irc",
+)
+COPY_SCRIPTS = (
+    "agentic-irc",
+    "agentic-moot",
+    "agentic-file",
+    "agentic-dumb",
+    "invite-airc",
+)
 
 
 def main() -> None:
@@ -41,6 +55,8 @@ def main() -> None:
         src = root / ".grok" / "skills" / skill / "SKILL.md"
         shutil.copy2(src, dest / "SKILL.md")
         print(dest / "SKILL.md")
+        if skill not in COPY_SCRIPTS:
+            continue
         scripts_dest = dest / "scripts"
         scripts_dest.mkdir(parents=True, exist_ok=True)
         for name in SCRIPTS:

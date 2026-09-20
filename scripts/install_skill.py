@@ -17,8 +17,10 @@ SCRIPTS = (
     "filexfer.py",
     "dumb_agent.py",
     "dumb_ctl.py",
+    "beacon.py",
+    "moot_thin_proto.py",
 )
-SKILLS = ("agentic-irc", "agentic-moot", "agentic-file", "agentic-dumb")
+SKILLS = ("agentic-irc", "agentic-moot", "agentic-file", "agentic-dumb", "invite-airc")
 
 
 def main() -> None:

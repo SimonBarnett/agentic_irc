@@ -1,45 +1,55 @@
 ---
 name: invite-airc
 description: >
-  Invite an elder/field Windows box into an agentic_irc Mode 3 moot with a
-  copy-pasteable thin command that includes a PIN. Use when Simon or an agent
-  says invite airc, elder machine, copy airc and run, PIN invite, or /invite-airc.
-  Chair runs on a modern box; thin is double-click-averse — one command only.
+  Invite an elder/field Windows box into an agentic_irc Mode 3 moot by
+  publishing live join details and double-clicking the thin exe. Use when
+  Simon or an agent says invite airc, elder machine, zero config, beacon,
+  publish details, PIN invite, or /invite-airc. No copy-paste flag soup on
+  the field box.
 ---
 
-# Invite airc (elder machine)
+# Invite airc (elder machine) — double-click
 
 ## Operator ritual (LOCKED)
 
-1. Operator asks the **agent** for a command (includes PIN).
-2. Operator copies the `airc` folder (exe + optional ini) onto the elder box.
-3. Operator runs **that one command** on the elder box.
+1. Agent on the modern box starts the chair and **publishes** the invite
+   (`airc-invite.json` beside the exe, or a secret gist URL in `beacon.url`).
+2. Operator copies the `airc` folder onto the elder box **once**
+   (exe + `airc-invite.json` and/or `beacon.url`).
+3. Operator **double-clicks** `airc-moot-thin.exe`. Nothing to type.
 
-Do **not** require flag soup, interactive PIN hunting, or hand-edited 8-arg lines as the happy path.
+Do **not** require `--pin --channel --moot` or `Enter PIN:` as the happy path.
+Those remain fallbacks.
 
 ## Agent steps (chair / modern box)
 
-1. Prefer release `mode3-thin` / `airc-moot-thin.exe` >= 0.2.1 (chair prints the thin invite).
-2. Start chair invite on the modern box (IONOS Ergo `irc.ntsa.uk:6697`, or `--host` if the thin still targets another net):
+1. Prefer release `mode3-thin` / `airc-moot-thin.exe` >= 0.3.0.
+2. Start chair on the modern box (fleet: IONOS Ergo; else pass `--host`):
 
 ```bat
-airc-moot-thin.exe --chair --channel "#YOUR-PRIVATE-CHAN" --nick cm-bob
+airc-moot-thin.exe --chair --channel "#YOUR-PRIVATE-CHAN" --nick cm-bob --host irc.ntsa.uk
 ```
 
-3. Capture stdout. `--chair` prints a ready-to-copy thin line plus PIN / moot / channel / expires (TTL 10m).
-4. Hand the operator **that one line** to run after copying `airc`. Shape:
+3. `--chair` writes `airc-invite.json` and `airc-invite.ini` next to the exe
+   (PIN + channel + moot + expiry; **no** PSK). TTL 10 minutes. It still prints
+   the copy-paste `--pin` line as a fallback.
+4. Optional live bulletin (so a folder already in the field can refresh):
 
-```bat
-airc-moot-thin.exe --pin NNNNNN --channel "#YOUR-PRIVATE-CHAN" --moot 16hex
+```bash
+python scripts/beacon.py make --channel '#YOUR-PRIVATE-CHAN' --moot <16hex> --pin <6digit> --pair <16hex> --chair cm-bob --out-dir /path/to/airc --gist
 ```
 
-Self-heal fills nick/home/jail from the box. Optional: `--hello`.
-5. Confirm thin JOIN + CAPA on chair; then sealed smoke (`exec hostname`) if requested.
-6. Never paste long-term PSK into chat. PIN is ephemeral (TTL ~10m).
+That writes `beacon.url` (secret gist, `https://` only). Needs `gh`.
+5. Tell the operator: copy `airc`, double-click the exe.
+6. Confirm thin JOIN + CAPA on chair; sealed smoke (`exec hostname`) if asked.
+7. Never paste long-term PSK. Never commit `airc-invite.json` or live PINs.
+   If the invite expired, run `--chair` again and overwrite the files.
 
 ## Hard rules
 
+- The invite file / gist URL **is** the 10-minute secret. Private channel still required.
 - Win95/98/NT4/XP live IRC still not claimed.
-- Empty operators refused for unattended installs; after PIN pair, chair becomes operator.
+- Empty operators refused for unattended `--key` installs; after pair, chair becomes operator.
+- Already-paired boxes (`dumb\connector.key` + `dumb\paired.ini`) reconnect and ignore a new beacon.
+- Fallback: `airc-moot-thin.exe --pin NNNNNN --channel "#chan" --moot 16hex`
 - Do not commit `connector.key` or live PINs.
-- `--chair` stdout includes the copy-paste thin one-liner (`--pin`, `--channel`, `--moot`) and an expires note.

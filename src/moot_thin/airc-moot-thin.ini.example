@@ -1,7 +1,8 @@
 ; Example config for airc-moot-thin.exe
 ; Copy to airc-moot-thin.ini beside the exe. CLI flags override these keys.
 ; Zero-arg / double-click: nick, home, allow_path, hello self-heal if omitted.
-; Happy path is PIN pairing (chair --chair, thin Enter PIN / --pin).
+; Happy path: chair writes airc-invite.json; thin double-click loads it.
+; PIN prompt / --pin remain fallbacks.
 ; Do not put PSK material, PIN values, SASL passwords, or API key assignments in this file.
 ; Air-gap: generate connector.key off IRC and point key= at the 32-byte file (or AIRC1+DPAPI file).
 

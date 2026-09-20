@@ -6,18 +6,19 @@
 #include "aes256gcm.h"
 #include "irc_tls.h"
 #include "pair.h"
+#include "beacon.h"
 
 #include <time.h>
 
 /* Keep in sync with VERSION */
-#define AIRC_THIN_VERSION "0.2.1"
+#define AIRC_THIN_VERSION "0.3.0"
 
 static void usage(void)
 {
     info("airc-moot-thin %s — Win32 ANSI thin moot CLI (not an LLM)", AIRC_THIN_VERSION);
-    info("usage: airc-moot-thin.exe          (zero-arg: self-heal + PIN prompt)");
+    info("usage: airc-moot-thin.exe          (zero-arg: load airc-invite.json / beacon.url, else PIN prompt)");
     info("       airc-moot-thin.exe --pin NNNNNN");
-    info("       airc-moot-thin.exe --chair  (prints copy-paste thin invite; OPEN; PAIR GRANT)");
+    info("       airc-moot-thin.exe --chair  (writes airc-invite.json; prints copy-paste fallback; PAIR GRANT)");
     info("       airc-moot-thin.exe --nick N --channel #chan --moot 16hex --home DIR --allow-path DIR --operators nicks");
     info("  [--key PATH] [--config FILE.ini] [--host HOST] [--port N] [--hello TEXT] [--once]");
     info("  --selftest   offline checks, no sockets");
@@ -887,6 +888,21 @@ static int prepare_chair(ThinConfig *cfg, PairSess *ps, uint8_t *key, int *have_
         return -1;
     ps->have_wrap = 1;
     chair_print_banner(ps->pin, cfg->channel, cfg->moot_id);
+    {
+        InviteDoc inv;
+        memset(&inv, 0, sizeof(inv));
+        inv.v = 1;
+        strncpy(inv.host, cfg->host, sizeof(inv.host) - 1);
+        inv.port = cfg->port ? cfg->port : 6697;
+        strncpy(inv.channel, cfg->channel, sizeof(inv.channel) - 1);
+        strncpy(inv.moot_id, cfg->moot_id, sizeof(inv.moot_id) - 1);
+        strncpy(inv.pair_id, ps->pair_id, sizeof(inv.pair_id) - 1);
+        strncpy(inv.pin, ps->pin, sizeof(inv.pin) - 1);
+        strncpy(inv.chair, cfg->nick, sizeof(inv.chair) - 1);
+        inv.expires_unix = ps->expires_unix;
+        if (invite_write_files(cfg, &inv) != 0)
+            info("INFO invite write failed");
+    }
     return 0;
 }
 
@@ -937,6 +953,30 @@ int main(int argc, char **argv)
 
     if (cfg.offline)
         return offline_job(&cfg);
+
+    if (!cfg.chair && !cfg.pin[0] && !key_file_present(&cfg)) {
+        int irc = invite_load_sibling(&cfg, cfg.exe_dir);
+        if (irc == -2) {
+            info("INFO invite expired");
+            return 2;
+        }
+        if (irc != 0) {
+            char url[512], body[JSON_MAX], bpath[MAX_PATH];
+            InviteDoc inv;
+            _snprintf(bpath, MAX_PATH, "%s\\beacon.url", cfg.exe_dir);
+            if (read_first_https_url(bpath, url, sizeof(url)) == 0) {
+                strncpy(cfg.beacon_url, url, sizeof(cfg.beacon_url) - 1);
+                if (invite_fetch_https(url, body, sizeof(body)) == 0 &&
+                    invite_parse_json(body, &inv) == 0) {
+                    irc = invite_apply(&cfg, &inv, (unsigned long)time(NULL));
+                    if (irc == -2) {
+                        info("INFO invite expired");
+                        return 2;
+                    }
+                }
+            }
+        }
+    }
 
     if (cfg.chair) {
         if (prepare_chair(&cfg, &ps, key, &have_key) != 0) {

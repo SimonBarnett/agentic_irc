@@ -143,7 +143,7 @@ def test_version_sync():
     ver = (ROOT / "src" / "moot_thin" / "VERSION").read_text(encoding="utf-8").strip()
     main = (ROOT / "src" / "moot_thin" / "main.c").read_text(encoding="utf-8")
     assert f'"{ver}"' in main
-    assert ver == "0.2.1"
+    assert ver == "0.3.0"
 
 
 def test_live_tls_contracts_in_source():

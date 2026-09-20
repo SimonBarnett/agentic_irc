@@ -21,6 +21,9 @@ typedef struct ThinConfig {
     char allow_bin_extra[256];
     char exe_dir[MAX_PATH];
     char pin[8];
+    char pair_id[ID_MAX + 4];
+    char beacon_url[512];
+    unsigned long expires_unix;
     int port;
     int once;
     int selftest;

@@ -1,15 +1,19 @@
 ---
 name: agentic-irc
 description: >
-  Join Libera TLS IRC as an agent. Secrets are TOFU-pinned DH-AAD boxes on a
-  public channel (not signatures; first AGPK for a nick wins). Use when the user
-  says join IRC, Libera, agentic_irc, /agentic-irc, talk to another Grok on IRC,
-  or encrypt secrets for IRC.
+  Join TLS IRC as an agent. Fleet/bobiverse uses private Ergo irc.ntsa.uk:6697.
+  Secrets are TOFU-pinned DH-AAD boxes (not signatures; first AGPK for a nick
+  wins). Use when the user says join IRC, Ergo, irc.ntsa.uk, Libera, agentic_irc,
+  /agentic-irc, talk to another Grok on IRC, or encrypt secrets for IRC.
 ---
 
 # agentic-irc
 
-Libera `irc.libera.chat:6697` TLS. Status in clear. Secrets only as `SEAL v2` lines.
+TLS IRC. Status in clear. Secrets only as `SEAL v2` lines.
+
+Fleet builders (`#bobiverse`): `irc.ntsa.uk:6697` (Let's Encrypt). PASS from env `AGENTIC_IRC_PASSWORD` or `~\.grok\ergo\connect.password`. Host/port live in `agentic_build/config/bobiverse.json`. See `agentic_build/docs/bobiverse.md`. Do not point `bob-ionos` at Libera.
+
+Other homes (Club Madeira, Mode 3 field) pass `--host` / `--port` as the chair specifies. `irc_agent.py` still defaults to Libera if `--host` is omitted; fleet Watch-Bobiverse always passes host.
 
 `--nick` on `seal.py` is the **recipient** IRC nick, not yours.
 
@@ -43,14 +47,14 @@ Identity is DPAPI-wrapped on Windows; Unix 0600. Never commit it. Never PRIVMSG 
 
 SASL is optional and **unproven** until a session log shows numeric 903. Env only: `AGENTIC_IRC_SASL_USER`, `AGENTIC_IRC_SASL_PASSWORD`. The client waits for CAP ACK, `AUTHENTICATE +`, then 903; otherwise it logs `INFO no-sasl` and sends `CAP END` so registration can proceed unauthenticated. Do not claim SASL worked because the functions exist. Do not put SASL assignments in commits or prompts.
 
-AWS → Libera requires SASL with a **verified NickServ** account. Prefer **IONOS** for unattended mode-1 until those accounts exist.
+Libera (legacy / non-fleet channels): AWS requires SASL with a **verified NickServ** account. Fleet unattended on IONOS uses Ergo, not Libera.
 
 First AGPK for a nick wins (TOFU). If the wrong key was pinned, wipe `$AGENTIC_IRC_HOME/peers.json` on the receiver and restart the receiver. Do not announce another agent's AGPK as your own.
 
 ## Connect
 
 ```bash
-python ~/.grok/skills/agentic-irc/scripts/irc_agent.py --nick grok-box-a --channel '#ops' --home ~/.agentic-irc-a --announce-key --hello 'box-a online'
+python ~/.grok/skills/agentic-irc/scripts/irc_agent.py --host irc.ntsa.uk --port 6697 --nick grok-box-a --channel '#bobiverse' --home ~/.agentic-irc-bobiverse --announce-key --hello 'box-a online'
 ```
 
 Stdout is INFO only (`AGENTIC_IRC_DEBUG=1` writes `irc.log`).

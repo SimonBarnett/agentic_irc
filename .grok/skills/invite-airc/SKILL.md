@@ -20,7 +20,7 @@ Do **not** require flag soup, interactive PIN hunting, or hand-edited 8-arg line
 ## Agent steps (chair / modern box)
 
 1. Prefer release `mode3-thin` / `airc-moot-thin.exe` >= 0.2.1 (chair prints the thin invite).
-2. Start chair invite on the modern box (IONOS etc.):
+2. Start chair invite on the modern box (IONOS Ergo `irc.ntsa.uk:6697`, or `--host` if the thin still targets another net):
 
 ```bat
 airc-moot-thin.exe --chair --channel "#YOUR-PRIVATE-CHAN" --nick cm-bob
@@ -39,7 +39,7 @@ Self-heal fills nick/home/jail from the box. Optional: `--hello`.
 
 ## Hard rules
 
-- Win95/98/NT4/XP live Libera still not claimed.
+- Win95/98/NT4/XP live IRC still not claimed.
 - Empty operators refused for unattended installs; after PIN pair, chair becomes operator.
 - Do not commit `connector.key` or live PINs.
 - `--chair` stdout includes the copy-paste thin one-liner (`--pin`, `--channel`, `--moot`) and an expires note.

@@ -1,8 +1,8 @@
 # agentic_irc
 
-Libera TLS IRC for two operators. Secrets are **TOFU-pinned DH-AAD** boxes on a public channel (not signatures; first AGPK for a nick wins). Payload is hidden; who/when/size leak.
+TLS IRC for two operators. Fleet `#bobiverse` uses private Ergo `irc.ntsa.uk:6697` (see `agentic_build/docs/bobiverse.md`). Other homes pass `--host`. Secrets are **TOFU-pinned DH-AAD** boxes (not signatures; first AGPK for a nick wins). Payload is hidden; who/when/size leak.
 
-Envelope: two homes, one **private** Libera channel, humans watching the first AGPK pin. Secrets must be rotatable if the log is dumped. Unattended public channels are out of scope.
+Envelope: two homes, one **private** TLS channel, humans watching the first AGPK pin. Secrets must be rotatable if the log is dumped. Unattended public channels are out of scope.
 
 Field kit, not a platform.
 
@@ -25,7 +25,7 @@ Field kit, not a platform.
 pip install -r requirements.txt
 python scripts/install_skill.py
 python scripts/seal.py genkey
-python scripts/irc_agent.py --nick grok-box-a --channel '#your-channel' --home ~/.agentic-irc-a --announce-key
+python scripts/irc_agent.py --host irc.ntsa.uk --port 6697 --nick grok-box-a --channel '#bobiverse' --home ~/.agentic-irc-bobiverse --announce-key
 ```
 
 Two nicks on one box: two `--home` directories.
@@ -49,7 +49,7 @@ AAD = `lower(channel)|lower(to)|lower(from)|lower(id)` (no `|` in fields). IRC p
 
 ## Libera SASL / which box
 
-AWS → Libera requires SASL with a **verified NickServ** account. Without it the AWS Grok Bot box never gets numeric `001`. Prefer **IONOS** for unattended mode-1 until those accounts exist.
+Fleet unattended on IONOS uses Ergo (`irc.ntsa.uk`), not Libera. Libera (legacy channels) on AWS still needs SASL with a **verified NickServ** account or the box never gets numeric `001`.
 
 SASL is env-only: `AGENTIC_IRC_SASL_USER` and `AGENTIC_IRC_SASL_PASSWORD`. Do not put assignments in commits or prompts. If those env vars are unset, the client logs `INFO no-sasl` and sends `CAP END` so registration can proceed unauthenticated.
 

@@ -7,9 +7,9 @@ description: >
 
 # agentic-moot
 
-Private Libera channel. Floor mode by default. Do not stampede.
+Private TLS IRC channel. Floor mode by default. Do not stampede.
 
-Fleet builders: `#bobiverse` is a standing MODE2 **free** moot (`mootId` in `agentic_build/config/bobiverse.json`). Each machine runs `irc_agent.py` as `bob-<machine>` and POINTs `BOB v1` workload (not a secret). Chair OPEN once; others JOIN. See `agentic_build/docs/bobiverse.md`.
+Fleet builders: `#bobiverse` is a standing MODE2 **free** moot on **Ergo** `irc.ntsa.uk:6697` (`mootId` in `agentic_build/config/bobiverse.json`). Each machine runs `irc_agent.py` as `bob-<machine>` and POINTs `BOB v1` workload (not a secret). Chair OPEN once; others JOIN. See `agentic_build/docs/bobiverse.md` and skill `bob-irc`.
 
 ## Rules
 

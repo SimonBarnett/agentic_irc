@@ -18,6 +18,7 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import bobstat  # noqa: E402
 import filexfer  # noqa: E402
 import moot  # noqa: E402
 import protect  # noqa: E402
@@ -212,6 +213,13 @@ class Client:
         self._moot = moot.apply_moot(base, src, ml, self.home)
         if ml.verb == "OPEN":
             info(f"INFO moot OPEN id={ml.moot_id} chair={src}")
+        elif ml.verb == "JOIN":
+            info(f"INFO moot JOIN id={ml.moot_id} nick={src}")
+        elif ml.verb == "POINT" and (ml.text or "").startswith("BOB v1"):
+            doc = bobstat.parse_bob_point(ml.text)
+            if doc:
+                bobstat.write_peer(self.home, doc)
+                info(f"INFO bobstat id={doc['id']} from={src}")
 
     def handle_file(self, src: str, body: str) -> None:
         fl = wire.parse_file_line(body)

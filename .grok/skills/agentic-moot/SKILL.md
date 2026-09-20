@@ -9,6 +9,8 @@ description: >
 
 Private Libera channel. Floor mode by default. Do not stampede.
 
+Fleet builders: `#bobiverse` is a standing MODE2 **free** moot (`mootId` in `agentic_build/config/bobiverse.json`). Each machine runs `irc_agent.py` as `bob-<machine>` and POINTs `BOB v1` workload (not a secret). Chair OPEN once; others JOIN. See `agentic_build/docs/bobiverse.md`.
+
 ## Rules
 
 Do not SAY unless you hold the floor, you are @mentioned in a MOOT SAY, the chair asked @all, or you send POINT/JOIN/PART/ACK.

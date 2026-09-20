@@ -19,6 +19,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import bobstat  # noqa: E402
+import bobtalk  # noqa: E402
 import filexfer  # noqa: E402
 import moot  # noqa: E402
 import protect  # noqa: E402
@@ -121,6 +122,7 @@ class Client:
         self.sasl_plus = threading.Event()
         self.sasl_903 = threading.Event()
         self.sasl_fail = threading.Event()
+        self._bobiverse_last_query: dict[str, float] = {}
 
     def send(self, line: str) -> None:
         assert self.sock is not None
@@ -130,6 +132,64 @@ class Client:
     def say(self, msg: str) -> None:
         self.send("PRIVMSG " + self.chan + " :" + msg)
         time.sleep(FLOOD_S)
+
+    def whisper(self, nick: str, msg: str) -> None:
+        target = (nick or "").strip()
+        if not target or "|" in target:
+            return
+        self.send("PRIVMSG " + target + " :" + msg)
+        time.sleep(FLOOD_S)
+
+    def _mine_nicks(self) -> set[str]:
+        return {self.original_nick.lower(), self.live_nick.lower()}
+
+    def _fleet_moot_state(self) -> dict:
+        disk = moot.load_state(self.home, bobtalk.FLEET_MOOT_ID)
+        if disk.get("id") == bobtalk.FLEET_MOOT_ID:
+            return disk
+        if self._moot.get("id") == bobtalk.FLEET_MOOT_ID:
+            return self._moot
+        return disk or self._moot or {}
+
+    def _is_briefer(self) -> bool:
+        return bobtalk.is_briefer(self._fleet_moot_state(), self.live_nick)
+
+    def _deliver_whispers(self, nick: str, lines: list[str]) -> None:
+        for line in lines:
+            if line:
+                self.whisper(nick, line)
+
+    def _fleet_joiner(self, nick: str) -> bool:
+        return (nick or "").strip().lower().startswith("bob-")
+
+    def _maybe_brief_joiner(self, nick: str) -> None:
+        joiner = (nick or "").strip()
+        if not joiner or joiner.lower() in self._mine_nicks():
+            return
+        if not self._fleet_joiner(joiner):
+            return
+        if not self._is_briefer():
+            return
+        lines = bobtalk.network_talk_lines(self.home)
+        self._deliver_whispers(joiner, lines)
+        info(f"INFO bobiverse brief to={joiner} lines={len(lines)}")
+
+    def _answer_bobiverse(self, asker: str) -> bool:
+        who = (asker or "").strip()
+        if not who or who.lower() in self._mine_nicks():
+            return True
+        if not self._is_briefer():
+            return True
+        now = time.time()
+        key = who.lower()
+        last = self._bobiverse_last_query.get(key, 0.0)
+        if now - last < bobtalk.BOBIVERSE_COOLDOWN_S:
+            return True
+        self._bobiverse_last_query[key] = now
+        lines = bobtalk.network_talk_lines(self.home)
+        self._deliver_whispers(who, lines)
+        info(f"INFO bobiverse answer to={who} lines={len(lines)}")
+        return True
 
     def connect(self) -> ssl.SSLSocket:
         ctx = ssl.create_default_context()
@@ -215,6 +275,8 @@ class Client:
             info(f"INFO moot OPEN id={ml.moot_id} chair={src}")
         elif ml.verb == "JOIN":
             info(f"INFO moot JOIN id={ml.moot_id} nick={src}")
+            if ml.moot_id == bobtalk.FLEET_MOOT_ID:
+                self._maybe_brief_joiner(src)
         elif ml.verb == "POINT" and (ml.text or "").startswith("BOB v1"):
             doc = bobstat.parse_bob_point(ml.text)
             if doc:
@@ -289,9 +351,17 @@ class Client:
         info(f"INFO dumb job id={dl.msg_id} from={src}")
 
     def handle_privmsg(self, prefix: str, target: str, body: str) -> None:
-        if target.lower() != self.chan.lower():
-            return
         src = prefix.split("!", 1)[0].lstrip(":")
+        tgt_l = target.lower()
+        to_channel = tgt_l == self.chan.lower()
+        to_me = tgt_l in self._mine_nicks()
+        if not to_channel and not to_me:
+            return
+        if bobtalk.parse_bobiverse_command(body):
+            self._answer_bobiverse(src)
+            return
+        if not to_channel:
+            return
         pk = seal.parse_agpk_line(body)
         if pk is not None:
             result = seal.tofu_pin(self.peers, src, pk)
@@ -409,6 +479,9 @@ class Client:
                         ch = parts[1].lstrip(":") if len(parts) > 1 else ""
                         if ch.lower() == self.chan.lower():
                             self.joined.set()
+                            joiner = prefix.split("!", 1)[0].lstrip(":") if prefix else ""
+                            if joiner:
+                                self._maybe_brief_joiner(joiner)
                     if cmd in ("433", "432"):
                         if self.live_nick == self.original_nick:
                             self.live_nick = self.original_nick + "_l"

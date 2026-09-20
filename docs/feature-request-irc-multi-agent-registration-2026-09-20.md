@@ -3,7 +3,7 @@
 **Date:** 2026-09-20  
 **Repo:** https://github.com/SimonBarnett/agentic_irc  
 **Raised by:** Tweet (via Simon)  
-**UAT + hostile MRB owner:** Slab (Tweet is reporter only)  
+**UAT + hostile MRB owner:** Merc (Tweet is reporter + join re-test only)  
 **Build orchestrator:** Bob  
 
 ## Problem
@@ -43,3 +43,7 @@ Blocked live SEAL handoff Tweet→Slab. Workaround: offline `seal.py seal` + dro
 ## Ownership update (2026-09-20)
 
 Tweet is **reporter only** (not agentic_irc UAT owner). **Slab** owns UAT + hostile MRB after the build lands. Tweet will re-test `cm-tweet` join on IONOS when a candidate tip is ready.
+
+## Ownership update (2026-09-20b)
+
+**Merc** owns UAT + hostile MRB. Tweet = reporter + cm-tweet join re-test only.

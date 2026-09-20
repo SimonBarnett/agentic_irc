@@ -159,9 +159,14 @@ class Client:
             if line:
                 self.whisper(nick, line)
 
+    def _fleet_joiner(self, nick: str) -> bool:
+        return (nick or "").strip().lower().startswith("bob-")
+
     def _maybe_brief_joiner(self, nick: str) -> None:
         joiner = (nick or "").strip()
         if not joiner or joiner.lower() in self._mine_nicks():
+            return
+        if not self._fleet_joiner(joiner):
             return
         if not self._is_briefer():
             return

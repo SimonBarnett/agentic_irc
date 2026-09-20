@@ -116,10 +116,19 @@ def test_join_brief_sequence(tmp_path, monkeypatch, recorder):
         },
     )
     c = irc_agent.Client(_args(tmp_path, "bob-flamingo"))
-    c.handle_privmsg("simon!u@h", "#bobiverse", f"MOOT v1 JOIN {MID}")
+    c.handle_privmsg("bob-ionos!u@h", "#bobiverse", f"MOOT v1 JOIN {MID}")
     assert len(recorder) >= 2
-    assert all(x.startswith("PRIVMSG simon :") for x in recorder)
+    assert all(x.startswith("PRIVMSG bob-ionos :") for x in recorder)
     assert not any("#bobiverse" in x for x in recorder)
+
+
+def test_moot_join_non_fleet_not_briefed(tmp_path, monkeypatch, recorder):
+    monkeypatch.setenv("AGENTIC_IRC_HOME", str(tmp_path))
+    _open_moot(tmp_path)
+    bobstat.write_peer(tmp_path, {"ok": True, "id": "flamingo", "running": 0, "queued": 0, "jobs": []})
+    c = irc_agent.Client(_args(tmp_path, "bob-flamingo"))
+    c.handle_privmsg("simon!u@h", "#bobiverse", f"MOOT v1 JOIN {MID}")
+    assert recorder == []
 
 
 def test_bobiverse_via_pm_to_bob(tmp_path, monkeypatch, recorder):

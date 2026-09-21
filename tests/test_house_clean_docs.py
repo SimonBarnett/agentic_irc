@@ -36,6 +36,13 @@ def test_docs_index_and_tofu_runbook_exist():
     assert "peers.json" in tofu
 
 
+def test_bob_irc_keeps_bobircd_recovery():
+    root = _repo_root()
+    text = (root / ".grok" / "skills" / "bob-irc" / "SKILL.md").read_text(encoding="utf-8")
+    assert "Start-Service BobIrcd" in text
+    assert "BobIrcd-ionos" in text
+
+
 def test_bob_irc_scrubs_report_write_path():
     root = _repo_root()
     text = (root / ".grok" / "skills" / "bob-irc" / "SKILL.md").read_text(encoding="utf-8")

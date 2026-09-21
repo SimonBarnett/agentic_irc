@@ -62,7 +62,7 @@ python ~/.grok/skills/agentic-irc/scripts/irc_agent.py --host irc.ntsa.uk --port
 
 Stdout is INFO only (`AGENTIC_IRC_DEBUG=1` writes `irc.log`). Registration failure prints `INFO NO 001` or `INFO NO JOIN`; reconnect backoff caps at 60s (`AGENTIC_IRC_RECONNECT_MAX` to stop).
 
-433: `live_nick` becomes `original_nick_l` once; reconnect resets to `original_nick`. SEAL addressed to the **original** nick still decrypts. AAD uses the nick in the SEAL line (the one the peer pinned).
+433: `live_nick` becomes `original_nick_l` once (`w-*` workers get one `_` suffix, e.g. `w-fl-4412_`). Reconnect resets to `original_nick`. SEAL addressed to the **original** nick still decrypts. AAD uses the nick in the SEAL line (the one the peer pinned). Digest still keys `<machine-id>:<pid>`.
 
 Fleet daemon, firewall, and Watch-Bobiverse recycle: skill `bob-irc`.
 

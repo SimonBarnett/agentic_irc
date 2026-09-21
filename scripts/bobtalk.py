@@ -24,20 +24,27 @@ def display_id(machine_id: str) -> str:
     return mid or "?"
 
 
-def briefer_nick(moot_state: dict) -> str | None:
-    """Chair if bob-*, else first bob-* on roster."""
+def briefer_nick(moot_state: dict, online_nicks: set[str] | None = None) -> str | None:
+    """Chair if bob-*, else first online bob-* on roster, else first bob-*."""
     roster = list(moot_state.get("roster") or [])
     chair = str(moot_state.get("chair") or "").strip()
     if chair.lower().startswith("bob-"):
         return chair
+    online = {n.lower() for n in (online_nicks or set())}
+    fallback: str | None = None
     for nick in roster:
-        if str(nick).lower().startswith("bob-"):
-            return str(nick)
-    return None
+        n = str(nick)
+        if not n.lower().startswith("bob-"):
+            continue
+        if fallback is None:
+            fallback = n
+        if not online or n.lower() in online:
+            return n
+    return fallback
 
 
-def is_briefer(moot_state: dict, live_nick: str) -> bool:
-    bn = briefer_nick(moot_state)
+def is_briefer(moot_state: dict, live_nick: str, online_nicks: set[str] | None = None) -> bool:
+    bn = briefer_nick(moot_state, online_nicks)
     if bn:
         return live_nick.lower() == bn.lower()
     return live_nick.lower().startswith("bob-")

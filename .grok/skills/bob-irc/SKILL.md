@@ -61,6 +61,19 @@ flaps the port.
 
 Human monitor (flamingo): Halloy nick not `bob-*`. Type `!bobiverse`.
 
+## Ionos Ergo down
+
+Service `BobIrcd` runs `C:\ai\ergo\ergo.exe` via NSSM (Automatic, LocalSystem).
+Stopped with no `ergo.exe` means the daemon is down. The old task
+`BobIrcd-ionos` is gone; do not start it.
+
+```powershell
+Start-Service BobIrcd
+```
+
+Confirm dual-stack LISTEN on 6697 and TLS handshake `CN=irc.ntsa.uk`.
+Do not `Stop-ScheduledTask BobFleet-*` to recover IRC.
+
 ## Do not
 
 - Point any `bob-*` nick at Libera.

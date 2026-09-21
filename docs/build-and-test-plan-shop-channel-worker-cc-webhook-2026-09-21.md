@@ -4,7 +4,7 @@
 **Spec:** docs/feature-request-shop-channel-worker-cc-webhook-2026-09-21.md
 **Issue:** #46
 **Sister:** agentic_build #124
-**Status:** intake — implement after Bob dispatches
+**Status:** BUILD — runtime + offline pytest on `cursor/shop-channel-digest-41fb`
 
 ## Goals
 
@@ -44,5 +44,5 @@ Push `work/shop-channel-digest`. Hostile MRB on #46. Bob UAT only.
 
 - [x] FR + this plan on the branch (intake)
 - [ ] pytest green, no sockets
-- [ ] #36 write verbs documented as scrubbed
-- [ ] Completion does not self-stamp UAT
+- [x] #36 write verbs documented as scrubbed
+- [x] Completion does not self-stamp UAT

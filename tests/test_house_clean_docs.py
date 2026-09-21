@@ -31,8 +31,18 @@ def test_docs_index_and_tofu_runbook_exist():
     root = _repo_root()
     index = (root / "docs" / "README.md").read_text(encoding="utf-8")
     assert "mrb-" in index and "audit" in index.lower()
+    assert "shop-channel-worker-cc-webhook" in index
     tofu = (root / "docs" / "tofu-rotation.md").read_text(encoding="utf-8")
     assert "peers.json" in tofu
+
+
+def test_bob_irc_scrubs_report_write_path():
+    root = _repo_root()
+    text = (root / ".grok" / "skills" / "bob-irc" / "SKILL.md").read_text(encoding="utf-8")
+    assert "Do **not** implement `!report`" in text or "no `!report`" in text.lower() or "No `!report`" in text
+    assert "!bobiverse" in text
+    assert "w-<shortid>-<pid>" in text or "w-<short>-<pid>" in text
+    assert "GET digest" in text or "HTTP GET" in text
 
 
 def test_dumb_skills_not_git_workers():

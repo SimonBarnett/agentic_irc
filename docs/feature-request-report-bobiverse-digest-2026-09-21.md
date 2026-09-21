@@ -1,5 +1,9 @@
 # Feature request: !report ingest + !bobiverse JSON digest
 
+**Superseded write path:** `#36` `!report` ingest is **scrubbed**. Live write is
+`POST reportUrl` / JOIN/QUIT. Live read is still `!bobiverse` (see
+`docs/feature-request-shop-channel-worker-cc-webhook-2026-09-21.md`, issue #46).
+
 **Date:** 2026-09-21
 **Repo:** https://github.com/SimonBarnett/agentic_irc
 **GitHub issue:** https://github.com/SimonBarnett/agentic_irc/issues/36

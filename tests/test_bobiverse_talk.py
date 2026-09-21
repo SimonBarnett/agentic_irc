@@ -63,23 +63,48 @@ def test_whisper_not_channel(tmp_path, monkeypatch, recorder):
     assert not any("#bobiverse" in x for x in recorder)
 
 
+def _json_whisper_payloads(recorder: list[str], asker: str) -> list[str]:
+    prefix = f"PRIVMSG {asker} :"
+    out: list[str] = []
+    for line in recorder:
+        if not line.startswith(prefix):
+            continue
+        body = line.split(" :", 1)[1]
+        if body.startswith("{") or body.startswith("BOB DIGEST v1"):
+            out.append(body)
+    return out
+
+
+def _reassemble_digest(lines: list[str]) -> dict:
+    pieces: list[str] = []
+    for body in lines:
+        if body.startswith("{"):
+            pieces.append(body)
+        elif body.startswith("BOB DIGEST v1 "):
+            rest = body[len("BOB DIGEST v1 ") :]
+            pieces.append(rest.split(" ", 1)[1])
+    return json.loads("".join(pieces))
+
+
 def test_bobiverse_human_gets_json_whisper(tmp_path, monkeypatch, recorder):
     monkeypatch.setenv("AGENTIC_IRC_HOME", str(tmp_path))
     _open_moot(tmp_path)
-    bobreport.apply_report(
+    bobreport.apply_callback(
         tmp_path,
-        "bob-ionos",
+        {"op": "merge", "machine": "ionos", "pid": 12, "working_on": "meter", "kind": "cursor"},
         "bob-flamingo",
-        "!report PCENT ionos cursor-models 12",
     )
     c = irc_agent.Client(_args(tmp_path, "bob-flamingo"))
+    assert "#flamingo" in c.channels
     c.handle_privmsg("simon!u@h", "#bobiverse", "!bobiverse")
     assert any(x.startswith("PRIVMSG simon :") for x in recorder)
-    assert not any("#bobiverse" in x for x in recorder)
-    body = recorder[0].split(" :", 1)[1]
-    doc = json.loads(body)
+    assert not any(x.startswith("PRIVMSG #bobiverse :{") for x in recorder)
+    payloads = _json_whisper_payloads(recorder, "simon")
+    assert payloads
+    doc = _reassemble_digest(payloads)
     assert doc["v"] == 1
     assert "machines" in doc
+    assert "ionos" in doc["machines"]
 
 
 def test_bobiverse_non_briefer_silent(tmp_path, monkeypatch, recorder):
@@ -94,20 +119,17 @@ def test_bobiverse_non_briefer_silent(tmp_path, monkeypatch, recorder):
 def test_bobiverse_tray_whisper_json(tmp_path, monkeypatch, recorder):
     monkeypatch.setenv("AGENTIC_IRC_HOME", str(tmp_path))
     _open_moot(tmp_path)
-    bobreport.apply_report(
-        tmp_path,
-        "bob-ionos",
-        "bob-flamingo",
-        "!report TASK START SimonBarnett/agentic_irc abcdef1 grok work 1m",
-    )
+    bobreport.start_worker(tmp_path, "ionos", 99, "work 1m", kind="grok")
     c = irc_agent.Client(_args(tmp_path, "bob-flamingo"))
     c.handle_privmsg("bob-marchhare!u@h", "#bobiverse", "!bobiverse")
     assert recorder
     assert all(x.startswith("PRIVMSG bob-marchhare :") for x in recorder)
-    assert not any("#bobiverse" in x for x in recorder)
-    payload = recorder[0].split(" :", 1)[1]
-    assert payload.startswith("{")
-    assert "BOB TRAY v1" not in payload
+    assert not any(x.startswith("PRIVMSG #bobiverse :") and "{" in x for x in recorder)
+    payloads = _json_whisper_payloads(recorder, "bob-marchhare")
+    assert payloads
+    doc = _reassemble_digest(payloads)
+    assert doc["v"] == 1
+    assert "BOB TRAY v1" not in "".join(payloads)
 
 
 def test_bobiverse_cooldown_human(tmp_path, monkeypatch, recorder):
@@ -206,7 +228,10 @@ def test_report_ingest_no_raw_echo(tmp_path, monkeypatch, recorder):
     raw = "!report TASK START SimonBarnett/agentic_build 8d9a852 composer-2.5 house-clean docs 12m"
     c.handle_privmsg("bob-ionos!u@h", "#bobiverse", raw)
     assert not any(raw in x for x in recorder)
-    assert any("#bobiverse" in x and "started" in x for x in recorder)
+    assert not any("#bobiverse" in x and "started" in x for x in recorder)
+    assert any(x == f"PRIVMSG bob-ionos :{bobreport.REPORT_GONE}" for x in recorder)
+    doc = bobreport.load_digest(tmp_path)
+    assert "task" not in doc["machines"]["ionos"]
 
 
 def test_report_non_briefer_ignored(tmp_path, monkeypatch, recorder):
@@ -217,34 +242,73 @@ def test_report_non_briefer_ignored(tmp_path, monkeypatch, recorder):
     assert recorder == []
 
 
-def _report_help_privmsg_payloads(recorder: list[str], asker: str) -> list[str]:
-    prefix = f"PRIVMSG {asker} :"
-    return [line.split(" :", 1)[1] for line in recorder if line.startswith(prefix)]
-
-
-def test_report_help_whispers_per_line_channel_and_pm(tmp_path, monkeypatch, recorder):
+def test_report_gone_whisper_once(tmp_path, monkeypatch, recorder):
     monkeypatch.setenv("AGENTIC_IRC_HOME", str(tmp_path))
     _open_moot(tmp_path, chair="bob-flamingo")
-    expected = bobreport.HELP_TEXT.splitlines()
     c = irc_agent.Client(_args(tmp_path, "bob-flamingo"))
 
     c.handle_privmsg("simon!u@h", "#bobiverse", "!report ?")
-    assert len(recorder) == len(expected)
-    assert all(x.startswith("PRIVMSG simon :") for x in recorder)
-    assert not any("#bobiverse" in x for x in recorder)
-    assert _report_help_privmsg_payloads(recorder, "simon") == expected
-    for line in recorder:
-        payload = line.split(" :", 1)[1]
-        assert "\n" not in payload and "\r" not in payload
-
+    assert recorder == [f"PRIVMSG simon :{bobreport.REPORT_GONE}"]
     recorder.clear()
     c.handle_privmsg("simon!u@h", "bob-flamingo", "!report help")
-    assert len(recorder) == len(expected)
-    assert all(x.startswith("PRIVMSG simon :") for x in recorder)
-    assert not any("#bobiverse" in x for x in recorder)
-    assert _report_help_privmsg_payloads(recorder, "simon") == expected
+    assert recorder == []
 
     recorder.clear()
     c2 = irc_agent.Client(_args(tmp_path, "bob-ionos"))
     c2.handle_privmsg("simon!u@h", "#bobiverse", "!report ?")
     assert recorder == []
+
+
+def test_bobiverse_help_and_machine(tmp_path, monkeypatch, recorder):
+    monkeypatch.setenv("AGENTIC_IRC_HOME", str(tmp_path))
+    _open_moot(tmp_path)
+    c = irc_agent.Client(_args(tmp_path, "bob-flamingo"))
+    c.handle_privmsg("simon!u@h", "#bobiverse", "!bobiverse ?")
+    got = [line.split(" :", 1)[1] for line in recorder if line.startswith("PRIVMSG simon :")]
+    assert got == bobreport.HELP_TEXT.splitlines()
+    recorder.clear()
+    c._bobiverse_last_query.clear()
+    c.handle_privmsg("simon!u@h", "#bobiverse", "!bobiverse nope")
+    assert any(bobreport.NO_MACHINE in x for x in recorder)
+
+
+def test_quit_worker_and_bob_action(tmp_path, monkeypatch, recorder):
+    monkeypatch.setenv("AGENTIC_IRC_HOME", str(tmp_path))
+    _open_moot(tmp_path)
+    bobreport.start_worker(tmp_path, "flamingo", 4412, "shop-channel FR")
+    bobreport.start_worker(tmp_path, "ionos", 884, "other")
+    c = irc_agent.Client(_args(tmp_path, "bob-flamingo"))
+    c.handle_quit("w-fl-4412")
+    assert "4412" not in bobreport.load_digest(tmp_path)["machines"]["flamingo"]["workers"]
+    assert any(
+        x.startswith("PRIVMSG #bobiverse :") and "ACTION" in x and "w-fl-4412" in x for x in recorder
+    )
+    assert not any("#flamingo" in x and "ACTION" in x for x in recorder)
+    recorder.clear()
+    c.handle_quit("bob-ionos")
+    doc = bobreport.load_digest(tmp_path)
+    assert doc["machines"]["ionos"]["status"] == "I am offline"
+    assert doc["machines"]["ionos"]["workers"] == {}
+    assert any("lost bob-ionos" in x and x.startswith("PRIVMSG #bobiverse :") for x in recorder)
+
+
+def test_worker_cc_pm_open(tmp_path, monkeypatch, recorder):
+    monkeypatch.setenv("AGENTIC_IRC_HOME", str(tmp_path))
+    c = irc_agent.Client(_args(tmp_path, "w-fl-4412", channel="#flamingo"))
+    assert c.channels == ["#flamingo"]
+    c.cc_send("thinking", "trace line")
+    assert recorder == []
+    c.handle_privmsg("simon!u@h", "w-fl-4412", "hello")
+    c.cc_send("thinking", "trace line")
+    assert any(x == "PRIVMSG simon :trace line" for x in recorder)
+    assert not any("#flamingo" in x and "trace line" in x for x in recorder)
+    recorder.clear()
+    c.cc_send("assistant", "visible stdout")
+    assert any(x == "PRIVMSG #flamingo :visible stdout" for x in recorder)
+    recorder.clear()
+    c.cc_send("thinking", "password=secret")
+    assert recorder == []
+
+
+def test_worker_433_suffix():
+    assert bobreport.parse_worker_nick("w-io-884_") == ("ionos", "884")

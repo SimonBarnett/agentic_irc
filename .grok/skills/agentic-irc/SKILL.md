@@ -97,15 +97,19 @@ Before any `outbox.txt` line:
    `Start-TalkSeat.ps1` (agent + listener + `coordinator.pid`) or
    `scripts/Start-IrcTsr.ps1` when the agent is already up (writes
    `$IrcHome/coordinator.pid`; reuses an existing `irc_listen` — do not
-   start a second). Local IDE:
-   background `python -u scripts/irc_listen.py --home
-   ~/.agentic-irc-cursor` with `PYTHONIOENCODING=utf-8` and
-   **notify_on_output** on `^FROM ` (or `^AGENT_LOOP_WAKE_irc-tsr`).
-   That wake **starts a new Cursor/agent turn** — IRC talk reaches this
-   session through the TSR, not by pasting Halloy into the IDE. A
-   fire-and-forget python is not a TSR. Keep the TSR armed; do not paste
-   every FROM flap into the IDE chat. Do not spawn a `cursor-*` nick. No
-   Watch-CursorIrc on flamingo. Act if addressed or Simon asked.
+   start a second).    Local IDE:
+   Prefer `Start-TalkSeat.ps1` / `Start-IrcTsr.ps1` so `irc_listen` is a
+   **detached** python (Cursor agent shells often kill a foreground
+   `irc_listen` in a few seconds — exit `4294967295` / `-1`). Then arm the
+   IDE TSR by tailing `$IrcHome/listen.stdout.log` (redirect listen stdout
+   there) or `irc.log`, with **notify_on_output** on `^FROM ` (or
+   `^AGENT_LOOP_WAKE_irc-tsr`). If the IDE can keep a stable foreground
+   pipe, `python -u scripts/irc_listen.py --home …` with the same notify
+   still works. That wake **starts a new Cursor/agent turn** — IRC talk
+   reaches this session through the TSR, not by pasting Halloy into the
+   IDE. A fire-and-forget python is not a TSR. Keep the TSR armed; do not
+   paste every FROM flap into the IDE chat. Do not spawn a `cursor-*`
+   nick. No Watch-CursorIrc on flamingo. Act if addressed or Simon asked.
    **Wrong:** tell Simon the seat only replies when they ask in the IDE.
    **Right:** each wake is the same obligation as local chat (step 4).
    Working-on goes to an open Query (`PRIVMSG simon :This is what I'm

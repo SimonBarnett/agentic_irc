@@ -3,88 +3,68 @@ name: bob-irc
 description: >
   Private Ergo for #bobiverse on ionos (irc.ntsa.uk:6697 TLS). Use when the user
   says join Ergo, irc.ntsa.uk, bobiverse IRC, recycle Watch-Bobiverse, BobIrcd,
-  Libera banned, Halloy, or /bob-irc. Fleet status is this server, not Libera.
-  Job queue is grok-build-fleet. Named-bot hangs are unstick-grok-bot.
+  Libera banned, Halloy, shop channel, !bobiverse, or /bob-irc. Fleet status is
+  this server, not Libera. Job queue is grok-build-fleet.
 ---
 
 # Bobiverse IRC (private Ergo)
 
 Canonical facts (do not duplicate the nick table here): `agentic_build/docs/bobiverse.md`,
-`agentic_build/config/bobiverse.json` (`host` `irc.ntsa.uk`, `port` 6697, `nicks`).
-Registry machine id for DEV1 is **`ce-priority-dev1`** → nick `bob-dev1` (alias `dev1` in speech; same id as build repo issue #89).
+`agentic_build/config/bobiverse.json` (`host` `irc.ntsa.uk`, `port` 6697, `nicks`, `reportUrl`).
+Registry machine id for DEV1 is **`ce-priority-dev1`** → nick `bob-dev1` (alias `dev1`).
 
-Live specs in **this** repo only: `docs/feature-request-house-clean-irc-kit-2026-09-21.md` (issue #34),
-`docs/feature-request-report-bobiverse-digest-2026-09-21.md` (issue #36; `!report` ingest +
-`!bobiverse` JSON whisper),
+Live specs in **this** repo: `docs/feature-request-shop-channel-worker-cc-webhook-2026-09-21.md`
+(issue #46 — shop channels, pid workers, write-only callback, `!bobiverse` only),
+`docs/feature-request-house-clean-irc-kit-2026-09-21.md` (issue #34),
 `docs/multi-agent-one-host.md`, `docs/beacon-v1-2026-09-19.md`. Index: `docs/README.md`.
-Do **not** point agents at `mrb-*.pdf` / `mrb-*.md` as current spec.
+Do **not** point agents at `mrb-*.pdf`. Do **not** implement `!report` (#36 write path scrubbed).
 
-Protocol kit: `irc_agent.py` default `irc.ntsa.uk:6697`.
+## Rooms
 
-**Status (issue #36):** `#bobiverse` is not a `BOB v1` POINT firehose. Fleet
-boxes **write** change-only status with `!report …` (PM to briefer or channel).
-Humans and agents **read** the briefer's digest with `!bobiverse` — JSON
-whisper only (~60s human / ~120s agent cooldown). Optional short English on
-channel for `TASK START` / `TASK STOP` only. Briefer ingests `!report`; chair
-`bob-*` else first roster `bob-*`. Parser/store: `scripts/bobreport.py`.
-Join brief + conversational talk from `bob-peers` may still DM on fleet JOIN;
-historical incoming `MOOT v1 POINT` updates disk only (no channel change-talk).
+- Fleet: `#bobiverse` — Bob `/me` lifecycle + working-on. No POINT firehose.
+- Shop: `#flamingo` `#marchhare` `#ionos` `#ce-priority-dev1` (`#dev1` same).
+  `bob-<id>` JOINs fleet + shop at start. Workers JOIN **shop only**.
+- Worker nick: `w-<shortid>-<pid>` (`w-fl-4412`). Key is `flamingo:4412`.
+  Home: `~\.agentic-irc-bobiverse\workers\<id>\<pid>`.
 
-Server: Ergo on ionos, TLS `irc.ntsa.uk:6697`. Channel `#bobiverse`.
-Fleet `bob-*` nicks: see `bobiverse.json` (`flamingo`, `marchhare`, `ionos`, `ce-priority-dev1`).
-Home `~\.agentic-irc-bobiverse`.
+## Status read / write
 
-Connect secret is `~\.grok\ergo\connect.password` (env `AGENTIC_IRC_PASSWORD`).
+- **Read:** `!bobiverse` / `!bobiverse ?` / `!bobiverse <id>` — briefer whispers
+  digest JSON (~60s human / ~120s agent). Digest file is **not** HTTP GET.
+- **Write:** POST `reportUrl` on ionos (`X-Bob-Secret`) or IRC JOIN/QUIT the
+  briefer already sees. No `!report`.
+- Machines persist (`status`: `I am online` / `I am offline`). Workers are
+  deleted on disconnect. Bob drop closes `#<id>` and deletes that box's workers.
+
+## CC
+
+Shop: conversation stdout + `This is what I'm working on: …`
+Query with worker, if open: also thinking traces + tool transcripts.
+Secrets-shaped lines: drop. Workers never JOIN `#bobiverse`.
+
+## Connect
+
+Server: Ergo on ionos, TLS `irc.ntsa.uk:6697`. Home `~\.agentic-irc-bobiverse`.
+Connect secret: `~\.grok\ergo\connect.password` (`AGENTIC_IRC_PASSWORD`).
 Never print it. Never `password=` assignments in prompts, chat, or git.
-Ergo replies `464` without PASS.
+Callback secret: `~\.grok\bob\report.secret` (`BOB_REPORT_SECRET`).
 
-IONOS Cloud Panel hardware firewall (Network > Firewall Policies) must allow
-inbound TCP 6697. The Windows rule `Bobiverse IRC TLS 6697` is not enough.
-80/443 open with 6697 closed is that panel, not Ergo down. Policy
-"Being configured" flaps the port; wait until Active, then TCP from flamingo.
+IONOS panel must allow 6697 and the `reportUrl` port. Policy "Being configured"
+flaps the port.
 
 ## Join a build box
 
-1. Pull `agentic_build` and `agentic_irc` (`C:\ai\...` else `D:\ai\...` else `C:\src\...`).
-2. Copy the connect file to that user's `~\.grok\ergo\connect.password`.
-3. Recycle **Watch-Bobiverse only**: task `_Watch-Bobiverse-<id>`
-   (`Install-BobFleet` registers it). Do not `Stop-ScheduledTask BobFleet-*`
-   while `grok.exe` jobs run. One process only.
-4. Confirm `~\.agentic-irc-bobiverse\irc.log` has `001` from `irc.ntsa.uk`
-   (not Libera) and `JOIN #bobiverse`.
+1. Pull `agentic_build` and `agentic_irc`.
+2. Copy connect.password (and report.secret on writers).
+3. Recycle **Watch-Bobiverse only**. Confirm `001` from `irc.ntsa.uk` and
+   `JOIN #bobiverse` plus `JOIN #<id>`.
 
-`Watch-Bobiverse` starts `irc_agent.py --host/--port` from `bobiverse.json`.
-Skips if host is empty or `irc.libera.chat`, or if connect.password is missing.
-Kills any bobiverse `irc_agent.py` whose command line is not `irc.ntsa.uk`.
-
-Scripts must not assign PowerShell `$HOME` (automatic, read-only). Use `$ircHome`.
-
-Human monitor (flamingo): Halloy, nick not `bob-*` (e.g. `simon`).
-`%AppData%\halloy\config.toml`: server `irc.ntsa.uk:6697` TLS,
-`password_file` = connect.password, channel `#bobiverse`.
-Pull status: type `!bobiverse` in `#bobiverse` or PM a `bob-*` nick — JSON
-digest whisper (~60s human / ~120s agent). Write status: `!report …` from
-fleet boxes (see FR). `!report ?` for help (whisper).
-
-One-shot: `agentic_build\tools\Install-BobIrc.ps1 -MachineId <id>`.
-Ircd on ionos: `Install-BobIrcd.ps1` / service `BobIrcd`.
-
-## Ionos Ergo down
-
-Service `BobIrcd` runs `C:\ai\ergo\ergo.exe` via NSSM (Automatic, LocalSystem).
-Stopped with no `ergo.exe` means the daemon is down. The old task
-`BobIrcd-ionos` is gone; do not start it.
-
-```powershell
-Start-Service BobIrcd
-```
-
-Confirm dual-stack LISTEN on 6697 and TLS handshake `CN=irc.ntsa.uk`.
-Do not `Stop-ScheduledTask BobFleet-*` to recover IRC.
+Human monitor (flamingo): Halloy nick not `bob-*`. Type `!bobiverse`.
 
 ## Do not
 
-- Point any `bob-*` nick at Libera (ionos IP banned 2026-09-20).
-- Run two Watch-Bobiverse processes (reconnect flood).
-- Open public `:6667`.
+- Point any `bob-*` nick at Libera.
+- Run two Watch-Bobiverse processes.
+- Open public `:6667` or a GET digest URL.
 - WinRM.
+- Stamp UAT (Bob only).

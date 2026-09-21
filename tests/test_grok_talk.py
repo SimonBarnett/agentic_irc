@@ -63,6 +63,36 @@ def test_enqueue_when_enabled_and_fuel(tmp_path, monkeypatch):
     assert doc["reply_target"] == "#bobiverse"
 
 
+def test_enqueue_when_weekly_zero_but_cursor_fuel(tmp_path, monkeypatch):
+    _enable_grok_talk(tmp_path, monkeypatch)
+    bobstat.write_peer(
+        tmp_path,
+        {
+            "ok": True,
+            "id": "ionos",
+            "weekly": 0,
+            "cursor_label": "-£75",
+            "running": 0,
+            "queued": 0,
+            "jobs": [],
+        },
+    )
+    dedupe: dict[tuple[str, str], float] = {}
+    job = grok_talk.enqueue_mention(
+        tmp_path,
+        "ionos",
+        "bob-ionos",
+        ["bob-ionos"],
+        "simon",
+        "#bobiverse",
+        "@bob-ionos ping",
+        to_me=False,
+        to_channel=True,
+        dedupe_last=dedupe,
+    )
+    assert job
+
+
 def test_no_enqueue_when_weekly_zero(tmp_path, monkeypatch):
     _enable_grok_talk(tmp_path, monkeypatch)
     bobstat.write_peer(

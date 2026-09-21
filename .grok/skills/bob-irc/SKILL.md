@@ -111,9 +111,10 @@ Canonical wording also lives in skill `agentic-irc` (Listener + TSR).
 
 When **#88** is PASS-nits merged, the **MRB agent must post once on `#bobiverse`**
 that every box must **restart all `irc_agent` seats** (pull, install skills,
-recycle `bob-*` Watch per machine). Copy from
+recycle `bob-*` Watch per machine). Nick suffix = **coordinator PowerShell
+`$PID`**, not python listen/agent. Copy from
 `docs/post-merge-talk-seat-pid-restart.md`. Flamingo check: **`bob-flamingo` +
-`flamingo-<agentPid>`** on fleet. Not optional.
+`flamingo-<powershellSeatPid>`** on fleet. Not optional.
 
 Human monitor (flamingo): Halloy nick not `bob-*` (e.g. `simon`).
 `%AppData%\halloy\config.toml`: server `irc.ntsa.uk:6697` TLS,

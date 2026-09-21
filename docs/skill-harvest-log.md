@@ -1,5 +1,11 @@
 # Skill harvest log
 
+## 2026-09-22 — #88 seat PID = PowerShell `$PID` (NOT python)
+
+Simon correction: suffix must be **coordinator PowerShell process id**, not
+python `irc_listen` (e.g. 17568) and not python `irc_agent`. FR #88, plan,
+runbook, skills updated. PR #89 must realign.
+
 ## 2026-09-22 — #88 post-merge IRC announce
 
 PASS-nits merge on talk-seat PID (#88): MRB agent posts on `#bobiverse`

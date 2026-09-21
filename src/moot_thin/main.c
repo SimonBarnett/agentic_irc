@@ -7,11 +7,12 @@
 #include "irc_tls.h"
 #include "pair.h"
 #include "beacon.h"
+#include "task_ui.h"
 
 #include <time.h>
 
 /* Keep in sync with VERSION */
-#define AIRC_THIN_VERSION "0.3.0"
+#define AIRC_THIN_VERSION "0.3.1"
 
 static void usage(void)
 {
@@ -102,6 +103,7 @@ static int prompt_pin(char *out, int outlen)
 
 static int selftest(void)
 {
+    task_ui_set_enabled(0);
     ThinConfig cfg;
     Jail jail;
     char err[256];

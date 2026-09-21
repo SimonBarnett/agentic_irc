@@ -143,7 +143,7 @@ def test_version_sync():
     ver = (ROOT / "src" / "moot_thin" / "VERSION").read_text(encoding="utf-8").strip()
     main = (ROOT / "src" / "moot_thin" / "main.c").read_text(encoding="utf-8")
     assert f'"{ver}"' in main
-    assert ver == "0.3.0"
+    assert ver == "0.3.1"
 
 
 def test_live_tls_contracts_in_source():
@@ -434,3 +434,25 @@ def test_default_bins_powershell_optional():
     src = (ROOT / "src" / "moot_thin" / "jail.c").read_text(encoding="utf-8")
     assert "powershell_present" in src
     assert "cmd.exe" in src
+
+
+def test_mode3_visibility_issue_4_task_ui_and_icon():
+    """GitHub issue #4: English task line, spinner, DONE/FAIL colours, desktop icon."""
+    tu = (ROOT / "src" / "moot_thin" / "task_ui.c").read_text(encoding="utf-8")
+    assert "task_ui_begin" in tu and "task_ui_spin_tick" in tu
+    assert "DONE" in tu and "FAIL" in tu
+    assert "FOREGROUND_GREEN" in tu and "FOREGROUND_RED" in tu
+    assert "Task:" in tu
+    dj = (ROOT / "src" / "moot_thin" / "dumb_job.c").read_text(encoding="utf-8")
+    assert "task_ui_begin(job_json)" in dj and "task_ui_end(result)" in dj
+    jail = (ROOT / "src" / "moot_thin" / "jail.c").read_text(encoding="utf-8")
+    assert "task_ui_spin_tick" in jail
+    build = (ROOT / "src" / "moot_thin" / "build.bat").read_text(encoding="utf-8")
+    assert "task_ui.c" in build and "airc-moot-thin.rc" in build
+    ico = ROOT / "src" / "moot_thin" / "airc-moot-thin.ico"
+    assert ico.exists() and ico.stat().st_size > 200
+    ver = (ROOT / "src" / "moot_thin" / "VERSION").read_text(encoding="utf-8").strip()
+    assert ver == "0.3.1"
+    main = (ROOT / "src" / "moot_thin" / "main.c").read_text(encoding="utf-8")
+    assert 'AIRC_THIN_VERSION "0.3.1"' in main
+    assert "task_ui_set_enabled(0)" in main

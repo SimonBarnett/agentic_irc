@@ -150,7 +150,7 @@ def test_bobiverse_forms(tmp_path):
 
 
 def test_callback_merge_delete_shop_down(tmp_path):
-    ok, err = bobreport.apply_callback(
+    ok, err, actions = bobreport.apply_callback(
         tmp_path,
         {
             "op": "merge",
@@ -162,18 +162,19 @@ def test_callback_merge_delete_shop_down(tmp_path):
         },
     )
     assert ok and err == ""
+    assert actions == ["'s pid 4412 on flamingo is working on shop-channel FR"]
     doc = bobreport.load_digest(tmp_path)
     assert doc["machines"]["flamingo"]["workers"]["4412"]["working_on"] == "shop-channel FR"
     assert doc["machines"]["flamingo"]["pcent"]["cursor-models"] == 12
-    ok, _ = bobreport.apply_callback(tmp_path, {"op": "delete-worker", "machine": "flamingo", "pid": 4412})
+    ok, _, _ = bobreport.apply_callback(tmp_path, {"op": "delete-worker", "machine": "flamingo", "pid": 4412})
     assert ok
     doc = bobreport.load_digest(tmp_path)
     assert doc["machines"]["flamingo"]["workers"] == {}
-    ok, _ = bobreport.apply_callback(tmp_path, {"op": "shop-down", "machine": "flamingo"})
+    ok, _, _ = bobreport.apply_callback(tmp_path, {"op": "shop-down", "machine": "flamingo"})
     assert ok
     doc = bobreport.load_digest(tmp_path)
     assert doc["machines"]["flamingo"]["status"] == "I am offline"
-    bad, _ = bobreport.apply_callback(tmp_path, {"op": "merge", "machine": "flamingo", "secret": "nope"})
+    bad, _, _ = bobreport.apply_callback(tmp_path, {"op": "merge", "machine": "flamingo", "secret": "nope"})
     assert not bad
 
 

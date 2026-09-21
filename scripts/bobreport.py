@@ -60,6 +60,8 @@ _DISCONNECT_DEDUPE: dict[tuple[str, str], float] = {}
 
 CC_SHOP = "shop"
 CC_QUERY = "query"
+WORKING_ON_PREFIX = "This is what I'm working on: "
+WORKING_ON_SHOP_SEP = ": " + WORKING_ON_PREFIX
 
 
 def looks_like_secret(text: str) -> bool:
@@ -210,6 +212,14 @@ def parse_bobiverse_query(body: str) -> tuple[str, str | None] | None:
 
 def digest_path(home: Path) -> Path:
     return Path(home) / "digest.json"
+
+
+def fleet_digest_home(home: Path) -> Path:
+    """Digest root when worker home is .../workers/<machine>/<pid>."""
+    p = Path(home)
+    if p.name.isdigit() and p.parent.parent.name == "workers":
+        return p.parent.parent.parent
+    return p
 
 
 def _empty_machine(machine_id: str) -> dict:
@@ -398,13 +408,13 @@ def apply_report(home: Path, sender_nick: str, briefer_nick: str, body: str) -> 
     return ReportOutcome(ok=False, err=REPORT_GONE)
 
 
-def start_worker(
+def merge_worker_working_on(
     home: Path,
     machine_id: str,
     pid: int | str,
     working_on: str,
-    kind: str = "grok",
     briefer_nick: str = "",
+    kind: str = "grok",
 ) -> PresenceOutcome:
     text = (working_on or "").strip()
     if not text:
@@ -423,26 +433,42 @@ def start_worker(
         doc["briefer"] = briefer_nick
     doc["ts"] = _utc_now_iso()
     ent = _machine_entry(doc, mid)
+    workers = ent.setdefault("workers", {})
+    prev = workers.get(pid_s) or {}
+    prev_wo = str(prev.get("working_on") or "").strip()
+    if prev_wo == text and prev:
+        return PresenceOutcome(ok=True, machine_id=mid)
     ent["online"] = True
     ent["status"] = "I am online"
-    workers = ent.setdefault("workers", {})
     w = _coerce_worker(
         mid,
         pid_s,
         {
-            "kind": kind,
-            "state": "running",
+            **prev,
+            "kind": kind or prev.get("kind") or "grok",
+            "state": prev.get("state") or "running",
             "working_on": text,
-            "nick": worker_nick(mid, pid_s),
+            "nick": prev.get("nick") or worker_nick(mid, pid_s),
             "key": worker_key(mid, pid_s),
         },
     )
     workers[pid_s] = w
     _roll_working_on(ent)
-    _note_event(doc, "worker-start", machine=mid, pid=pid_s, working_on=text)
+    _note_event(doc, "worker-start" if not prev else "working_on", machine=mid, pid=pid_s, working_on=text)
     save_digest(home, doc)
     action = f"'s pid {pid_s} on {mid} is working on {text}"
     return PresenceOutcome(ok=True, actions=[action], machine_id=mid)
+
+
+def start_worker(
+    home: Path,
+    machine_id: str,
+    pid: int | str,
+    working_on: str,
+    kind: str = "grok",
+    briefer_nick: str = "",
+) -> PresenceOutcome:
+    return merge_worker_working_on(home, machine_id, pid, working_on, briefer_nick, kind=kind)
 
 
 def delete_worker(home: Path, machine_id: str, pid: int | str, briefer_nick: str = "", now: float | None = None) -> PresenceOutcome:
@@ -564,19 +590,35 @@ def apply_quit(home: Path, nick: str, briefer_nick: str = "") -> PresenceOutcome
     return PresenceOutcome(ok=True)
 
 
-def apply_callback(home: Path, payload: dict, briefer_nick: str = "") -> tuple[bool, str]:
+def apply_callback(
+    home: Path, payload: dict, briefer_nick: str = ""
+) -> tuple[bool, str, list[str]]:
     if not isinstance(payload, dict):
-        return False, "malformed"
+        return False, "malformed", []
     if any(k.lower() in ("secret", "x-bob-secret", "password") for k in payload):
-        return False, "secret"
+        return False, "secret", []
     blob = json.dumps(payload, separators=(",", ":"))
     if looks_like_secret(blob):
-        return False, "secret"
+        return False, "secret", []
     op = str(payload.get("op") or "").strip().lower()
     mid = normalize_machine_id(str(payload.get("machine") or payload.get("id") or ""))
+    actions: list[str] = []
     if op == "merge":
         if not mid:
-            return False, "bad machine"
+            return False, "bad machine", []
+        pid_raw = payload.get("pid")
+        if pid_raw is not None and str(pid_raw) != "" and "working_on" in payload:
+            try:
+                pid_s = str(int(str(pid_raw)))
+            except ValueError:
+                return False, "bad pid", []
+            kind = str(payload.get("kind") or "grok")
+            wo_out = merge_worker_working_on(
+                home, mid, pid_s, str(payload.get("working_on") or ""), briefer_nick, kind=kind
+            )
+            if not wo_out.ok:
+                return False, wo_out.err or "bad merge", []
+            actions.extend(wo_out.actions)
         doc = load_digest(home)
         if briefer_nick:
             doc["briefer"] = briefer_nick
@@ -591,45 +633,49 @@ def apply_callback(home: Path, payload: dict, briefer_nick: str = "") -> tuple[b
             ent["pcent"] = payload["pcent"]
         if payload.get("uptime_since"):
             ent["uptime_since"] = str(payload["uptime_since"])
-        pid_raw = payload.get("pid")
         if pid_raw is not None and str(pid_raw) != "":
             try:
                 pid_s = str(int(str(pid_raw)))
             except ValueError:
-                return False, "bad pid"
-            wo = str(payload.get("working_on") or "")
-            if looks_like_secret(wo):
-                return False, "secret"
-            workers = ent.setdefault("workers", {})
-            prev = workers.get(pid_s) or {}
-            workers[pid_s] = _coerce_worker(
-                mid,
-                pid_s,
-                {
-                    **prev,
-                    "kind": payload.get("kind", prev.get("kind") or ""),
-                    "state": payload.get("state", prev.get("state") or "running"),
-                    "working_on": wo if "working_on" in payload else prev.get("working_on") or "",
-                    "nick": payload.get("nick") or prev.get("nick") or worker_nick(mid, pid_s),
-                },
-            )
-            _roll_working_on(ent)
+                return False, "bad pid", []
+            if "working_on" not in payload:
+                wo = str(payload.get("working_on") or "")
+                if looks_like_secret(wo):
+                    return False, "secret", []
+                workers = ent.setdefault("workers", {})
+                prev = workers.get(pid_s) or {}
+                workers[pid_s] = _coerce_worker(
+                    mid,
+                    pid_s,
+                    {
+                        **prev,
+                        "kind": payload.get("kind", prev.get("kind") or ""),
+                        "state": payload.get("state", prev.get("state") or "running"),
+                        "working_on": prev.get("working_on") or "",
+                        "nick": payload.get("nick") or prev.get("nick") or worker_nick(mid, pid_s),
+                    },
+                )
+                _roll_working_on(ent)
         elif "working_on" in payload:
             ent["working_on"] = str(payload.get("working_on") or "")
         _note_event(doc, "merge", machine=mid)
         save_digest(home, doc)
-        return True, ""
+        return True, "", actions
     if op == "delete-worker":
         if not mid:
-            return False, "bad machine"
+            return False, "bad machine", []
         out = delete_worker(home, mid, payload.get("pid") or "", briefer_nick)
-        return (True, "") if out.ok else (False, out.err or "bad delete")
+        if out.ok and out.actions:
+            actions.extend(out.actions)
+        return (True, "", actions) if out.ok else (False, out.err or "bad delete", [])
     if op == "shop-down":
         if not mid:
-            return False, "bad machine"
+            return False, "bad machine", []
         out = shop_down(home, mid, briefer_nick)
-        return (True, "") if out.ok else (False, out.err or "bad shop-down")
-    return False, "bad op"
+        if out.ok and out.actions:
+            actions.extend(out.actions)
+        return (True, "", actions) if out.ok else (False, out.err or "bad shop-down", [])
+    return False, "bad op", []
 
 
 def route_cc(kind: str, pm_open: bool) -> frozenset[str]:
@@ -649,7 +695,46 @@ def route_cc(kind: str, pm_open: bool) -> frozenset[str]:
 
 
 def working_on_shop_line(nick: str, text: str) -> str:
-    return f"{nick}: This is what I'm working on: {text}"
+    return f"{nick}: {WORKING_ON_PREFIX}{text}"
+
+
+def parse_working_on_shop_line(body: str) -> tuple[str | None, str] | None:
+    """Parse shop PRIVMSG body; return (nick or None, job text)."""
+    text = (body or "").strip()
+    if not text:
+        return None
+    if WORKING_ON_SHOP_SEP in text:
+        left, job = text.split(WORKING_ON_SHOP_SEP, 1)
+        nick = left.strip()
+        job = job.strip()
+        if nick and parse_worker_nick(nick) and job:
+            return nick, job
+        return None
+    if text.startswith(WORKING_ON_PREFIX):
+        job = text[len(WORKING_ON_PREFIX) :].strip()
+        return (None, job) if job else None
+    return None
+
+
+def ingest_working_on_shop(
+    home: Path, sender_nick: str, body: str, briefer_nick: str = ""
+) -> PresenceOutcome:
+    parsed = parse_working_on_shop_line(body)
+    if not parsed:
+        return PresenceOutcome(ok=False, err="not working_on")
+    nick_in_line, job = parsed
+    who = (nick_in_line or sender_nick or "").strip()
+    worker = parse_worker_nick(who)
+    if not worker:
+        return PresenceOutcome(ok=False, err="not worker")
+    mid, pid = worker
+    out = merge_worker_working_on(home, mid, pid, job, briefer_nick)
+    if not out.ok:
+        return out
+    if out.actions:
+        return out
+    action = f"'s pid {pid} on {mid} is working on {job.strip()}"
+    return PresenceOutcome(ok=True, actions=[action], machine_id=mid)
 
 
 def split_irc_text(text: str, limit: int = MAX_DIGEST_LINE) -> list[str]:

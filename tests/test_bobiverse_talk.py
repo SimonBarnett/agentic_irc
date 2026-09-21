@@ -272,6 +272,54 @@ def test_bobiverse_help_and_machine(tmp_path, monkeypatch, recorder):
     assert any(bobreport.NO_MACHINE in x for x in recorder)
 
 
+def test_working_on_shop_line_and_bob_action(tmp_path, monkeypatch, recorder):
+    monkeypatch.setenv("AGENTIC_IRC_HOME", str(tmp_path))
+    _open_moot(tmp_path)
+    job = "agentic_irc shop-channel FR (BUILD)"
+    shop_line = bobreport.working_on_shop_line("w-fl-4412", job)
+    w = irc_agent.Client(_args(tmp_path, "w-fl-4412", channel="#flamingo"))
+    w.cc_send("working_on", job)
+    assert bobreport.load_digest(tmp_path)["machines"]["flamingo"]["workers"]["4412"]["working_on"] == job
+    assert recorder == [f"PRIVMSG #flamingo :{shop_line}"]
+    recorder.clear()
+    w.cc_send("working_on", job)
+    assert recorder == []
+    w.cc_send("assistant", "visible stdout")
+    assert recorder == ["PRIVMSG #flamingo :visible stdout"]
+    assert not any("#bobiverse" in x for x in recorder)
+    recorder.clear()
+    bob = irc_agent.Client(_args(tmp_path, "bob-flamingo"))
+    bob.handle_privmsg("w-fl-4412!u@h", "#flamingo", shop_line)
+    assert not any(x.startswith("PRIVMSG #flamingo :") for x in recorder)
+    assert any(
+        x.startswith("PRIVMSG #bobiverse :")
+        and "ACTION" in x
+        and "pid 4412 on flamingo is working on" in x
+        for x in recorder
+    )
+    recorder.clear()
+    bob.handle_privmsg("w-fl-4412!u@h", "#flamingo", shop_line)
+    assert not any("ACTION" in x for x in recorder)
+
+
+def test_working_on_callback_emits_bob_action(tmp_path, monkeypatch, recorder):
+    monkeypatch.setenv("AGENTIC_IRC_HOME", str(tmp_path))
+    _open_moot(tmp_path)
+    c = irc_agent.Client(_args(tmp_path, "bob-flamingo"))
+    c.apply_digest_callback(
+        {"op": "merge", "machine": "flamingo", "pid": 4412, "working_on": "callback job", "kind": "cursor"}
+    )
+    assert bobreport.load_digest(tmp_path)["machines"]["flamingo"]["workers"]["4412"]["working_on"] == "callback job"
+    assert any(
+        x.startswith("PRIVMSG #bobiverse :") and "ACTION" in x and "callback job" in x for x in recorder
+    )
+    recorder.clear()
+    c.apply_digest_callback(
+        {"op": "merge", "machine": "flamingo", "pid": 4412, "working_on": "callback job", "kind": "cursor"}
+    )
+    assert not any("ACTION" in x for x in recorder)
+
+
 def test_quit_worker_and_bob_action(tmp_path, monkeypatch, recorder):
     monkeypatch.setenv("AGENTIC_IRC_HOME", str(tmp_path))
     _open_moot(tmp_path)

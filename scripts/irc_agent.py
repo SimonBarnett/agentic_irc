@@ -336,7 +336,47 @@ class Client:
             pass
         self.stop.set()
 
+    def _digest_home(self) -> Path:
+        return bobreport.fleet_digest_home(self.home)
+
+    def _cc_working_on(self, text: str) -> None:
+        worker = bobreport.parse_worker_nick(self.original_nick)
+        if not worker:
+            return
+        mid, pid = worker
+        raw = (text or "").strip()
+        if not raw:
+            return
+        out = bobreport.merge_worker_working_on(self._digest_home(), mid, pid, raw)
+        if not out.ok or not out.actions:
+            return
+        shop = self._shop_channel()
+        if not shop or shop.lower() == bobreport.FLEET_CHANNEL:
+            return
+        nick = self.live_nick or self.original_nick
+        line = bobreport.working_on_shop_line(nick, raw)
+        for piece in bobreport.split_irc_text(line):
+            self.send("PRIVMSG " + shop + " :" + piece)
+            time.sleep(FLOOD_S)
+
+    def apply_digest_callback(self, payload: dict) -> None:
+        if not self._is_briefer():
+            return
+        briefer = bobtalk.briefer_nick(self._fleet_moot_state()) or self.live_nick
+        ok, _err, actions = bobreport.apply_callback(self.home, payload, briefer)
+        if not ok or not actions:
+            return
+        pid_raw = payload.get("pid")
+        mid = bobreport.normalize_machine_id(str(payload.get("machine") or payload.get("id") or ""))
+        key = f"{mid}:{pid_raw}" if mid and pid_raw is not None else str(mid or "merge")
+        out = bobreport.PresenceOutcome(ok=True, actions=actions, machine_id=mid)
+        self._emit_presence(out, "working_on", key)
+
     def cc_send(self, kind: str, text: str) -> None:
+        k = (kind or "").strip().lower().replace("-", "_")
+        if k == "working_on":
+            self._cc_working_on(text)
+            return
         pieces = bobreport.split_irc_text(text)
         dests = bobreport.route_cc(kind, bool(self._pm_open))
         shop = self._shop_channel()
@@ -555,6 +595,17 @@ class Client:
         if bobreport.parse_report_command(body):
             self._handle_report(src, to_channel, body)
             return
+        if to_channel and self._is_briefer():
+            ch = bobreport.normalize_channel(target)
+            if ch.lower() != bobreport.FLEET_CHANNEL.lower():
+                if bobreport.parse_working_on_shop_line(body):
+                    briefer = bobtalk.briefer_nick(self._fleet_moot_state()) or self.live_nick
+                    out = bobreport.ingest_working_on_shop(self.home, src, body, briefer)
+                    if out.ok and out.actions:
+                        worker = bobreport.parse_worker_nick(src)
+                        key = f"{worker[0]}:{worker[1]}" if worker else src
+                        self._emit_presence(out, "working_on", key)
+                    return
         if not to_channel:
             return
         pk = seal.parse_agpk_line(body)

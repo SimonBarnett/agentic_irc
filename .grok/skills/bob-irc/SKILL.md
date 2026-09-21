@@ -44,10 +44,11 @@ Do **not** point agents at `mrb-*.pdf`. Do **not** implement `!report` (#36 writ
   Digest file is **not** HTTP GET. Each box has its own `digest.json`;
   flamingo local is not ionos.
 - **Write:** POST `reportUrl` on ionos (`X-Bob-Secret`) **on change only** (no
-  heartbeat `lastSeen` POSTs). A worker that changes `working_on` or goes
-  idle must POST immediately: `scripts/post_working_on.py --machine <id>
-  --pid <pid> --nick <machine>-<pid> --working-on '…'` or `--idle`. 204 =
-  change, 200 = same. Skip if unchanged. `scripts/bobcallback.py`
+  heartbeat `lastSeen` POSTs). Create the worker first (`--create`: merge
+  pid/nick/kind, no `working_on`), then POST `working_on` or idle:
+  `scripts/post_working_on.py --machine <id> --pid <pid>
+  --nick <machine>-<pid> --create` then `--working-on '…'` or `--idle`.
+  204 = change, 200 = same. Skip if unchanged. `scripts/bobcallback.py`
   `POST /bob/v1/report`: first change **204**, duplicate **200**, GET/HEAD
   **405**. Default bind `127.0.0.1` is not peer-reachable — bind a
   reachable address and open the IONOS port. DNS is optional (IP URL is

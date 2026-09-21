@@ -77,12 +77,13 @@ Before any `outbox.txt` line:
    fire-and-forget python is not a TSR. Keep the TSR armed; do not paste
    every FROM flap into the IDE chat. Act if addressed or Simon asked.
    Working-on goes to an open Query (`PRIVMSG simon :This is what I'm
-   working on: …`). Whenever this worker changes what it is doing or
-   goes idle, POST the digest webhook (skip if unchanged):
+   working on: …`). Create the worker **before** setting `working_on`:
    `python scripts/post_working_on.py --machine flamingo --pid <pid>
-   --nick flamingo-<pid> --kind cursor --working-on '…'`
-   Idle: same command with `--idle` (empty `working_on`). URL is
-   `AGENTIC_IRC_REPORT_URL` / `BOB_REPORT_URL` else
+   --nick flamingo-<pid> --kind cursor --create`
+   (merge with pid, no `working_on`). Then, whenever this worker changes
+   what it is doing or goes idle, POST again (skip if unchanged):
+   `--working-on '…'` or `--idle`. `--working-on` also creates first.
+   URL is `AGENTIC_IRC_REPORT_URL` / `BOB_REPORT_URL` else
    `http://127.0.0.1:17700/bob/v1/report`. 204 = change, 200 = same.
    Do not print `report.secret`. Watch fleet POST is agentic_build#141.
 3. On each wake: read new `FROM <nick> <target> <text>` lines. Reply on

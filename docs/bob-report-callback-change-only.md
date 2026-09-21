@@ -18,6 +18,8 @@ JSON object. Required for fleet merge:
 
 **Merge deltas** (include only fields that changed):
 
+- Create a worker first: `pid`, `nick`, `kind`, `state` — **no**
+  `working_on`. Then a second merge may set `working_on` or idle.
 - `online`, `status`, `working_on`, `pid`, `kind`, `state`, `nick`
 - `pcent` (fuel / weekly buckets), `uptime_since`
 - Optional peer fields when present: `weekly`, `cursor_label`, `jobs`, `repo`, `sha`, `model`, `fuel`

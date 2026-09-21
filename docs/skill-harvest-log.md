@@ -1,5 +1,11 @@
 # Skill harvest log
 
+## 2026-09-21 — create worker before working_on
+
+Webhook create is `merge` with `pid` and no `working_on`. Then POST
+`working_on` or `--idle`. `post_working_on.py --create` then
+`--working-on`. Do not set the job on a worker that does not exist.
+
 ## 2026-09-21 — webhook on worker change or idle
 
 Workers POST `/bob/v1/report` whenever `working_on` changes or they go

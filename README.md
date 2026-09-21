@@ -19,6 +19,8 @@ Canonical table: `agentic_build/config/bobiverse.json` and `agentic_build/docs/b
 
 Alias: fleet scripts and docs may say `dev1`; registry id is **`ce-priority-dev1`** (same nick `bob-dev1`). Do not invent another id for that box.
 
+Shop rooms: `#flamingo` `#marchhare` `#ionos` `#ce-priority-dev1`. Workers `w-<short>-<pid>` JOIN shop only. Fleet read is `!bobiverse` (whisper JSON). There is no `!report` and no HTTP GET of the digest.
+
 Happy path for a field Windows box: chair publishes `airc-invite.json` (or a secret-gist `beacon.url`); the operator double-clicks `airc-moot-thin.exe`. No typed PIN. See `docs/beacon-v1-2026-09-19.md`.
 
 ## Layout

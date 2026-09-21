@@ -138,10 +138,14 @@ class Client:
         self.args = args
         self.original_nick = args.nick
         self.live_nick = args.nick
-        chan = args.channel if args.channel.startswith("#") else "#" + args.channel
-        if "|" in chan:
-            raise ValueError("channel must not contain |")
-        self.chan = chan
+        self.channels = bobreport.channels_for_nick(args.nick, args.channel)
+        if not self.channels:
+            chan = args.channel if str(args.channel).startswith("#") else "#" + str(args.channel)
+            if "|" in chan:
+                raise ValueError("channel must not contain |")
+            self.channels = [chan]
+        self.chan = self.channels[0]
+        self._pending_joins: set[str] = {c.lower() for c in self.channels}
         if args.home:
             os.environ["AGENTIC_IRC_HOME"] = str(Path(args.home).expanduser())
         self.home = seal.home()
@@ -170,6 +174,9 @@ class Client:
         self.sasl_fail = threading.Event()
         self._bobiverse_last_query: dict[str, float] = {}
         self._bobiverse_last_tray: dict[str, float] = {}
+        self._report_gone_told: set[str] = set()
+        self._pm_open: dict[str, float] = {}
+        self._action_last: dict[tuple[str, str], float] = {}
 
     def send(self, line: str) -> None:
         assert self.sock is not None
@@ -179,6 +186,19 @@ class Client:
     def say(self, msg: str) -> None:
         self.send("PRIVMSG " + self.chan + " :" + msg)
         time.sleep(FLOOD_S)
+
+    def _joined_channel(self, target: str) -> bool:
+        t = bobreport.normalize_channel(target).lower()
+        return t in {c.lower() for c in self.channels}
+
+    def _shop_channel(self) -> str | None:
+        worker = bobreport.parse_worker_nick(self.original_nick)
+        if worker:
+            return bobreport.shop_channel(worker[0])
+        mid = bobreport.machine_from_nick(self.original_nick)
+        if mid:
+            return bobreport.shop_channel(mid)
+        return None
 
     def whisper(self, nick: str, msg: str) -> None:
         target = (nick or "").strip()
@@ -225,24 +245,113 @@ class Client:
         who = (sender or "").strip()
         if not who or not self._is_briefer():
             return
-        briefer = bobtalk.briefer_nick(self._fleet_moot_state()) or self.live_nick
-        outcome = bobreport.apply_report(self.home, who, briefer, body)
-        if outcome.help_text:
-            self._deliver_whispers(who, outcome.help_text.splitlines())
+        if bobreport.looks_like_secret(body):
             return
-        if not outcome.ok:
-            if outcome.err:
-                self.whisper(who, outcome.err)
+        key = who.lower()
+        if key in self._report_gone_told:
             return
-        if outcome.speak_channel:
-            self.say(outcome.speak_channel)
+        self._report_gone_told.add(key)
+        self.whisper(who, bobreport.REPORT_GONE)
 
-    def _answer_bobiverse(self, asker: str, on_channel: bool) -> bool:
+    def _fleet_action(self, event_class: str, key: str, text: str) -> None:
+        if not self._is_briefer() or not text:
+            return
+        if bobreport.looks_like_secret(text):
+            return
+        now = time.time()
+        stamp = (event_class, key)
+        last = self._action_last.get(stamp, 0.0)
+        if now - last < bobreport.ACTION_COOLDOWN_S:
+            return
+        self._action_last[stamp] = now
+        self.send("PRIVMSG " + bobreport.FLEET_CHANNEL + " :\x01ACTION " + text + "\x01")
+        time.sleep(FLOOD_S)
+
+    def _emit_presence(self, outcome: bobreport.PresenceOutcome, event_class: str, key: str) -> None:
+        for action in outcome.actions:
+            self._fleet_action(event_class, key, action)
+
+    def handle_join(self, nick: str, channel: str) -> None:
+        who = (nick or "").strip()
+        ch = bobreport.normalize_channel(channel)
+        if who.lower() in self._mine_nicks():
+            self._pending_joins.discard(ch.lower())
+            if ch.lower() == self.chan.lower() or not self._pending_joins:
+                self.joined.set()
+            if not self._pending_joins:
+                self.joined.set()
+        if who and who.lower() not in self._mine_nicks() and ch.lower() == bobreport.FLEET_CHANNEL:
+            self._maybe_brief_joiner(who)
+        if not self._is_briefer():
+            return
+        briefer = bobtalk.briefer_nick(self._fleet_moot_state()) or self.live_nick
+        out = bobreport.apply_join(self.home, who, ch, briefer)
+        self._emit_presence(out, "join", f"{who}:{ch}")
+
+    def handle_part(self, nick: str, channel: str) -> None:
+        who = (nick or "").strip()
+        ch = bobreport.normalize_channel(channel)
+        self._maybe_local_shop_closed(who)
+        if not self._is_briefer():
+            return
+        briefer = bobtalk.briefer_nick(self._fleet_moot_state()) or self.live_nick
+        out = bobreport.apply_part(self.home, who, ch, briefer)
+        klass = "shop-down" if out.shop_closed else "drop"
+        self._emit_presence(out, klass, f"{who}:{ch}")
+
+    def handle_quit(self, nick: str) -> None:
+        who = (nick or "").strip()
+        self._maybe_local_shop_closed(who)
+        if not self._is_briefer():
+            return
+        briefer = bobtalk.briefer_nick(self._fleet_moot_state()) or self.live_nick
+        out = bobreport.apply_quit(self.home, who, briefer)
+        klass = "shop-down" if out.shop_closed else "drop"
+        self._emit_presence(out, klass, who)
+
+    def _maybe_local_shop_closed(self, departed: str) -> None:
+        mid = bobreport.machine_from_nick(departed)
+        mine = bobreport.parse_worker_nick(self.original_nick)
+        if not mid or not mine or mine[0] != mid:
+            return
+        shop = bobreport.shop_channel(mid)
+        try:
+            self.send("PART " + shop + " :shop closed")
+            self.send("QUIT :shop closed")
+        except Exception:
+            pass
+        self.stop.set()
+
+    def cc_send(self, kind: str, text: str) -> None:
+        pieces = bobreport.split_irc_text(text)
+        dests = bobreport.route_cc(kind, bool(self._pm_open))
+        shop = self._shop_channel()
+        for piece in pieces:
+            if bobreport.CC_SHOP in dests and shop and shop.lower() != bobreport.FLEET_CHANNEL:
+                self.send("PRIVMSG " + shop + " :" + piece)
+                time.sleep(FLOOD_S)
+            if bobreport.CC_QUERY in dests:
+                for nick in list(self._pm_open):
+                    self.whisper(nick, piece)
+
+    def _mark_pm_open(self, nick: str) -> None:
+        n = (nick or "").strip()
+        if not n or n.lower() in self._mine_nicks():
+            return
+        if n.lower().startswith("bob-") or bobreport.parse_worker_nick(n):
+            return
+        self._pm_open[n.lower()] = time.time()
+
+    def _answer_bobiverse(self, asker: str, body: str) -> bool:
         who = (asker or "").strip()
         if not who or who.lower() in self._mine_nicks():
             return True
         if not self._is_briefer():
             return True
+        parsed = bobreport.parse_bobiverse_query(body)
+        if not parsed:
+            return True
+        form, machine_id = parsed
         now = time.time()
         key = who.lower()
         tray = bobtalk.is_tray_asker(who)
@@ -253,9 +362,9 @@ class Client:
             return True
         last_map[key] = now
         briefer = bobtalk.briefer_nick(self._fleet_moot_state()) or self.live_nick
-        lines = bobreport.format_digest_whisper_lines(self.home, briefer)
+        lines = bobreport.format_digest_whisper_lines(self.home, briefer, form=form, machine_id=machine_id)
         self._deliver_whispers(who, lines)
-        info(f"INFO bobiverse digest to={who} lines={len(lines)}")
+        info(f"INFO bobiverse digest to={who} form={form} lines={len(lines)}")
         return True
 
     def connect(self) -> ssl.SSLSocket:
@@ -420,12 +529,14 @@ class Client:
     def handle_privmsg(self, prefix: str, target: str, body: str) -> None:
         src = prefix.split("!", 1)[0].lstrip(":")
         tgt_l = target.lower()
-        to_channel = tgt_l == self.chan.lower()
+        to_channel = self._joined_channel(target)
         to_me = tgt_l in self._mine_nicks()
         if not to_channel and not to_me:
             return
+        if to_me:
+            self._mark_pm_open(src)
         if bobtalk.parse_bobiverse_command(body):
-            self._answer_bobiverse(src, to_channel)
+            self._answer_bobiverse(src, body)
             return
         if bobreport.parse_report_command(body):
             self._handle_report(src, to_channel, body)
@@ -550,14 +661,28 @@ class Client:
                         self.ready.set()
                     if cmd == "JOIN":
                         ch = parts[1].lstrip(":") if len(parts) > 1 else ""
-                        if ch.lower() == self.chan.lower():
-                            self.joined.set()
-                            joiner = prefix.split("!", 1)[0].lstrip(":") if prefix else ""
-                            if joiner:
-                                self._maybe_brief_joiner(joiner)
+                        if not ch and trailing:
+                            ch = trailing
+                        joiner = prefix.split("!", 1)[0].lstrip(":") if prefix else ""
+                        if joiner:
+                            self.handle_join(joiner, ch)
+                    if cmd == "PART":
+                        ch = parts[1].lstrip(":") if len(parts) > 1 else ""
+                        if not ch and trailing:
+                            ch = trailing
+                        who = prefix.split("!", 1)[0].lstrip(":") if prefix else ""
+                        if who:
+                            self.handle_part(who, ch)
+                    if cmd == "QUIT":
+                        who = prefix.split("!", 1)[0].lstrip(":") if prefix else ""
+                        if who:
+                            self.handle_quit(who)
                     if cmd in ("433", "432"):
                         if self.live_nick == self.original_nick:
-                            self.live_nick = self.original_nick + "_l"
+                            if bobreport.parse_worker_nick(self.original_nick):
+                                self.live_nick = self.original_nick + "_"
+                            else:
+                                self.live_nick = self.original_nick + "_l"
                             self.send("NICK " + self.live_nick)
                             info(f"INFO nick -> {self.live_nick} (still accept {self.original_nick})")
                     for line in self.sasl_on_line(cmd, parts[1:], trailing):
@@ -608,6 +733,7 @@ class Client:
         self.joined.clear()
         self.dead.clear()
         self.live_nick = self.original_nick
+        self._pending_joins = {c.lower() for c in self.channels}
         self._outbox_gen += 1
         gen = self._outbox_gen
         info(
@@ -627,7 +753,7 @@ class Client:
         if not self.ready.wait(30):
             self._abort_gate("NO 001")
         time.sleep(1)
-        self.send("JOIN " + self.chan)
+        self.send("JOIN " + ",".join(self.channels))
         if not self.joined.wait(30):
             self._abort_gate("NO JOIN")
         if self.args.hello:

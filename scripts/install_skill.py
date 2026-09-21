@@ -19,6 +19,10 @@ SCRIPTS = (
     "dumb_ctl.py",
     "beacon.py",
     "moot_thin_proto.py",
+    "bobreport.py",
+    "bobcallback.py",
+    "bobtalk.py",
+    "bobstat.py",
 )
 SKILLS = (
     "agentic-irc",

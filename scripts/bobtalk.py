@@ -51,8 +51,9 @@ def parse_bobiverse_command(body: str) -> bool:
 
 
 def is_tray_asker(nick: str) -> bool:
-    """Fleet agents / Watch use tray pull (~120s); humans read channel talk."""
-    return (nick or "").strip().lower().startswith("bob-")
+    """Fleet agents / Watch / shop workers use tray pull (~120s)."""
+    n = (nick or "").strip().lower()
+    return n.startswith("bob-") or n.startswith("w-")
 
 
 def _repo_ok(repo: object) -> bool:

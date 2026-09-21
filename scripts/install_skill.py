@@ -25,6 +25,7 @@ SCRIPTS = (
     "bobstat.py",
     "grok_talk.py",
     "grok_talk_drain.py",
+    "irc_listen.py",
 )
 SKILLS = (
     "agentic-irc",

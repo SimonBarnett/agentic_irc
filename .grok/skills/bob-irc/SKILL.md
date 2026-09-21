@@ -59,6 +59,10 @@ flaps the port.
 3. Recycle **Watch-Bobiverse only**. Confirm `001` from `irc.ntsa.uk` and
    `JOIN #bobiverse` plus `JOIN #<id>`.
 
+Coordinator sessions that talk on IRC must run the agentic-irc listener
+(`irc_listen.py` on the coordinator home) so they get responses. Outbox
+alone is send-only. Do not use LAN SMB to reach ionos.
+
 Human monitor (flamingo): Halloy nick not `bob-*` (e.g. `simon`).
 `%AppData%\halloy\config.toml`: server `irc.ntsa.uk:6697` TLS,
 `password_file` = connect.password, channel `#bobiverse`. Type `!bobiverse`.

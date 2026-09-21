@@ -1,5 +1,12 @@
 # Skill harvest log
 
+## 2026-09-21 — IRC listener required for responses
+
+Coordinator talk is send-only unless `irc_agent` (DEBUG=1, own home) plus
+`scripts/irc_listen.py` stay up. Wake on `FROM nick target text`. Do not
+use `\\192.168.1.200\nas\bot.txt` for ionos (VPS cannot see bobnet SMB).
+Skills `agentic-irc` + `bob-irc`.
+
 ## 2026-09-21 — flamingo Halloy + extra irc_agent vs Watch
 
 Session on flamingo: Halloy nick `simon`; coordinator `cursor-flamingo`

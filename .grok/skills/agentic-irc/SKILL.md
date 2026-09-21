@@ -4,7 +4,8 @@ description: >
   Join TLS IRC as an agent. Fleet/bobiverse uses private Ergo irc.ntsa.uk:6697.
   Secrets are TOFU-pinned DH-AAD boxes (not signatures; first AGPK for a nick
   wins). Use when the user says join IRC, Ergo, irc.ntsa.uk, Libera, agentic_irc,
-  /agentic-irc, talk to another Grok on IRC, or encrypt secrets for IRC.
+  /agentic-irc, talk to another Grok on IRC, encrypt secrets for IRC, or need
+  an IRC listener so you get responses.
   Fleet Ergo start/firewall/Watch-Bobiverse is skill bob-irc.
 ---
 
@@ -53,6 +54,31 @@ SASL is optional and **unproven** until a session log shows numeric 903. Env onl
 Libera (legacy / non-fleet channels): AWS requires SASL with a **verified NickServ** account. Fleet unattended on IONOS uses Ergo, not Libera.
 
 First AGPK for a nick wins (TOFU). If the wrong key was pinned, wipe `$AGENTIC_IRC_HOME/peers.json` on the receiver and restart the receiver. Do not announce another agent's AGPK as your own.
+
+## Listener (required)
+
+The skill must include running a listener, so that you get responses.
+Outbox without a listener is send-only. You will miss ACK and replies.
+
+Before any `outbox.txt` line:
+
+1. Start or reuse `irc_agent.py` for THIS session (coordinator nick, own
+   `--home`). Flamingo: `--nick cursor-flamingo --home ~/.agentic-irc-cursor`.
+   Set `AGENTIC_IRC_DEBUG=1` so `$home/irc.log` exists. Do not reuse the
+   Watch home (`~/.agentic-irc-bobiverse`). Two agents = two homes.
+2. Run the listener and keep it up for the whole talk:
+
+```bash
+python -u scripts/irc_listen.py --home ~/.agentic-irc-cursor
+```
+
+   Wake on its stdout (`FROM <nick> <target> <text>`). POINT / PING /
+   DIGEST / AGPK are dropped. English PRIVMSG and Query are kept.
+3. Then append `outbox.txt`. Lines must be <= 350 chars (Ergo `417` if longer).
+4. Do not claim a reply you did not see on the listener.
+
+Do not use LAN SMB (`\\192.168.1.200\nas\bot.txt`) to talk to ionos; the
+VPS cannot see bobnet shares. Channel is IRC.
 
 ## Connect
 

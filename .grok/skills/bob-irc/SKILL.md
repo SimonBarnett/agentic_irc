@@ -75,8 +75,9 @@ Log: `~\.grok\long-running-background-tasks\bobcallback-ionos.log`. Task
 `BobReport-ionos`. `config/bobiverse.json` `reportUrl` is updated on install.
 Do not expose GET digest over HTTP (callback returns 405 on GET).
 
-Give fleet writers the secret with **SEAL v2** (Query or `#bobiverse` PM);
-see `agentic-irc` Secrets. Plaintext `report.secret` copy only on the same
+Give fleet writers the secret with **SEAL v2** (Query or `#bobiverse` PM) or
+**FILE tier S** (`agentic-file` skill: `filexfer.py --home … offer … --tier S`
+to the peer's IRC nick, channel `#bobiverse`). Plaintext copy only on the same
 box or over an already-trusted channel.
 
 ## Join a build box

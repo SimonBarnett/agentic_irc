@@ -126,4 +126,7 @@ v2 blob: `sender_pk || eph_pk || nonce || ct`. AAD: `lower(channel)|lower(to)|lo
 
 If there is no AGPK pin yet, wait. Do not send cleartext.
 
+For `report.secret` (or any file), prefer **`agentic-file`** tier S:
+`filexfer.py --home $AGENTIC_IRC_HOME offer …` — see that skill for CLI order.
+
 Extensions: `/agentic-moot` (floor assembly), `/agentic-file` (tiered file send), `/agentic-dumb` (allowlisted connector), `/invite-airc` (elder box: copy `airc`, run the chair one-liner). Mode 3 field box: chair `--chair` prints a copy-paste `airc-moot-thin.exe --pin … --channel "…" --moot …` line (expires 10m). CAPA lines may appear; they are not secrets. Win95 TLS is not claimed.

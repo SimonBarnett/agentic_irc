@@ -1,5 +1,12 @@
 # Skill harvest log
 
+## 2026-09-21 — FILE tier S report.secret to flamingo
+
+Simon asks on `#bobiverse` / PM: SEAL `~\.grok\bob\report.secret` to
+`flamingo-17568` (tier S, AAD `#bobiverse`). Use `filexfer.py --home <ircHome>
+offer` (home flag **before** `offer`, not after). PowerShell: use `$ircHome`,
+not `$home` (read-only `$HOME`). Skills `agentic-file`, `bob-irc`.
+
 ## 2026-09-21 — Ionos webhook IIS + SEAL report secret
 
 `scripts/Install-BobReport.ps1`: `reportUrl` `http://bob.ntsa.uk/bob/v1/report`,

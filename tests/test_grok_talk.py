@@ -63,6 +63,40 @@ def test_enqueue_when_enabled_and_fuel(tmp_path, monkeypatch):
     assert doc["reply_target"] == "#bobiverse"
 
 
+def test_ac2_weekly_zero_with_cursor_label_does_not_enqueue(tmp_path, monkeypatch):
+    """AC2: weekly=0 must not enqueue; cursor_label is not an IRC fuel gate (#126)."""
+    _enable_grok_talk(tmp_path, monkeypatch)
+    bobstat.write_peer(
+        tmp_path,
+        {
+            "ok": True,
+            "id": "ionos",
+            "weekly": 0,
+            "cursor_label": "-£75",
+            "running": 0,
+            "queued": 0,
+            "jobs": [],
+        },
+    )
+    dedupe: dict[tuple[str, str], float] = {}
+    assert (
+        grok_talk.enqueue_mention(
+            tmp_path,
+            "ionos",
+            "bob-ionos",
+            ["bob-ionos"],
+            "simon",
+            "#bobiverse",
+            "@bob-ionos ping",
+            to_me=False,
+            to_channel=True,
+            dedupe_last=dedupe,
+        )
+        is None
+    )
+    assert not grok_talk.inbox_path(tmp_path).exists()
+
+
 def test_no_enqueue_when_weekly_zero(tmp_path, monkeypatch):
     _enable_grok_talk(tmp_path, monkeypatch)
     bobstat.write_peer(

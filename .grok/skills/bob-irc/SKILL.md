@@ -14,20 +14,21 @@ Canonical facts (do not duplicate the nick table here): `agentic_build/docs/bobi
 Registry machine id for DEV1 is **`ce-priority-dev1`** → nick `bob-dev1` (alias `dev1` in speech; same id as build repo issue #89).
 
 Live specs in **this** repo only: `docs/feature-request-house-clean-irc-kit-2026-09-21.md` (issue #34),
+`docs/feature-request-report-bobiverse-digest-2026-09-21.md` (issue #36; `!report` ingest +
+`!bobiverse` JSON whisper),
 `docs/multi-agent-one-host.md`, `docs/beacon-v1-2026-09-19.md`. Index: `docs/README.md`.
 Do **not** point agents at `mrb-*.pdf` / `mrb-*.md` as current spec.
 
 Protocol kit: `irc_agent.py` default `irc.ntsa.uk:6697`.
 
-**Quiet talk:** `#bobiverse` stays conversational — status lines go on the
-**channel** (one fact per `PRIVMSG` on real field change). Watch still writes
-`bob-peers\<id>.json` for the tray; do not POINT a full `BOB v1` blob every
-Watch tick (producer dedupe in `agentic_build`). Fleet `bob-*` join still gets
-a **DM brief** from the briefer. Humans type `!bobiverse` in channel for a
-short English snapshot on the channel (~60s cooldown). Agents / Watch send
-`!bobiverse` ~every **120s** and get **`BOB TRAY v1`** lines by whisper for
-tray refresh (not duplicated on channel). Briefer: chair `bob-*` else first
-`bob-*` on the fleet moot roster. Formatter: `scripts/bobtalk.py`.
+**Status (issue #36):** `#bobiverse` is not a `BOB v1` POINT firehose. Fleet
+boxes **write** change-only status with `!report …` (PM to briefer or channel).
+Humans and agents **read** the briefer's digest with `!bobiverse` — JSON
+whisper only (~60s human / ~120s agent cooldown). Optional short English on
+channel for `TASK START` / `TASK STOP` only. Briefer ingests `!report`; chair
+`bob-*` else first roster `bob-*`. Parser/store: `scripts/bobreport.py`.
+Join brief + conversational talk from `bob-peers` may still DM on fleet JOIN;
+historical incoming `MOOT v1 POINT` updates disk only (no channel change-talk).
 
 Server: Ergo on ionos, TLS `irc.ntsa.uk:6697`. Channel `#bobiverse`.
 Fleet `bob-*` nicks: see `bobiverse.json` (`flamingo`, `marchhare`, `ionos`, `ce-priority-dev1`).
@@ -61,9 +62,9 @@ Scripts must not assign PowerShell `$HOME` (automatic, read-only). Use `$ircHome
 Human monitor (flamingo): Halloy, nick not `bob-*` (e.g. `simon`).
 `%AppData%\halloy\config.toml`: server `irc.ntsa.uk:6697` TLS,
 `password_file` = connect.password, channel `#bobiverse`.
-Pull status: type `!bobiverse` in `#bobiverse` for an in-channel snapshot
-(per-nick ~60s cooldown), or PM a `bob-*` nick. Fleet agents use `!bobiverse`
-for tray pull (`BOB TRAY v1` whispers, ~120s).
+Pull status: type `!bobiverse` in `#bobiverse` or PM a `bob-*` nick — JSON
+digest whisper (~60s human / ~120s agent). Write status: `!report …` from
+fleet boxes (see FR). `!report ?` for help (whisper).
 
 One-shot: `agentic_build\tools\Install-BobIrc.ps1 -MachineId <id>`.
 Ircd on ionos: `Install-BobIrcd.ps1` / service `BobIrcd`.

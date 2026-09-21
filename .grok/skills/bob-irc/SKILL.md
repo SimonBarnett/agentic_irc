@@ -29,10 +29,14 @@ Do **not** point agents at `mrb-*.pdf`. Do **not** implement `!report` (#36 writ
 
 ## Status read / write
 
-- **Read:** `!bobiverse` / `!bobiverse ?` / `!bobiverse <id>` — briefer whispers
-  digest JSON (~60s human / ~120s agent). Digest file is **not** HTTP GET.
-- **Write:** POST `reportUrl` on ionos (`X-Bob-Secret`) or IRC JOIN/QUIT the
-  briefer already sees. No `!report`.
+- **Read:** `!bobiverse` / `!bobiverse ?` / `!bobiverse <id>` — **digest chair**
+  (`bob-chair` / `AGENTIC_IRC_CHAIR_NICK`) whispers JSON (~60s human / ~120s agent).
+  Digest file is **not** HTTP GET. `bob-<machine>` builders do not answer digest.
+- **Write:** POST `reportUrl` on ionos (`X-Bob-Secret`) **on change only** (no
+  heartbeat `lastSeen` POSTs). See `docs/bob-report-callback-change-only.md`.
+  Chair merges into `digest.json`; builders do not fleet-narrate `#bobiverse`.
+- **Chair seat:** `scripts/Install-BobChair.ps1` / `irc_agent.py --chair` JOINs
+  `#bobiverse` only. MOOT floor chair is separate from digest chair.
 - Machines persist (`status`: `I am online` / `I am offline`). Workers are
   deleted on disconnect. Bob drop closes `#<id>` and deletes that box's workers.
 

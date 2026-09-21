@@ -6,6 +6,8 @@ Agents: open **live** specs below. Do not treat `mrb-*.md` / `mrb-*.pdf` as curr
 
 | Doc | Role |
 |---|---|
+| `feature-request-bob-listen-talk-all-seats-2026-09-21.md` | Every `bob-*` ACK on @mention / Query (no grok.exe) |
+| `build-and-test-plan-bob-listen-talk-all-seats-2026-09-21.md` | Worker plan for listen/talk ACK |
 | `feature-request-shop-channel-worker-cc-webhook-2026-09-21.md` | Shop channels, pid workers, write-only callback, `!bobiverse` only (issue #46) |
 | `build-and-test-plan-shop-channel-worker-cc-webhook-2026-09-21.md` | Worker plan for #46 |
 | `feature-request-house-clean-irc-kit-2026-09-21.md` | Fleet canon alignment (issue #34) |

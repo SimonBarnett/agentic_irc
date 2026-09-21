@@ -278,3 +278,31 @@ def test_irc_agent_source_sends_cap_end_after_user(tmp_path: Path):
     assert "sasl_plain()" in src
     assert "_abort_gate" in src
     assert "NO 001" in src and "NO JOIN" in src
+
+
+def test_bob_nick_acks_channel_mention(tmp_path: Path, monkeypatch):
+    import bobstat
+
+    monkeypatch.setenv("AGENTIC_IRC_HOME", str(tmp_path))
+    bobstat.write_peer(
+        tmp_path,
+        {"ok": True, "id": "ionos", "weekly": 0, "running": 0, "queued": 0, "jobs": []},
+    )
+    sent: list[str] = []
+
+    def _send(self, line: str) -> None:
+        sent.append(line)
+
+    monkeypatch.setattr(irc_agent.Client, "send", _send)
+    c = irc_agent.Client(_args(tmp_path, "bob-ionos"))
+    c.channels = ["#bobiverse", "#ionos"]
+    c.chan = "#bobiverse"
+    c.handle_privmsg(
+        "cursor-flamingo!u@h",
+        "#bobiverse",
+        "@bob-ionos are you on the new brief?",
+    )
+    acks = [x for x in sent if "cursor-flamingo" in x and "ionos here" in x]
+    assert acks, sent
+    assert "weekly=0" in acks[0]
+    assert acks[0].startswith("PRIVMSG #bobiverse :")

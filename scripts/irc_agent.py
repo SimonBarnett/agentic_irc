@@ -177,6 +177,7 @@ class Client:
         self._report_gone_told: set[str] = set()
         self._pm_open: dict[str, float] = {}
         self._action_last: dict[tuple[str, str], float] = {}
+        self._mention_last: dict[str, float] = {}
 
     def send(self, line: str) -> None:
         assert self.sock is not None
@@ -421,6 +422,32 @@ class Client:
         info(f"INFO bobiverse digest to={who} form={form} lines={len(lines)}")
         return True
 
+    def _maybe_mention_reply(self, src: str, target: str, body: str, to_channel: bool, to_me: bool) -> bool:
+        """ACK when a human/worker addresses this bob-* nick. No grok.exe."""
+        if not bobtalk.is_fleet_bob_nick(self.original_nick):
+            return False
+        nicks = [self.live_nick, self.original_nick]
+        mid = bobreport.machine_from_nick(self.original_nick) or self.original_nick
+        line = bobtalk.mention_reply_line(self.home, mid, nicks, src, body, to_me=to_me)
+        if not line:
+            return False
+        if bobreport.looks_like_secret(body) or bobreport.looks_like_secret(line):
+            return False
+        key = (src or "").strip().lower()
+        now = time.time()
+        last = self._mention_last.get(key, 0.0)
+        if now - last < bobtalk.MENTION_COOLDOWN_S:
+            return True
+        self._mention_last[key] = now
+        if to_channel:
+            dest = bobreport.normalize_channel(target) or self.chan
+            self.send("PRIVMSG " + dest + " :" + line)
+            time.sleep(FLOOD_S)
+        else:
+            self.whisper(src, line)
+        info(f"INFO mention-ack to={src} dest={'chan' if to_channel else 'pm'}")
+        return True
+
     def connect(self) -> ssl.SSLSocket:
         ctx = ssl.create_default_context()
         raw = socket.create_connection((self.args.host, self.args.port), 20)
@@ -595,6 +622,9 @@ class Client:
         if bobreport.parse_report_command(body):
             self._handle_report(src, to_channel, body)
             return
+        if not to_channel:
+            self._maybe_mention_reply(src, target, body, to_channel=False, to_me=True)
+            return
         if to_channel and self._is_briefer():
             ch = bobreport.normalize_channel(target)
             if ch.lower() != bobreport.FLEET_CHANNEL.lower():
@@ -623,6 +653,7 @@ class Client:
             self.handle_moot(src, body)
             self.handle_file(src, body)
             self.handle_dumb(src, body)
+            self._maybe_mention_reply(src, target, body, to_channel=True, to_me=False)
             return
         if parsed.version == 2 and parsed.from_nick and parsed.from_nick.lower() != src.lower():
             info("INFO SEAL prefix != from_nick, drop")

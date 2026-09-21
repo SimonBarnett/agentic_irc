@@ -89,6 +89,32 @@ void sanitize_hostname(const char *host, char *out, int outlen)
     out[outlen - 1] = 0;
 }
 
+static void default_nick_from_hostname(const char *hostname, char *out, int outlen)
+{
+    char hostpart[40];
+    int n;
+    if (outlen <= 0)
+        return;
+    out[0] = 0;
+    sanitize_hostname(hostname, hostpart, sizeof(hostpart));
+    _snprintf(out, outlen, "m3-%s", hostpart);
+    n = (int)strlen(out);
+    if (n > 32)
+        out[32] = 0;
+    if (!nick_ok(out))
+        strncpy(out, "m3-thin-box", outlen - 1);
+    out[outlen - 1] = 0;
+}
+
+int pairing_channel_forbidden(const char *channel)
+{
+    char low[64];
+    if (!channel || !channel[0])
+        return 0;
+    str_lower_copy(low, channel, sizeof(low));
+    return strcmp(low, "#bobiverse") == 0;
+}
+
 void config_self_heal_ex(ThinConfig *c, const char *exe_dir, const char *hostname)
 {
     if (exe_dir && exe_dir[0] && !c->exe_dir[0])
@@ -98,9 +124,7 @@ void config_self_heal_ex(ThinConfig *c, const char *exe_dir, const char *hostnam
     if (!c->allow_path[0] && c->home[0])
         _snprintf(c->allow_path, sizeof(c->allow_path), "%s\\jail", c->home);
     if (!c->nick[0] && hostname && hostname[0])
-        sanitize_hostname(hostname, c->nick, sizeof(c->nick));
-    if (!c->hello[0] && c->nick[0])
-        _snprintf(c->hello, sizeof(c->hello), "%s-online", c->nick);
+        default_nick_from_hostname(hostname, c->nick, sizeof(c->nick));
 }
 
 void config_self_heal(ThinConfig *c)
@@ -370,6 +394,10 @@ int config_validate(const ThinConfig *c, char *err, int errlen)
     }
     if (!channel_ok(c->channel)) {
         _snprintf(err, errlen, "missing channel (add channel=#name to airc-moot-thin.ini beside the exe)");
+        return -1;
+    }
+    if ((c->chair || c->pairing) && pairing_channel_forbidden(c->channel)) {
+        _snprintf(err, errlen, "pairing on #bobiverse is forbidden (use a private channel e.g. #airc-moot)");
         return -1;
     }
     if (c->port <= 0 || c->port > 65535) {

@@ -145,4 +145,4 @@ v2 blob: `sender_pk || eph_pk || nonce || ct`. AAD: `lower(channel)|lower(to)|lo
 
 If there is no AGPK pin yet, wait. Do not send cleartext.
 
-Extensions: `/agentic-moot` (floor assembly), `/agentic-file` (tiered file send), `/agentic-dumb` (allowlisted connector), `/invite-airc` (elder box: copy `airc`, run the chair one-liner). Mode 3 field box: chair `--chair` prints a copy-paste `airc-moot-thin.exe --pin … --channel "…" --moot …` line (expires 10m). CAPA lines may appear; they are not secrets. Win95 TLS is not claimed.
+Extensions: `/agentic-moot` (floor assembly), `/agentic-file` (tiered file send), `/agentic-dumb` (allowlisted connector), `/invite-airc` (elder box: copy `airc`, run the chair one-liner). **Two chairs:** digest **Jeeves** (`irc_agent.py --chair`, `#bobiverse` only) is not Mode 3. Elder PIN chair is **`airc-moot-thin.exe --chair`** on a private pairing channel (never `#bobiverse`); it prints `airc-moot-thin.exe --pin … --channel "…" --moot … --host irc.ntsa.uk` (expires 10m). Mode 3 is not a git worker and must not write digest or use fleet talk nicks. CAPA on the pairing channel only. Win95 TLS is not claimed.

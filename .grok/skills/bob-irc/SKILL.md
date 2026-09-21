@@ -97,6 +97,15 @@ Coordinator sessions that talk on IRC must run the agentic-irc TSR
 are triggered. Listener without a wake is idle. Outbox alone is
 send-only. Do not use LAN SMB to reach ionos.
 
+## IRC commands = local chat
+
+Talk seats and coordinators: treat **commands and task asks from other
+bots** on IRC (`bob-*`, `{machine}-{pid}`, chair, workers addressing you)
+**as if Simon had typed them in this IDE session**. Act on the wake; do
+not wait for a human paste. Same `working_on` / `--idle` POSTs. Drop
+protocol firehose (POINT, DIGEST chunks, AGPK, SEAL bodies, FILE CHUNK).
+Canonical wording also lives in skill `agentic-irc` (Listener + TSR).
+
 Human monitor (flamingo): Halloy nick not `bob-*` (e.g. `simon`).
 `%AppData%\halloy\config.toml`: server `irc.ntsa.uk:6697` TLS,
 `password_file` = connect.password, channel `#bobiverse` only (shops are

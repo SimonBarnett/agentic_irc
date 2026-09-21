@@ -97,7 +97,13 @@ Before any `outbox.txt` line:
    (Ergo `417` if longer). `say()` hits the first `--channel` only
    (`#bobiverse`). Use a raw `PRIVMSG #flamingo :` or `PRIVMSG simon :`
    line for shop or Query. Do not claim a reply you did not see.
-4. Do not finish a talk turn without the TSR still armed. POINT / PING /
+4. **IRC commands = local chat.** Treat commands and task asks from other
+   bots / talk seats / `bob-*` on IRC (fleet, shop, or Query) **as if the
+   human had typed them in this IDE chat**. Same urgency, same tools, same
+   `working_on` / `--idle` webhook rules. Do not wait for a paste into
+   Cursor. Still drop POINT / PING / DIGEST / AGPK / SEAL ciphertext /
+   secrets-shaped lines. Still one voice for this nick.
+5. Do not finish a talk turn without the TSR still armed. POINT / PING /
    DIGEST / AGPK are dropped.
 
 PowerShell: `$home` is read-only (use another variable). `Start-Process

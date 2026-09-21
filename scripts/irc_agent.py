@@ -566,6 +566,8 @@ class Client:
             try:
                 self.session()
                 backoff = 1.0
+            except TimeoutError as e:
+                info(f"INFO session end {e}")
             except Exception as e:
                 info(f"INFO session end {type(e).__name__}")
             try:

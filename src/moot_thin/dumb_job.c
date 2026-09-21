@@ -258,25 +258,37 @@ int run_job_json(const char *job_json, const char *from_nick, const ThinConfig *
             argc = 0;
         if (!cwd[0])
             strncpy(cwd, jail->root, sizeof(cwd) - 1);
+        if (argc < 1) {
+            json_err(result, resultcap, op, id, "empty_argv");
+            return 0;
+        }
         st = jail_exec(jail, argv, argc, cwd, timeout_s, out, sizeof(out), errb, sizeof(errb), &rc);
         for (i = 0; i < argc; i++)
             free(argv[i]);
-        if (st == -2) {
+        if (st == JAIL_EXEC_BUSY) {
             json_err(result, resultcap, op, id, "busy");
             task_ui_end(result);
             return 0;
         }
-        if (st == -3) {
+        if (st == JAIL_EXEC_EMPTY) {
+            json_err(result, resultcap, op, id, "empty_argv");
+            return 0;
+        }
+        if (st == JAIL_EXEC_BIN) {
             json_err(result, resultcap, op, id, "bin");
             task_ui_end(result);
             return 0;
         }
-        if (st == -4) {
+        if (st == JAIL_EXEC_META) {
+            json_err(result, resultcap, op, id, "meta");
+            return 0;
+        }
+        if (st == JAIL_EXEC_JAIL) {
             json_err(result, resultcap, op, id, "jail");
             task_ui_end(result);
             return 0;
         }
-        if (st == -5) {
+        if (st == JAIL_EXEC_TIMEOUT) {
             json_err(result, resultcap, op, id, "timeout");
             task_ui_end(result);
             return 0;

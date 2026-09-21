@@ -26,11 +26,13 @@ Extra names: connector flag `--allow-bin` (comma-separated). CAPA does not enume
 
 ## Meta characters in exec argv
 
-These characters anywhere in the joined argv string are rejected unless the thin was started with **`--allow-meta`** (off by default on Mode 3 thins):
+These characters anywhere in the joined argv string are rejected on **`airc-moot-thin.exe`** (Mode 3 C thin has no `--allow-meta` flag):
 
 `&` `|` `>` `<` `^`
 
 **Result error:** `meta` (not `bin`).
+
+On **`scripts/dumb_agent.py`** and **`airc-dumb.exe` (net45)** only, you may start the connector with **`--allow-meta`** to permit those characters in argv. Mode 3 field thins do not expose that escape hatch; use **`put`** + **`Start-Process`** in a jail script instead of `&` on the exec line.
 
 **Recipe without `&`:** `put` a small `.ps1` into the jail, then exec:
 
@@ -72,7 +74,7 @@ Large stdout/stderr from a single exec may be truncated (`truncated: true`); ful
 |---------|---------|
 | `empty_argv` | Exec job had no argv |
 | `bin` | argv[0] not on the allowlist |
-| `meta` | Disallowed shell metacharacter in joined argv (`--allow-meta` not set) |
+| `meta` | Disallowed shell metacharacter in joined argv (C thin always; Python/net45 unless `--allow-meta`) |
 | `jail` | Path escape, UNC, `//` in argv, bad `cwd`, or blocked file name |
 | `busy` | Another exec is in flight |
 | `timeout` | Subprocess exceeded `timeout_s` |

@@ -6,4 +6,5 @@ $py = Join-Path $here 'irc_agent.py'
 $home = if ($env:AGENTIC_IRC_HOME) { $env:AGENTIC_IRC_HOME } else { Join-Path $env:USERPROFILE '.agentic-irc-bobiverse' }
 $nick = if ($env:AGENTIC_IRC_CHAIR_NICK) { $env:AGENTIC_IRC_CHAIR_NICK } else { 'bob-chair' }
 $env:AGENTIC_IRC_CHAIR_NICK = $nick
+& python -c "import sys; sys.path.insert(0, r'$here'); import bobreport; bobreport.persist_chair_nick(r'$home', r'$nick')"
 & python $py --nick $nick --channel '#bobiverse' --home $home --chair @args

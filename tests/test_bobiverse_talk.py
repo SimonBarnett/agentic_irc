@@ -121,8 +121,8 @@ def test_bobiverse_non_briefer_silent(tmp_path, monkeypatch, recorder):
 
 def test_chair_answers_bobiverse_builder_silent(tmp_path, monkeypatch, recorder):
     monkeypatch.setenv("AGENTIC_IRC_HOME", str(tmp_path))
-    monkeypatch.setenv("AGENTIC_IRC_CHAIR_NICK", "bob-chair")
     _open_moot(tmp_path, chair="bob-chair")
+    bobreport.persist_chair_nick(tmp_path, "bob-chair")
     bobreport.apply_callback(
         tmp_path,
         {"op": "merge", "machine": "ionos", "pid": 12, "working_on": "meter", "kind": "cursor"},
@@ -132,6 +132,7 @@ def test_chair_answers_bobiverse_builder_silent(tmp_path, monkeypatch, recorder)
     builder.handle_privmsg("simon!u@h", "#bobiverse", "!bobiverse")
     assert recorder == []
     chair = irc_agent.Client(_args(tmp_path, "bob-chair", chair=True))
+    assert bobreport.load_digest(tmp_path).get("chairNick") == "bob-chair"
     assert chair.channels == ["#bobiverse"]
     chair.handle_privmsg("simon!u@h", "#bobiverse", "!bobiverse")
     assert any(x.startswith("PRIVMSG simon :") for x in recorder)
@@ -140,7 +141,7 @@ def test_chair_answers_bobiverse_builder_silent(tmp_path, monkeypatch, recorder)
 
 def test_chair_mode_no_fleet_action_on_callback(tmp_path, monkeypatch, recorder):
     monkeypatch.setenv("AGENTIC_IRC_HOME", str(tmp_path))
-    monkeypatch.setenv("AGENTIC_IRC_CHAIR_NICK", "bob-chair")
+    bobreport.persist_chair_nick(tmp_path, "bob-chair")
     _open_moot(tmp_path, chair="bob-chair")
     chair = irc_agent.Client(_args(tmp_path, "bob-chair", chair=True))
     chair.apply_digest_callback(
@@ -148,6 +149,43 @@ def test_chair_mode_no_fleet_action_on_callback(tmp_path, monkeypatch, recorder)
     )
     assert bobreport.load_digest(tmp_path)["machines"]["flamingo"]["workers"]["4412"]["working_on"] == "callback job"
     assert not any("#bobiverse" in x and "ACTION" in x for x in recorder)
+
+
+def test_chair_mention_silent_on_channel(tmp_path, monkeypatch, recorder):
+    monkeypatch.setenv("AGENTIC_IRC_HOME", str(tmp_path))
+    bobreport.persist_chair_nick(tmp_path, "bob-chair")
+    chair = irc_agent.Client(_args(tmp_path, "bob-chair", chair=True))
+    chair.handle_privmsg("simon!u@h", "#bobiverse", "bob-chair: are you there")
+    assert recorder == []
+
+
+def test_chair_drains_outbox_without_bobiverse_spam(tmp_path, monkeypatch, recorder):
+    monkeypatch.setenv("AGENTIC_IRC_HOME", str(tmp_path))
+    bobreport.persist_chair_nick(tmp_path, "bob-chair")
+    chair = irc_agent.Client(_args(tmp_path, "bob-chair", chair=True))
+    chair.sock = object()
+    chair.joined.set()
+    outbox = chair.outbox
+    outbox.write_text(
+        "\n".join(
+            [
+                "JOIN #bobiverse",
+                "BOB DIGEST v1 1/1 {}",
+                "flamingo: I am offline",
+                "PRIVMSG #bobiverse :BOB DIGEST v1 1/2 {}",
+                bobtalk.TRAY_PREFIX + "id=ionos weekly=3 running=0 queued=0 repo=- kind=- model=- lastSeen=- jobs=-",
+                "PRIVMSG #ionos :shop ok",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    sent = chair.drain_outbox_once()
+    assert "JOIN #bobiverse" in sent
+    assert any(x.startswith("PRIVMSG #ionos :") for x in recorder)
+    assert not any("#bobiverse" in x and "BOB DIGEST" in x for x in recorder)
+    assert not any("#bobiverse" in x and "I am offline" in x for x in recorder)
+    assert not any("#bobiverse" in x and bobtalk.TRAY_PREFIX.strip() in x for x in recorder)
 
 
 def test_bobiverse_tray_whisper_json(tmp_path, monkeypatch, recorder):

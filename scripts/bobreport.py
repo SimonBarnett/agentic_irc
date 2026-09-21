@@ -38,6 +38,15 @@ SHORT_ID: dict[str, str] = {
 }
 SHORT_TO_MACHINE = {v: k for k, v in SHORT_ID.items()}
 FLEET_MACHINE_IDS = ("flamingo", "marchhare", "ionos", "ce-priority-dev1")
+_MERGE_PEER_FIELDS = (
+    "weekly",
+    "cursor_label",
+    "jobs",
+    "repo",
+    "sha",
+    "model",
+    "fuel",
+)
 WORKER_NICK_RE = re.compile(r"^w-([a-z0-9]+)-(\d+)_?$", re.I)
 
 HELP_TEXT = (
@@ -302,6 +311,9 @@ def _coerce_machine(mid: str, raw: object) -> dict:
         base["pcent"] = raw["pcent"]
     if raw.get("uptime_since"):
         base["uptime_since"] = str(raw["uptime_since"])
+    for key in _MERGE_PEER_FIELDS:
+        if key in raw and raw[key] is not None:
+            base[key] = raw[key]
     return base
 
 
@@ -427,6 +439,59 @@ def chair_mode_active(home: Path) -> bool:
     return bool(digest_chair_nick(home))
 
 
+def persist_chair_nick(home: Path, nick: str) -> None:
+    """Write digest chair identity to shared digest.json (issue #73 / #78)."""
+    n = (nick or "").strip()
+    if not n:
+        return
+    root = fleet_digest_home(Path(home))
+    doc = load_digest(root)
+    if str(doc.get("chairNick") or "") == n:
+        return
+    doc["chairNick"] = n
+    save_digest(root, doc)
+
+
+def _fleet_spam_privmsg_body(body: str) -> bool:
+    """Outbox / channel lines that must not hit #bobiverse when chair mode is on."""
+    raw = (body or "").strip()
+    if not raw:
+        return False
+    low = raw.lower().replace("\x01", " ")
+    if low.startswith("bob digest v1"):
+        return True
+    if low.startswith("bob tray v1"):
+        return True
+    if "i am offline" in low or "i am online" in low:
+        return True
+    if "working on" in low:
+        return True
+    if " is on " in low and (" now." in low or " now" in low):
+        return True
+    if low.startswith("action ") or " action " in low:
+        return True
+    if " here. weekly=" in low:
+        return True
+    return False
+
+
+def outbox_line_spam_for_fleet_channel(line: str, *, default_channel: str = FLEET_CHANNEL) -> bool:
+    """True if line must be dropped (not sent) to #bobiverse under chair mode."""
+    text = (line or "").strip()
+    if not text:
+        return False
+    to_fleet = default_channel.lower() == FLEET_CHANNEL.lower()
+    body = text
+    if text.upper().startswith("PRIVMSG "):
+        rest = text[8:]
+        target, _, tail = rest.partition(" ")
+        to_fleet = target.lstrip(":").lower() == FLEET_CHANNEL.lower()
+        body = tail[1:] if tail.startswith(":") else (text.split(" :", 1)[1] if " :" in text else text)
+    if not to_fleet:
+        return False
+    return _fleet_spam_privmsg_body(body)
+
+
 def _machine_fingerprint(ent: dict) -> str:
     view = {
         "online": ent.get("online"),
@@ -436,6 +501,9 @@ def _machine_fingerprint(ent: dict) -> str:
         "uptime_since": ent.get("uptime_since"),
         "workers": ent.get("workers"),
     }
+    for key in _MERGE_PEER_FIELDS:
+        if key in ent:
+            view[key] = ent.get(key)
     return json.dumps(view, sort_keys=True, separators=(",", ":"))
 
 
@@ -517,6 +585,13 @@ def _apply_merge_payload(doc: dict, mid: str, payload: dict) -> list[str]:
             _roll_working_on(ent)
     elif "working_on" in payload and (pid_raw is None or str(pid_raw) == ""):
         ent["working_on"] = str(payload.get("working_on") or "")
+    for key in _MERGE_PEER_FIELDS:
+        if key not in payload or payload[key] is None:
+            continue
+        val = payload[key]
+        if key == "jobs" and not isinstance(val, list):
+            continue
+        ent[key] = val
     return actions
 
 

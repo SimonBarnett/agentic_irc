@@ -155,6 +155,8 @@ class Client:
         self.home = seal.home()
         self.home.mkdir(parents=True, exist_ok=True)
         protect.protect_path(self.home)
+        if getattr(args, "chair", False):
+            bobreport.persist_chair_nick(self.home, args.nick)
         self.outbox = Path(args.outbox) if args.outbox else self.home / "outbox.txt"
         self.inbox = self.home / "inbox"
         self.inbox.mkdir(parents=True, exist_ok=True)
@@ -441,6 +443,8 @@ class Client:
 
     def _maybe_mention_reply(self, src: str, target: str, body: str, to_channel: bool, to_me: bool) -> bool:
         """ACK when a human/worker addresses this bob-* nick. No grok.exe."""
+        if getattr(self.args, "chair", False):
+            return False
         if not bobtalk.is_fleet_bob_nick(self.original_nick):
             return False
         nicks = [self.live_nick, self.original_nick]
@@ -822,17 +826,21 @@ class Client:
 
     def drain_outbox_once(self) -> list[str]:
         """Send complete unread outbox lines. Offset persisted; restart does not skip JOIN."""
-        try:
-            grok_talk.drain_completions_to_outbox(self.home, outbox=self.outbox)
-        except OSError:
-            pass
+        if not getattr(self.args, "chair", False):
+            try:
+                grok_talk.drain_completions_to_outbox(self.home, outbox=self.outbox)
+            except OSError:
+                pass
         path = self.outbox
         if not path.exists() or self.sock is None:
             return []
         last = load_outbox_pos(path)
         lines, new_last = take_outbox_lines(path, last)
         sent: list[str] = []
+        gate_fleet = bobreport.chair_mode_active(self.home)
         for line in lines:
+            if gate_fleet and bobreport.outbox_line_spam_for_fleet_channel(line, default_channel=self.chan):
+                continue
             if line.startswith("PRIVMSG "):
                 self.send(line)
                 time.sleep(FLOOD_S)

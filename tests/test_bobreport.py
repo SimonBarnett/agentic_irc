@@ -202,3 +202,34 @@ def test_disconnect_dedupe(tmp_path):
     bobreport.delete_worker(tmp_path, "flamingo", 9, now=140.0)
     doc = bobreport.load_digest(tmp_path)
     assert "9" not in doc["machines"]["flamingo"]["workers"]
+
+
+def test_merge_peer_fields_fuel_and_duplicate(tmp_path):
+    payload = {
+        "op": "merge",
+        "machine": "ionos",
+        "fuel": "Cursor Models",
+        "weekly": 3,
+        "model": "Cursor Models",
+        "repo": "agentic_irc",
+        "sha": "abc1234",
+        "cursor_label": "Composer",
+        "jobs": [{"repo": "agentic_irc", "state": "running"}],
+    }
+    out = bobreport.apply_callback(tmp_path, payload)
+    assert out.ok and out.changed
+    ent = bobreport.load_digest(tmp_path)["machines"]["ionos"]
+    assert ent["fuel"] == "Cursor Models"
+    assert ent["weekly"] == 3
+    assert ent["model"] == "Cursor Models"
+    assert ent["repo"] == "agentic_irc"
+    assert ent["sha"] == "abc1234"
+    assert ent["cursor_label"] == "Composer"
+    assert ent["jobs"] == [{"repo": "agentic_irc", "state": "running"}]
+    events_n = len(bobreport.load_digest(tmp_path).get("events") or [])
+    dup = bobreport.apply_callback(tmp_path, dict(payload))
+    assert dup.ok and not dup.changed
+    assert len(bobreport.load_digest(tmp_path).get("events") or []) == events_n
+    changed = bobreport.apply_callback(tmp_path, {**payload, "fuel": "grok.exe"})
+    assert changed.ok and changed.changed
+    assert bobreport.load_digest(tmp_path)["machines"]["ionos"]["fuel"] == "grok.exe"

@@ -1,5 +1,13 @@
 # Skill harvest log
 
+## 2026-09-22 — TSR wake = IDE turn (not IDE-only)
+
+Cursor talk seats mis-described IRC as "only when you ask in the IDE".
+The listener TSR (`irc_listen` + notify on `^FROM `) **starts the agent
+turn**; treat wakes like local chat (step 4). On wake, drain pending talk
+via wake text or `irc_listen.py --once` on the coordinator home. Skills
+`agentic-irc` + `bob-irc`.
+
 ## 2026-09-21 — Start-IrcTsr + coordinator.pid
 
 Talk seat: `{machine}-{pid}` only. `scripts/Start-IrcTsr.ps1` reuses

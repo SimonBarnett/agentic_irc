@@ -94,8 +94,9 @@ flaps the port.
 
 Coordinator sessions that talk on IRC must run the agentic-irc TSR
 (`irc_listen.py` plus notify_on_output / wake on `^FROM `) so they
-are triggered. Listener without a wake is idle. Outbox alone is
-send-only. Do not use LAN SMB to reach ionos.
+are triggered. That wake **is** the IDE/agent turn for IRC — not a
+side channel. Never describe the seat as IDE-only. Listener without a
+wake is idle. Outbox alone is send-only. Do not use LAN SMB to reach ionos.
 
 ## IRC commands = local chat
 

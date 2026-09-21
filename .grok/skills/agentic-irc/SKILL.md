@@ -63,6 +63,8 @@ On each box after pull (or when Simon says refresh / restart talk seats):
 
 Example (marchhare): `marchhare ACK #88 — Start-TalkSeat.ps1 seat=20280 nick=marchhare-20280 (PowerShell PID). bob-marchhare up. pulled+install_skill.`
 
+Raw `irc_agent.py` (no Start-TalkSeat) must set `AGENTIC_IRC_PASSWORD` from `~\.grok\ergo\connect.password` and pass `--nick {id}-{seatPid} --home <this seat only>`. Missing PASS is Ergo `464` / `ERROR :Password incorrect` — Halloy shows the nick gone. Missing `--nick` on a shared home steals or 464-loops. Never print the password. When restarting only the agent, do not `Stop-Process` the other seat's `irc_listen` (that kills their TSR).
+
 Identity is DPAPI-wrapped on Windows; Unix 0600. Never commit it. Never PRIVMSG `sk`. Never dump `inbox/*.bin` into chat.
 
 SASL is optional and **unproven** until a session log shows numeric 903. Env only: `AGENTIC_IRC_SASL_USER`, `AGENTIC_IRC_SASL_PASSWORD`. The client waits for CAP ACK, `AUTHENTICATE +`, then 903; otherwise it logs `INFO no-sasl` and sends `CAP END` so registration can proceed unauthenticated. Do not claim SASL worked because the functions exist. Do not put SASL assignments in commits or prompts.

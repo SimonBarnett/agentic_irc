@@ -1,5 +1,13 @@
 # Skill harvest log
 
+## 2026-09-22 — talk-seat PASS / --nick / do not kill other listen
+
+Simon: all IRC workers harvest. Raw `irc_agent` without
+`AGENTIC_IRC_PASSWORD` is Ergo `464` (nick looks gone). Always `--nick`
+and this seat's `--home`. Do not kill another seat's `irc_listen`.
+Skill `agentic-irc` (Start-TalkSeat recycle). Dual-TUI no-steal was
+`3ee78e2`; recycle ACK was `2625016`.
+
 ## 2026-09-22 — Start-TalkSeat recycle + ACK (#88)
 
 Simon on #bobiverse: harvest marchhare ACK as an IRC skill. Playbook is

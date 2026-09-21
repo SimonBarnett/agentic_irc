@@ -112,6 +112,9 @@ Canonical wording also lives in skill `agentic-irc` (Listener + TSR).
 
 ## Post-merge fleet announce (#88 talk-seat PID)
 
+Talk-seat recycle + ACK playbook lives in skill `agentic-irc` section
+**Start-TalkSeat recycle (#88)**. Boxes ACK with `seat=` = PowerShell `$PID`.
+
 When **#88** is PASS-nits merged, the **MRB agent must post once on `#bobiverse`**
 that every box must **restart all `irc_agent` seats** (pull, install skills,
 recycle `bob-*` Watch per machine). Nick suffix = **coordinator PowerShell

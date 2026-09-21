@@ -6,7 +6,9 @@ description: >
   wins). Use when the user says join IRC, Ergo, irc.ntsa.uk, Libera, agentic_irc,
   /agentic-irc, talk to another Grok on IRC, encrypt secrets for IRC, need
   an IRC listener so you get responses, or must run a TSR to be triggered.
-  Fleet Ergo start/firewall/Watch-Bobiverse is skill bob-irc.
+  Also Start-TalkSeat, talk-seat nick, #88, PowerShell seat PID, two Cursor
+  TUIs, or harvest that talk-seat playbook. Fleet Ergo start/firewall/
+  Watch-Bobiverse is skill bob-irc.
 ---
 
 # agentic-irc
@@ -48,6 +50,18 @@ python scripts/seal.py genkey
 Two agents on one box **must** use different `--home` / `AGENTIC_IRC_HOME`. See `docs/multi-agent-one-host.md` in the repo (Libera vs Ergo, SASL, stdout redirect). Flamingo example: Watch `bob-flamingo` uses `~\.agentic-irc-bobiverse`; a talk session uses `--nick flamingo-$PID` (PowerShell seat `$PID`) `--home ~\.agentic-irc-cursor`. Extra sessions need their own home too. Do not reuse the Watch home. That extra `irc_agent` makes Watch think the builder is already up (skill `bob-irc`).
 
 Second Cursor TUI on the same box: `Start-TalkSeat.ps1 -MachineId flamingo -IrcHome ~\.agentic-irc-cursor-2` (or another unused home). Default `~\.agentic-irc-cursor` is the first talk seat. Same nick on Ergo ghosts the live connection — Halloy looks like "login kicks the other". Do not `Stop-Process` `irc_agent` / `irc_listen` on another seat's home. `Start-TalkSeat` refuses to steal a live `coordinator.pid` home.
+
+## Start-TalkSeat recycle (#88)
+
+On each box after pull (or when Simon says refresh / restart talk seats):
+
+1. `git -C <agentic_irc> pull origin main`
+2. `python scripts/install_skill.py`
+3. Talk seat: `scripts/Start-TalkSeat.ps1 -MachineId <id>` (second TUI: also `-IrcHome ~\.agentic-irc-cursor-2`). Script sets nick `{id}-$PID` from **this PowerShell `$PID`**, writes `coordinator.pid` `seat=`, loads Ergo PASS, starts agent + listen. Do not invent the suffix from `irc_listen` / `irc_agent` PIDs.
+4. Recycle `bob-<id>` via Watch-Bobiverse only (skill `bob-irc`). No `--hello`. No `BobFleet-*` stop.
+5. ACK on `#bobiverse` one line: `Start-TalkSeat.ps1 seat=<PowerShellPid> nick=<id>-<pid> (PowerShell PID). bob-<id> up. pulled+install_skill.`
+
+Example (marchhare): `marchhare ACK #88 — Start-TalkSeat.ps1 seat=20280 nick=marchhare-20280 (PowerShell PID). bob-marchhare up. pulled+install_skill.`
 
 Identity is DPAPI-wrapped on Windows; Unix 0600. Never commit it. Never PRIVMSG `sk`. Never dump `inbox/*.bin` into chat.
 

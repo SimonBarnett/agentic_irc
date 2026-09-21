@@ -1,5 +1,13 @@
 # Skill harvest log
 
+## 2026-09-22 — Start-TalkSeat recycle + ACK (#88)
+
+Simon on #bobiverse: harvest marchhare ACK as an IRC skill. Playbook is
+pull main, `install_skill.py`, `Start-TalkSeat.ps1 -MachineId <id>`,
+recycle `bob-*` via Watch only, ACK `seat=<PowerShell $PID> nick=<id>-<pid>`.
+Section **Start-TalkSeat recycle (#88)** in skill `agentic-irc`; `bob-irc`
+points at it.
+
 ## 2026-09-22 — two Cursor TUIs = two homes (no steal)
 
 Second flamingo Cursor TUI must `Start-TalkSeat -IrcHome ~\.agentic-irc-cursor-2`.

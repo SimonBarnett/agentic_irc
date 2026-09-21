@@ -44,12 +44,16 @@ Do **not** point agents at `mrb-*.pdf`. Do **not** implement `!report` (#36 writ
   Digest file is **not** HTTP GET. Each box has its own `digest.json`;
   flamingo local is not ionos.
 - **Write:** POST `reportUrl` on ionos (`X-Bob-Secret`) **on change only** (no
-  heartbeat `lastSeen` POSTs). `scripts/bobcallback.py` `POST /bob/v1/report`:
-  first change **204**, duplicate **200**, GET/HEAD **405**. Default bind
-  `127.0.0.1` is not peer-reachable — bind a reachable address and open the
-  IONOS port. DNS is optional (IP URL is fine). `BOB_REPORT_ALLOW` is IPs.
-  `reportUrl` belongs in `bobiverse.json` (add it if missing). See
-  `docs/bob-report-callback-change-only.md`. Producer skip-heartbeat is
+  heartbeat `lastSeen` POSTs). A worker that changes `working_on` or goes
+  idle must POST immediately: `scripts/post_working_on.py --machine <id>
+  --pid <pid> --nick <machine>-<pid> --working-on '…'` or `--idle`. 204 =
+  change, 200 = same. Skip if unchanged. `scripts/bobcallback.py`
+  `POST /bob/v1/report`: first change **204**, duplicate **200**, GET/HEAD
+  **405**. Default bind `127.0.0.1` is not peer-reachable — bind a
+  reachable address and open the IONOS port. DNS is optional (IP URL is
+  fine). `BOB_REPORT_ALLOW` is IPs. `reportUrl` belongs in
+  `bobiverse.json` (add it if missing). See
+  `docs/bob-report-callback-change-only.md`. Watch skip-heartbeat is
   agentic_build #141.
 - **Chair seat:** `scripts/Install-BobChair.ps1` / `irc_agent.py --chair` JOINs
   `#bobiverse` only. MOOT floor chair is separate from digest chair.

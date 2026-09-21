@@ -1,5 +1,12 @@
 # Skill harvest log
 
+## 2026-09-21 — webhook on worker change or idle
+
+Workers POST `/bob/v1/report` whenever `working_on` changes or they go
+idle (`scripts/post_working_on.py`, `--idle` for empty). Skip unchanged.
+204 = change, 200 = same. Watch fleet skip-heartbeat remains
+agentic_build#141.
+
 ## 2026-09-21 — talk nick is {machine}-{pid}
 
 Cursor and Grok use the same nick `{machine}-{pid}` (e.g. `flamingo-17568`).

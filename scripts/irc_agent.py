@@ -18,6 +18,7 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import bobreport  # noqa: E402
 import bobstat  # noqa: E402
 import bobtalk  # noqa: E402
 import filexfer  # noqa: E402
@@ -220,6 +221,22 @@ class Client:
         self._deliver_whispers(joiner, lines)
         info(f"INFO bobiverse brief to={joiner} lines={len(lines)}")
 
+    def _handle_report(self, sender: str, _on_channel: bool, body: str) -> None:
+        who = (sender or "").strip()
+        if not who or not self._is_briefer():
+            return
+        briefer = bobtalk.briefer_nick(self._fleet_moot_state()) or self.live_nick
+        outcome = bobreport.apply_report(self.home, who, briefer, body)
+        if outcome.help_text:
+            self.whisper(who, outcome.help_text)
+            return
+        if not outcome.ok:
+            if outcome.err:
+                self.whisper(who, outcome.err)
+            return
+        if outcome.speak_channel:
+            self.say(outcome.speak_channel)
+
     def _answer_bobiverse(self, asker: str, on_channel: bool) -> bool:
         who = (asker or "").strip()
         if not who or who.lower() in self._mine_nicks():
@@ -235,19 +252,10 @@ class Client:
         if now - last < cooldown:
             return True
         last_map[key] = now
-        if tray:
-            lines = bobtalk.tray_pull_lines(self.home)
-            self._deliver_whispers(who, lines)
-            info(f"INFO bobiverse tray to={who} lines={len(lines)}")
-            return True
-        lines = bobtalk.network_talk_lines(self.home)
-        if on_channel:
-            for line in lines:
-                if line:
-                    self.say(line)
-        else:
-            self._deliver_whispers(who, lines)
-        info(f"INFO bobiverse answer to={who} channel={on_channel} lines={len(lines)}")
+        briefer = bobtalk.briefer_nick(self._fleet_moot_state()) or self.live_nick
+        lines = bobreport.format_digest_whisper_lines(self.home, briefer)
+        self._deliver_whispers(who, lines)
+        info(f"INFO bobiverse digest to={who} lines={len(lines)}")
         return True
 
     def connect(self) -> ssl.SSLSocket:
@@ -339,13 +347,8 @@ class Client:
         elif ml.verb == "POINT" and (ml.text or "").startswith("BOB v1"):
             doc = bobstat.parse_bob_point(ml.text)
             if doc:
-                before = bobstat.read_peer(self.home, doc["id"])
                 bobstat.write_peer(self.home, doc)
                 info(f"INFO bobstat id={doc['id']} from={src}")
-                if self._is_briefer():
-                    talk = bobtalk.change_talk_line(before, doc)
-                    if talk:
-                        self.say(talk)
 
     def handle_file(self, src: str, body: str) -> None:
         fl = wire.parse_file_line(body)
@@ -423,6 +426,9 @@ class Client:
             return
         if bobtalk.parse_bobiverse_command(body):
             self._answer_bobiverse(src, to_channel)
+            return
+        if bobreport.parse_report_command(body):
+            self._handle_report(src, to_channel, body)
             return
         if not to_channel:
             return

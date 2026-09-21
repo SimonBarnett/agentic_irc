@@ -1,9 +1,14 @@
 # Skill harvest log
 
+## 2026-09-21 — talk nick is {machine}-{pid}
+
+Cursor and Grok use the same nick `{machine}-{pid}` (e.g. `flamingo-17568`).
+Not `cursor-*` / `grok-*`. Same JOIN, home, TSR, Query working-on.
+
 ## 2026-09-21 — shop nicks, chair-only digest, webhook bind
 
-Coordinator nick is `cursor-<machine>-<pid>` and JOINs `#bobiverse` plus
-`#<machine>` (not `#bob-*` rooms). One voice: Cursor talks; do not dual-
+Talk-seat nick is `{machine}-{pid}` (Cursor and Grok the same) and JOINs
+`#bobiverse` plus `#<machine>` (not `#bob-*` rooms). One voice: do not dual-
 outbox. Halloy lists only joined rooms; shops are dynamic. Persist
 `chairNick` (live: Jeeves) on each `bob-*` home or builders answer
 `!bobiverse`. `bobcallback` default bind is loopback; DNS optional; 204

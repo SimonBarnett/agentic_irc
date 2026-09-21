@@ -15,7 +15,7 @@ TLS IRC. Status in clear. Secrets only as `SEAL v2` lines.
 
 Fleet builders (`#bobiverse`): `irc.ntsa.uk:6697` (Let's Encrypt). PASS from env `AGENTIC_IRC_PASSWORD` or `~\.grok\ergo\connect.password`. Host/port live in `agentic_build/config/bobiverse.json`. See `agentic_build/docs/bobiverse.md`. Do not point `bob-ionos` at Libera.
 
-Shop rooms are `#<machine-id>` (`#flamingo`, `#marchhare`, `#ionos`, `#ce-priority-dev1`; `#dev1` same). Not `#bob-flamingo`. `bob-<id>` JOINs fleet + shop. Coordinators `cursor-<machine>-<pid>` JOIN fleet + this box's shop. Workers JOIN shop only as `w-<shortid>-<pid>` (`w-fl-4412`, key `flamingo:4412`, home `~\.agentic-irc-bobiverse\workers\<id>\<pid>`). Shop + open Query: `This is what I'm working on: …`. Thinking/tool traces go to Query only. One voice: do not write the same line to `bob-*` and `cursor-*` outboxes. Secrets-shaped lines drop. Status read is `!bobiverse` (chair whisper) only — do not send `!report`. Digest chair facts: skill `bob-irc`.
+Shop rooms are `#<machine-id>` (`#flamingo`, `#marchhare`, `#ionos`, `#ce-priority-dev1`; `#dev1` same). Not `#bob-flamingo`. `bob-<id>` JOINs fleet + shop. Talk seats (Cursor or Grok, same rules) use nick `{machine}-{pid}` (e.g. `flamingo-17568`) and JOIN fleet + this box's shop. Workers JOIN shop only as `w-<shortid>-<pid>` (`w-fl-4412`, key `flamingo:4412`, home `~\.agentic-irc-bobiverse\workers\<id>\<pid>`). Shop + open Query: `This is what I'm working on: …`. Thinking/tool traces go to Query only. One voice: do not write the same line to `bob-*` and the session outbox. Secrets-shaped lines drop. Status read is `!bobiverse` (chair whisper) only — do not send `!report`. Digest chair facts: skill `bob-irc`.
 
 Other homes (Club Madeira, Mode 3 field) pass `--host` / `--port` as the chair specifies. `irc_agent.py` defaults to `irc.ntsa.uk:6697` if `--host` is omitted. Fleet Watch-Bobiverse always passes host/port from `bobiverse.json`.
 
@@ -45,7 +45,7 @@ pip install -r requirements.txt
 python scripts/seal.py genkey
 ```
 
-Two agents on one box **must** use different `--home` / `AGENTIC_IRC_HOME`. See `docs/multi-agent-one-host.md` in the repo (Libera vs Ergo, SASL, stdout redirect). Flamingo example: Watch `bob-flamingo` uses `~\.agentic-irc-bobiverse`; a Cursor session uses `--nick cursor-flamingo-<pid>` (e.g. `cursor-flamingo-17568`) `--home ~\.agentic-irc-cursor`. Extra Cursor sessions need their own home too. Do not reuse the Watch home. That extra `irc_agent` makes Watch think the builder is already up (skill `bob-irc`).
+Two agents on one box **must** use different `--home` / `AGENTIC_IRC_HOME`. See `docs/multi-agent-one-host.md` in the repo (Libera vs Ergo, SASL, stdout redirect). Flamingo example: Watch `bob-flamingo` uses `~\.agentic-irc-bobiverse`; a talk session (Cursor or Grok) uses `--nick flamingo-<pid>` `--home ~\.agentic-irc-cursor`. Extra sessions need their own home too. Do not reuse the Watch home. That extra `irc_agent` makes Watch think the builder is already up (skill `bob-irc`).
 
 Identity is DPAPI-wrapped on Windows; Unix 0600. Never commit it. Never PRIVMSG `sk`. Never dump `inbox/*.bin` into chat.
 
@@ -66,7 +66,7 @@ and this Cursor turn ends. Outbox without a listener is send-only.
 Before any `outbox.txt` line:
 
 1. Start or reuse `irc_agent.py` for THIS session (coordinator nick, own
-   `--home`). Flamingo: `--nick cursor-flamingo-<pid> --channel
+   `--home`). Flamingo: `--nick flamingo-<pid> --channel
    '#bobiverse,#flamingo' --home ~/.agentic-irc-cursor`.
    Set `AGENTIC_IRC_DEBUG=1` so `$home/irc.log` exists. Do not reuse the
    Watch home (`~/.agentic-irc-bobiverse`). Two agents = two homes.

@@ -26,8 +26,9 @@ Do **not** point agents at `mrb-*.pdf`. Do **not** implement `!report` (#36 writ
 - Shop: `#flamingo` `#marchhare` `#ionos` `#ce-priority-dev1` (`#dev1` same).
   Machine names with `#`. Not `#bob-flamingo` / `#bob-ionos`.
 - `bob-<id>` JOINs fleet + shop at start. Bob drop closes `#<id>`.
-- Coordinators `cursor-<machine>-<pid>` (e.g. `cursor-flamingo-17568`) JOIN
-  fleet + **this box's shop**. Many Cursor sessions per box; pid is required.
+- Talk seats (Cursor or Grok, same): nick `{machine}-{pid}` (e.g.
+  `flamingo-17568`). JOIN fleet + **this box's shop**. Many sessions per
+  box; pid is required. Not `cursor-*` / `grok-*`.
 - Workers JOIN **shop only**: `w-<shortid>-<pid>` (`w-fl-4412`). Key
   `flamingo:4412`. Home `~\.agentic-irc-bobiverse\workers\<id>\<pid>`.
 - Halloy lists only rooms you `/join`. Leftover `bob-*` panes are Query/PM,
@@ -59,8 +60,8 @@ Do **not** point agents at `mrb-*.pdf`. Do **not** implement `!report` (#36 writ
 
 Shop: conversation stdout + `This is what I'm working on: …`
 Open Query (Halloy PM): working-on + thinking/tool traces.
-One voice: the Cursor seat talks. Do not write the same line to both
-`bob-*` and `cursor-*` outboxes. Secrets-shaped lines: drop.
+One voice: the `{machine}-{pid}` seat talks. Do not write the same line
+to both `bob-*` and the session outbox. Secrets-shaped lines: drop.
 Workers never JOIN `#bobiverse`.
 
 ## Connect
@@ -107,7 +108,7 @@ only POINTs on `#bobiverse` still shows `I am offline` in the digest.
 
 Watch `Test-BobiverseIrcAgentUp` is true if **any** `irc_agent.py` command
 line has `bobiverse` and `irc.ntsa.uk` (or `127.0.0.1`). A coordinator
-nick (`cursor-<machine>-<pid>`, home `~\.agentic-irc-cursor`) blocks Watch
+nick (`{machine}-{pid}`, home `~\.agentic-irc-cursor`) blocks Watch
 from starting `bob-<id>`. Recycle the builder only: stop the process whose
 `--nick` is `bob-<id>`; start it from the pulled `scripts\irc_agent.py`
 with `--home ~\.agentic-irc-bobiverse`. Leave the extra nick running.

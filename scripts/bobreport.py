@@ -2,7 +2,9 @@
 """Shop-channel digest + !bobiverse reader (issue #46). !report write path scrubbed."""
 from __future__ import annotations
 
+import copy
 import json
+import os
 import re
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -400,6 +402,124 @@ class PresenceOutcome:
     machine_id: str | None = None
 
 
+@dataclass
+class CallbackOutcome:
+    ok: bool
+    err: str = ""
+    actions: list[str] = field(default_factory=list)
+    changed: bool = True
+
+
+CHAIR_NICK_ENV = "AGENTIC_IRC_CHAIR_NICK"
+
+
+def digest_chair_nick(home: Path) -> str | None:
+    """Dedicated digest chair (issue #73). Env wins over digest.json chairNick."""
+    env = (os.environ.get(CHAIR_NICK_ENV) or "").strip()
+    if env:
+        return env
+    doc = load_digest(home)
+    raw = str(doc.get("chairNick") or doc.get("chair_nick") or "").strip()
+    return raw or None
+
+
+def chair_mode_active(home: Path) -> bool:
+    return bool(digest_chair_nick(home))
+
+
+def _machine_fingerprint(ent: dict) -> str:
+    view = {
+        "online": ent.get("online"),
+        "status": ent.get("status"),
+        "working_on": ent.get("working_on"),
+        "pcent": ent.get("pcent"),
+        "uptime_since": ent.get("uptime_since"),
+        "workers": ent.get("workers"),
+    }
+    return json.dumps(view, sort_keys=True, separators=(",", ":"))
+
+
+def _merge_worker_on_ent(
+    ent: dict, mid: str, pid_s: str, working_on: str, kind: str = "grok"
+) -> list[str]:
+    text = (working_on or "").strip()
+    if not text:
+        return []
+    if looks_like_secret(text) or looks_like_secret(kind):
+        return []
+    workers = ent.setdefault("workers", {})
+    prev = workers.get(pid_s) or {}
+    prev_wo = str(prev.get("working_on") or "").strip()
+    if prev_wo == text and prev:
+        return []
+    ent["online"] = True
+    ent["status"] = "I am online"
+    w = _coerce_worker(
+        mid,
+        pid_s,
+        {
+            **prev,
+            "kind": kind or prev.get("kind") or "grok",
+            "state": prev.get("state") or "running",
+            "working_on": text,
+            "nick": prev.get("nick") or worker_nick(mid, pid_s),
+            "key": worker_key(mid, pid_s),
+        },
+    )
+    workers[pid_s] = w
+    _roll_working_on(ent)
+    return [f"'s pid {pid_s} on {mid} is working on {text}"]
+
+
+def _apply_merge_payload(doc: dict, mid: str, payload: dict) -> list[str]:
+    """Mutate digest doc for one machine merge; return new English actions."""
+    actions: list[str] = []
+    pid_raw = payload.get("pid")
+    ent = _machine_entry(doc, mid)
+    if pid_raw is not None and str(pid_raw) != "" and "working_on" in payload:
+        try:
+            pid_s = str(int(str(pid_raw)))
+        except ValueError:
+            return []
+        kind = str(payload.get("kind") or "grok")
+        actions.extend(_merge_worker_on_ent(ent, mid, pid_s, str(payload.get("working_on") or ""), kind=kind))
+    if "online" in payload:
+        ent["online"] = bool(payload["online"])
+        ent["status"] = "I am online" if ent["online"] else "I am offline"
+    if payload.get("status"):
+        ent["status"] = str(payload["status"])
+    if "pcent" in payload and isinstance(payload["pcent"], dict):
+        ent["pcent"] = payload["pcent"]
+    if payload.get("uptime_since"):
+        ent["uptime_since"] = str(payload["uptime_since"])
+    if pid_raw is not None and str(pid_raw) != "":
+        try:
+            pid_s = str(int(str(pid_raw)))
+        except ValueError:
+            return actions
+        if "working_on" not in payload:
+            wo = str(payload.get("working_on") or "")
+            if looks_like_secret(wo):
+                return actions
+            workers = ent.setdefault("workers", {})
+            prev = workers.get(pid_s) or {}
+            workers[pid_s] = _coerce_worker(
+                mid,
+                pid_s,
+                {
+                    **prev,
+                    "kind": payload.get("kind", prev.get("kind") or ""),
+                    "state": payload.get("state", prev.get("state") or "running"),
+                    "working_on": prev.get("working_on") or "",
+                    "nick": payload.get("nick") or prev.get("nick") or worker_nick(mid, pid_s),
+                },
+            )
+            _roll_working_on(ent)
+    elif "working_on" in payload and (pid_raw is None or str(pid_raw) == ""):
+        ent["working_on"] = str(payload.get("working_on") or "")
+    return actions
+
+
 def apply_report(home: Path, sender_nick: str, briefer_nick: str, body: str) -> ReportOutcome:
     """Scrubbed: never ingest !report. Secret-shaped lines are dropped."""
     del home, sender_nick, briefer_nick
@@ -590,92 +710,63 @@ def apply_quit(home: Path, nick: str, briefer_nick: str = "") -> PresenceOutcome
     return PresenceOutcome(ok=True)
 
 
-def apply_callback(
-    home: Path, payload: dict, briefer_nick: str = ""
-) -> tuple[bool, str, list[str]]:
+def apply_callback(home: Path, payload: dict, briefer_nick: str = "") -> CallbackOutcome:
     if not isinstance(payload, dict):
-        return False, "malformed", []
+        return CallbackOutcome(ok=False, err="malformed")
     if any(k.lower() in ("secret", "x-bob-secret", "password") for k in payload):
-        return False, "secret", []
+        return CallbackOutcome(ok=False, err="secret")
     blob = json.dumps(payload, separators=(",", ":"))
     if looks_like_secret(blob):
-        return False, "secret", []
+        return CallbackOutcome(ok=False, err="secret")
     op = str(payload.get("op") or "").strip().lower()
     mid = normalize_machine_id(str(payload.get("machine") or payload.get("id") or ""))
     actions: list[str] = []
     if op == "merge":
         if not mid:
-            return False, "bad machine", []
+            return CallbackOutcome(ok=False, err="bad machine")
         pid_raw = payload.get("pid")
         if pid_raw is not None and str(pid_raw) != "" and "working_on" in payload:
             try:
-                pid_s = str(int(str(pid_raw)))
+                str(int(str(pid_raw)))
             except ValueError:
-                return False, "bad pid", []
-            kind = str(payload.get("kind") or "grok")
-            wo_out = merge_worker_working_on(
-                home, mid, pid_s, str(payload.get("working_on") or ""), briefer_nick, kind=kind
-            )
-            if not wo_out.ok:
-                return False, wo_out.err or "bad merge", []
-            actions.extend(wo_out.actions)
+                return CallbackOutcome(ok=False, err="bad pid")
+            text = str(payload.get("working_on") or "").strip()
+            if not text:
+                return CallbackOutcome(ok=False, err="working_on required")
+            if looks_like_secret(text):
+                return CallbackOutcome(ok=False, err="secret")
         doc = load_digest(home)
+        ent_before = copy.deepcopy(_machine_entry(doc, mid))
+        fp_before = _machine_fingerprint(ent_before)
+        actions = _apply_merge_payload(doc, mid, payload)
+        fp_after = _machine_fingerprint(_machine_entry(doc, mid))
+        if fp_before == fp_after:
+            return CallbackOutcome(ok=True, changed=False, actions=[])
         if briefer_nick:
             doc["briefer"] = briefer_nick
         doc["ts"] = _utc_now_iso()
-        ent = _machine_entry(doc, mid)
-        if "online" in payload:
-            ent["online"] = bool(payload["online"])
-            ent["status"] = "I am online" if ent["online"] else "I am offline"
-        if payload.get("status"):
-            ent["status"] = str(payload["status"])
-        if "pcent" in payload and isinstance(payload["pcent"], dict):
-            ent["pcent"] = payload["pcent"]
-        if payload.get("uptime_since"):
-            ent["uptime_since"] = str(payload["uptime_since"])
-        if pid_raw is not None and str(pid_raw) != "":
-            try:
-                pid_s = str(int(str(pid_raw)))
-            except ValueError:
-                return False, "bad pid", []
-            if "working_on" not in payload:
-                wo = str(payload.get("working_on") or "")
-                if looks_like_secret(wo):
-                    return False, "secret", []
-                workers = ent.setdefault("workers", {})
-                prev = workers.get(pid_s) or {}
-                workers[pid_s] = _coerce_worker(
-                    mid,
-                    pid_s,
-                    {
-                        **prev,
-                        "kind": payload.get("kind", prev.get("kind") or ""),
-                        "state": payload.get("state", prev.get("state") or "running"),
-                        "working_on": prev.get("working_on") or "",
-                        "nick": payload.get("nick") or prev.get("nick") or worker_nick(mid, pid_s),
-                    },
-                )
-                _roll_working_on(ent)
-        elif "working_on" in payload:
-            ent["working_on"] = str(payload.get("working_on") or "")
         _note_event(doc, "merge", machine=mid)
         save_digest(home, doc)
-        return True, "", actions
+        return CallbackOutcome(ok=True, actions=actions)
     if op == "delete-worker":
         if not mid:
-            return False, "bad machine", []
+            return CallbackOutcome(ok=False, err="bad machine")
         out = delete_worker(home, mid, payload.get("pid") or "", briefer_nick)
         if out.ok and out.actions:
             actions.extend(out.actions)
-        return (True, "", actions) if out.ok else (False, out.err or "bad delete", [])
+        if out.ok:
+            return CallbackOutcome(ok=True, actions=actions)
+        return CallbackOutcome(ok=False, err=out.err or "bad delete")
     if op == "shop-down":
         if not mid:
-            return False, "bad machine", []
+            return CallbackOutcome(ok=False, err="bad machine")
         out = shop_down(home, mid, briefer_nick)
         if out.ok and out.actions:
             actions.extend(out.actions)
-        return (True, "", actions) if out.ok else (False, out.err or "bad shop-down", [])
-    return False, "bad op", []
+        if out.ok:
+            return CallbackOutcome(ok=True, actions=actions)
+        return CallbackOutcome(ok=False, err=out.err or "bad shop-down")
+    return CallbackOutcome(ok=False, err="bad op")
 
 
 def route_cc(kind: str, pm_open: bool) -> frozenset[str]:

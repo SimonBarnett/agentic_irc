@@ -75,6 +75,25 @@ def is_briefer(moot_state: dict, live_nick: str, online_nicks: set[str] | None =
     return live_nick.lower().startswith("bob-")
 
 
+def is_digest_operator(
+    moot_state: dict, live_nick: str, online_nicks: set[str] | None, home: Path
+) -> bool:
+    """Digest merge + !bobiverse: dedicated chair when configured (issue #73)."""
+    import bobreport as br
+
+    chair = br.digest_chair_nick(home)
+    if chair:
+        return live_nick.lower() == chair.lower()
+    return is_briefer(moot_state, live_nick, online_nicks)
+
+
+def fleet_status_to_channel_enabled(home: Path) -> bool:
+    """No fleet ACTION / join brief on #bobiverse when digest chair is configured."""
+    import bobreport as br
+
+    return not br.chair_mode_active(home)
+
+
 def parse_bobiverse_command(body: str) -> bool:
     text = (body or "").strip()
     if not text:

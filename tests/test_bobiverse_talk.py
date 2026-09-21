@@ -18,7 +18,9 @@ import wire
 MID = bobtalk.FLEET_MOOT_ID
 
 
-def _args(home: Path, nick: str = "bob-flamingo", channel: str = "#bobiverse") -> argparse.Namespace:
+def _args(
+    home: Path, nick: str = "bob-flamingo", channel: str = "#bobiverse", chair: bool = False
+) -> argparse.Namespace:
     return argparse.Namespace(
         nick=nick,
         channel=channel,
@@ -31,6 +33,7 @@ def _args(home: Path, nick: str = "bob-flamingo", channel: str = "#bobiverse") -
         realname="test",
         once=True,
         password="",
+        chair=chair,
     )
 
 
@@ -114,6 +117,37 @@ def test_bobiverse_non_briefer_silent(tmp_path, monkeypatch, recorder):
     c2 = irc_agent.Client(_args(tmp_path, "bob-ionos"))
     c2.handle_privmsg("simon!u@h", "#bobiverse", "!bobiverse")
     assert recorder == []
+
+
+def test_chair_answers_bobiverse_builder_silent(tmp_path, monkeypatch, recorder):
+    monkeypatch.setenv("AGENTIC_IRC_HOME", str(tmp_path))
+    monkeypatch.setenv("AGENTIC_IRC_CHAIR_NICK", "bob-chair")
+    _open_moot(tmp_path, chair="bob-chair")
+    bobreport.apply_callback(
+        tmp_path,
+        {"op": "merge", "machine": "ionos", "pid": 12, "working_on": "meter", "kind": "cursor"},
+        "bob-chair",
+    )
+    builder = irc_agent.Client(_args(tmp_path, "bob-ionos"))
+    builder.handle_privmsg("simon!u@h", "#bobiverse", "!bobiverse")
+    assert recorder == []
+    chair = irc_agent.Client(_args(tmp_path, "bob-chair", chair=True))
+    assert chair.channels == ["#bobiverse"]
+    chair.handle_privmsg("simon!u@h", "#bobiverse", "!bobiverse")
+    assert any(x.startswith("PRIVMSG simon :") for x in recorder)
+    assert not any("BOB DIGEST" in x and "#bobiverse" in x for x in recorder)
+
+
+def test_chair_mode_no_fleet_action_on_callback(tmp_path, monkeypatch, recorder):
+    monkeypatch.setenv("AGENTIC_IRC_HOME", str(tmp_path))
+    monkeypatch.setenv("AGENTIC_IRC_CHAIR_NICK", "bob-chair")
+    _open_moot(tmp_path, chair="bob-chair")
+    chair = irc_agent.Client(_args(tmp_path, "bob-chair", chair=True))
+    chair.apply_digest_callback(
+        {"op": "merge", "machine": "flamingo", "pid": 4412, "working_on": "callback job", "kind": "cursor"}
+    )
+    assert bobreport.load_digest(tmp_path)["machines"]["flamingo"]["workers"]["4412"]["working_on"] == "callback job"
+    assert not any("#bobiverse" in x and "ACTION" in x for x in recorder)
 
 
 def test_bobiverse_tray_whisper_json(tmp_path, monkeypatch, recorder):

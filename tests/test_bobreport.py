@@ -150,7 +150,7 @@ def test_bobiverse_forms(tmp_path):
 
 
 def test_callback_merge_delete_shop_down(tmp_path):
-    ok, err, actions = bobreport.apply_callback(
+    out = bobreport.apply_callback(
         tmp_path,
         {
             "op": "merge",
@@ -161,21 +161,35 @@ def test_callback_merge_delete_shop_down(tmp_path):
             "pcent": {"cursor-models": 12},
         },
     )
-    assert ok and err == ""
-    assert actions == ["'s pid 4412 on flamingo is working on shop-channel FR"]
+    assert out.ok and out.changed and out.err == ""
+    assert out.actions == ["'s pid 4412 on flamingo is working on shop-channel FR"]
     doc = bobreport.load_digest(tmp_path)
     assert doc["machines"]["flamingo"]["workers"]["4412"]["working_on"] == "shop-channel FR"
     assert doc["machines"]["flamingo"]["pcent"]["cursor-models"] == 12
-    ok, _, _ = bobreport.apply_callback(tmp_path, {"op": "delete-worker", "machine": "flamingo", "pid": 4412})
-    assert ok
+    events_before_dup = len(bobreport.load_digest(tmp_path).get("events") or [])
+    dup = bobreport.apply_callback(
+        tmp_path,
+        {
+            "op": "merge",
+            "machine": "flamingo",
+            "pid": 4412,
+            "kind": "grok",
+            "working_on": "shop-channel FR",
+            "pcent": {"cursor-models": 12},
+        },
+    )
+    assert dup.ok and not dup.changed
+    assert len(bobreport.load_digest(tmp_path).get("events") or []) == events_before_dup
+    out2 = bobreport.apply_callback(tmp_path, {"op": "delete-worker", "machine": "flamingo", "pid": 4412})
+    assert out2.ok
     doc = bobreport.load_digest(tmp_path)
     assert doc["machines"]["flamingo"]["workers"] == {}
-    ok, _, _ = bobreport.apply_callback(tmp_path, {"op": "shop-down", "machine": "flamingo"})
-    assert ok
+    out3 = bobreport.apply_callback(tmp_path, {"op": "shop-down", "machine": "flamingo"})
+    assert out3.ok
     doc = bobreport.load_digest(tmp_path)
     assert doc["machines"]["flamingo"]["status"] == "I am offline"
-    bad, _, _ = bobreport.apply_callback(tmp_path, {"op": "merge", "machine": "flamingo", "secret": "nope"})
-    assert not bad
+    bad = bobreport.apply_callback(tmp_path, {"op": "merge", "machine": "flamingo", "secret": "nope"})
+    assert not bad.ok
 
 
 def test_disconnect_dedupe(tmp_path):

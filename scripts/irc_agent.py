@@ -139,7 +139,10 @@ class Client:
         self.args = args
         self.original_nick = args.nick
         self.live_nick = args.nick
-        self.channels = bobreport.channels_for_nick(args.nick, args.channel)
+        if getattr(args, "chair", False):
+            self.channels = [bobreport.FLEET_CHANNEL]
+        else:
+            self.channels = bobreport.channels_for_nick(args.nick, args.channel)
         if not self.channels:
             chan = args.channel if str(args.channel).startswith("#") else "#" + str(args.channel)
             if "|" in chan:
@@ -235,6 +238,11 @@ class Client:
     def _is_briefer(self) -> bool:
         return bobtalk.is_briefer(self._fleet_moot_state(), self.live_nick, self._online_bob_nicks())
 
+    def _is_digest_operator(self) -> bool:
+        return bobtalk.is_digest_operator(
+            self._fleet_moot_state(), self.live_nick, self._online_bob_nicks(), self.home
+        )
+
     def _deliver_whispers(self, nick: str, lines: list[str]) -> None:
         for line in lines:
             if line:
@@ -249,6 +257,8 @@ class Client:
             return
         if not self._fleet_joiner(joiner):
             return
+        if not bobtalk.fleet_status_to_channel_enabled(self.home):
+            return
         if not self._is_briefer():
             return
         lines = bobtalk.network_talk_lines(self.home)
@@ -257,7 +267,7 @@ class Client:
 
     def _handle_report(self, sender: str, _on_channel: bool, body: str) -> None:
         who = (sender or "").strip()
-        if not who or not self._is_briefer():
+        if not who or not self._is_digest_operator():
             return
         if bobreport.looks_like_secret(body):
             return
@@ -268,7 +278,9 @@ class Client:
         self.whisper(who, bobreport.REPORT_GONE)
 
     def _fleet_action(self, event_class: str, key: str, text: str) -> None:
-        if not self._is_briefer() or not text:
+        if not bobtalk.fleet_status_to_channel_enabled(self.home):
+            return
+        if not self._is_digest_operator() or not text:
             return
         if bobreport.looks_like_secret(text):
             return
@@ -282,6 +294,8 @@ class Client:
         time.sleep(FLOOD_S)
 
     def _emit_presence(self, outcome: bobreport.PresenceOutcome, event_class: str, key: str) -> None:
+        if not bobtalk.fleet_status_to_channel_enabled(self.home):
+            return
         for action in outcome.actions:
             self._fleet_action(event_class, key, action)
 
@@ -294,7 +308,7 @@ class Client:
                 self.joined.set()
         if who and who.lower() not in self._mine_nicks() and ch.lower() == bobreport.FLEET_CHANNEL:
             self._maybe_brief_joiner(who)
-        if not self._is_briefer():
+        if not self._is_digest_operator():
             return
         briefer = bobtalk.briefer_nick(self._fleet_moot_state()) or self.live_nick
         out = bobreport.apply_join(self.home, who, ch, briefer)
@@ -304,7 +318,7 @@ class Client:
         who = (nick or "").strip()
         ch = bobreport.normalize_channel(channel)
         self._maybe_local_shop_closed(who)
-        if not self._is_briefer():
+        if not self._is_digest_operator():
             return
         briefer = bobtalk.briefer_nick(self._fleet_moot_state()) or self.live_nick
         out = bobreport.apply_part(self.home, who, ch, briefer)
@@ -314,7 +328,7 @@ class Client:
     def handle_quit(self, nick: str) -> None:
         who = (nick or "").strip()
         self._maybe_local_shop_closed(who)
-        if not self._is_briefer():
+        if not self._is_digest_operator():
             return
         briefer = bobtalk.briefer_nick(self._fleet_moot_state()) or self.live_nick
         out = bobreport.apply_quit(self.home, who, briefer)
@@ -363,12 +377,13 @@ class Client:
             time.sleep(FLOOD_S)
 
     def apply_digest_callback(self, payload: dict) -> None:
-        if not self._is_briefer():
+        if not self._is_digest_operator():
             return
         briefer = bobtalk.briefer_nick(self._fleet_moot_state()) or self.live_nick
-        ok, _err, actions = bobreport.apply_callback(self.home, payload, briefer)
-        if not ok or not actions:
+        out = bobreport.apply_callback(self.home, payload, briefer)
+        if not out.ok or not out.actions:
             return
+        actions = out.actions
         pid_raw = payload.get("pid")
         mid = bobreport.normalize_machine_id(str(payload.get("machine") or payload.get("id") or ""))
         key = f"{mid}:{pid_raw}" if mid and pid_raw is not None else str(mid or "merge")
@@ -403,7 +418,7 @@ class Client:
         who = (asker or "").strip()
         if not who or who.lower() in self._mine_nicks():
             return True
-        if not self._is_briefer():
+        if not self._is_digest_operator():
             return True
         parsed = bobreport.parse_bobiverse_query(body)
         if not parsed:
@@ -929,6 +944,11 @@ def main() -> None:
     p.add_argument("--hello", default="")
     p.add_argument("--announce-key", action="store_true")
     p.add_argument("--once", action="store_true", help="no reconnect (tests)")
+    p.add_argument(
+        "--chair",
+        action="store_true",
+        help="digest chair seat: JOIN #bobiverse only; !bobiverse + webhook digest",
+    )
     args = p.parse_args()
     c = Client(args)
 

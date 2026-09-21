@@ -74,9 +74,11 @@ def handle_request(
         return 400, b""
     if not isinstance(payload, dict):
         return 400, b""
-    ok, _err, _actions = bobreport.apply_callback(home, payload, briefer_nick)
-    if not ok:
+    out = bobreport.apply_callback(home, payload, briefer_nick)
+    if not out.ok:
         return 400, b""
+    if not out.changed:
+        return 200, b""
     return 204, b""
 
 

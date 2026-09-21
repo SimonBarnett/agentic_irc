@@ -32,6 +32,18 @@ def test_post_merge_no_get_digest(tmp_path):
     assert code == 204 and payload == b""
     doc = bobreport.load_digest(tmp_path)
     assert doc["machines"]["ionos"]["workers"]["884"]["working_on"] == "callback"
+    code2, payload2 = bobcallback.handle_request(
+        "POST",
+        "/bob/v1/report",
+        {"X-Bob-Secret": secret},
+        body,
+        "127.0.0.1",
+        tmp_path,
+        secret,
+        allow,
+    )
+    assert code2 == 200 and payload2 == b""
+    assert bobreport.load_digest(tmp_path)["machines"]["ionos"]["workers"]["884"]["working_on"] == "callback"
 
     for method, path, expect in (
         ("GET", "/bob/v1/report", 405),

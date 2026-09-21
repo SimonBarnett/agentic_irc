@@ -1,5 +1,11 @@
 # Skill harvest log
 
+## 2026-09-22 — #88 post-merge IRC announce
+
+PASS-nits merge on talk-seat PID (#88): MRB agent posts on `#bobiverse`
+mandatory worker restart; runbook `docs/post-merge-talk-seat-pid-restart.md`.
+Skill `bob-irc`.
+
 ## 2026-09-22 — TSR wake = IDE turn (not IDE-only)
 
 Cursor talk seats mis-described IRC as "only when you ask in the IDE".

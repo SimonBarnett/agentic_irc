@@ -107,6 +107,14 @@ not wait for a human paste. Same `working_on` / `--idle` POSTs. Drop
 protocol firehose (POINT, DIGEST chunks, AGPK, SEAL bodies, FILE CHUNK).
 Canonical wording also lives in skill `agentic-irc` (Listener + TSR).
 
+## Post-merge fleet announce (#88 talk-seat PID)
+
+When **#88** is PASS-nits merged, the **MRB agent must post once on `#bobiverse`**
+that every box must **restart all `irc_agent` seats** (pull, install skills,
+recycle `bob-*` Watch per machine). Copy from
+`docs/post-merge-talk-seat-pid-restart.md`. Flamingo check: **`bob-flamingo` +
+`flamingo-<agentPid>`** on fleet. Not optional.
+
 Human monitor (flamingo): Halloy nick not `bob-*` (e.g. `simon`).
 `%AppData%\halloy\config.toml`: server `irc.ntsa.uk:6697` TLS,
 `password_file` = connect.password, channel `#bobiverse` only (shops are

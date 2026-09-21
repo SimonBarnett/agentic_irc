@@ -1,4 +1,5 @@
 #include "task_ui.h"
+#include "util.h"
 
 static int g_enabled = 1;
 static int g_console = -1;

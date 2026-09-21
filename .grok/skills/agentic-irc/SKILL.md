@@ -84,7 +84,8 @@ Before any `outbox.txt` line:
    what it is doing or goes idle, POST again (skip if unchanged):
    `--working-on '…'` or `--idle`. `--working-on` also creates first.
    URL is `AGENTIC_IRC_REPORT_URL` / `BOB_REPORT_URL` else
-   `http://127.0.0.1:17700/bob/v1/report`. 204 = change, 200 = same.
+   `http://irc.ntsa.uk:80/bob/v1/report`. 204 = change, 200 = same.
+   **401** means this box's `report.secret` is not ionos's.
    Do not print `report.secret`. Watch fleet POST is agentic_build#141.
 3. On each wake: read new `FROM <nick> <target> <text>` lines. Reply on
    `outbox.txt` if addressed or Simon asked the box. Lines <= 350 chars

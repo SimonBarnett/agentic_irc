@@ -1,5 +1,10 @@
 # Skill harvest log
 
+## 2026-09-21 — live reportUrl irc.ntsa.uk:80
+
+Digest write URL is `http://irc.ntsa.uk:80/bob/v1/report`. GET 405,
+POST 204/200. POST 401 = flamingo secret != ionos `report.secret`.
+
 ## 2026-09-21 — create worker before working_on
 
 Webhook create is `merge` with `pid` and no `working_on`. Then POST

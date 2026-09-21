@@ -1,6 +1,7 @@
 # POST /bob/v1/report — change-only merge (issue #73)
 
 Write-only callback on ionos (`scripts/bobcallback.py`). **No HTTP GET** of digest.
+Live URL: `http://irc.ntsa.uk:80/bob/v1/report`.
 
 ## Auth
 

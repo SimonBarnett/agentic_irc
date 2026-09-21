@@ -11,7 +11,7 @@ import urllib.request
 
 import bobcallback
 
-DEFAULT_URL = "http://127.0.0.1:17700/bob/v1/report"
+DEFAULT_URL = "http://irc.ntsa.uk:80/bob/v1/report"
 
 
 def report_url() -> str:
@@ -38,7 +38,7 @@ def post(payload: dict) -> int:
         },
     )
     try:
-        with urllib.request.urlopen(req, timeout=10) as resp:
+        with urllib.request.urlopen(req, timeout=15) as resp:
             return int(resp.status)
     except urllib.error.HTTPError as exc:
         return int(exc.code)
@@ -71,7 +71,6 @@ def main() -> int:
     nick = (args.nick or "").strip() or "%s-%s" % (args.machine, args.pid)
     wo = "" if args.idle else (args.working_on or "").strip()
     codes = []
-    # Worker must exist before working_on. Create is merge with pid and no working_on.
     if args.create or wo or args.idle:
         created = base_payload(args.machine, args.pid, nick, args.kind, "running")
         code = post(created)

@@ -52,7 +52,10 @@ Do **not** point agents at `mrb-*.pdf`. Do **not** implement `!report` (#36 writ
   `POST /bob/v1/report`: first change **204**, duplicate **200**, GET/HEAD
   **405**. Default bind `127.0.0.1` is not peer-reachable — bind a
   reachable address and open the IONOS port. DNS is optional (IP URL is
-  fine). `BOB_REPORT_ALLOW` is IPs. `reportUrl` belongs in
+  fine). Live write URL: `http://irc.ntsa.uk:80/bob/v1/report`
+  (GET **405**, POST **204**/**200**; **401** = secret mismatch —
+  writers need ionos `~\.grok\bob\report.secret`, not a local-only
+  copy). `BOB_REPORT_ALLOW` is IPs. `reportUrl` belongs in
   `bobiverse.json` (add it if missing). See
   `docs/bob-report-callback-change-only.md`. Watch skip-heartbeat is
   agentic_build #141.

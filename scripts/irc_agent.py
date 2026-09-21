@@ -27,6 +27,39 @@ import seal  # noqa: E402
 import wire  # noqa: E402
 
 FLOOD_S = 0.8
+REG_FAIL_CMDS = frozenset(
+    {
+        "ERROR",
+        "464",
+        "465",
+        "471",
+        "472",
+        "473",
+        "474",
+        "475",
+        "477",
+        "478",
+        "481",
+        "482",
+        "483",
+        "484",
+        "485",
+        "486",
+        "487",
+        "488",
+        "489",
+        "490",
+        "491",
+        "492",
+        "493",
+        "494",
+        "495",
+        "496",
+        "497",
+        "498",
+        "499",
+    }
+)
 
 
 def take_outbox_lines(path: Path, last: int) -> tuple[list[str], int]:
@@ -78,6 +111,18 @@ def save_outbox_pos(outbox: Path, pos: int) -> None:
 
 def info(msg: str) -> None:
     print(msg, flush=True)
+
+
+def reconnect_cap() -> int | None:
+    """Max reconnect cycles after a failed session; None = unlimited."""
+    raw = (os.environ.get("AGENTIC_IRC_RECONNECT_MAX") or "").strip()
+    if not raw:
+        return None
+    try:
+        n = int(raw)
+    except ValueError:
+        return None
+    return n if n >= 0 else None
 
 
 def debug_log(path: Path | None, line: str) -> None:
@@ -473,6 +518,9 @@ class Client:
                     parts = rest.split(" ")
                     cmd = parts[0] if parts else ""
                     trailing = t.split(" :", 1)[1] if " :" in t else ""
+                    if not self.ready.is_set() and cmd in REG_FAIL_CMDS:
+                        detail = trailing.strip() or (parts[1] if len(parts) > 1 else "")
+                        info(f"INFO reg {cmd} {detail}".strip()[:220])
                     if cmd == "001":
                         self.ready.set()
                     if cmd == "JOIN":
@@ -526,6 +574,10 @@ class Client:
                 return
             time.sleep(1)
 
+    def _abort_gate(self, gate: str) -> None:
+        info(f"INFO {gate}")
+        raise TimeoutError(gate)
+
     def session(self) -> None:
         self.ready.clear()
         self.joined.clear()
@@ -533,6 +585,10 @@ class Client:
         self.live_nick = self.original_nick
         self._outbox_gen += 1
         gen = self._outbox_gen
+        info(
+            f"INFO connecting {self.args.host}:{self.args.port} "
+            f"nick={self.live_nick} home={self.home}"
+        )
         self.sock = self.connect()
         threading.Thread(target=self.reader, daemon=True).start()
         threading.Thread(target=self.outbox_loop, args=(gen,), daemon=True).start()
@@ -544,11 +600,11 @@ class Client:
         self.send(f"USER {self.live_nick} 0 * :{self.args.realname}")
         self.sasl_plain()
         if not self.ready.wait(30):
-            raise TimeoutError("NO 001")
+            self._abort_gate("NO 001")
         time.sleep(1)
         self.send("JOIN " + self.chan)
         if not self.joined.wait(30):
-            raise TimeoutError("NO JOIN")
+            self._abort_gate("NO JOIN")
         if self.args.hello:
             self.say(self.args.hello)
         if self.args.announce_key:
@@ -562,10 +618,15 @@ class Client:
 
     def run_forever(self) -> None:
         backoff = 1.0
+        attempt = 0
+        cap = reconnect_cap()
         while not self.stop.is_set():
             try:
                 self.session()
                 backoff = 1.0
+                attempt = 0
+            except TimeoutError:
+                pass
             except Exception as e:
                 info(f"INFO session end {type(e).__name__}")
             try:
@@ -574,8 +635,12 @@ class Client:
             except OSError:
                 pass
             self.sock = None
+            attempt += 1
+            if cap is not None and attempt >= cap:
+                info(f"INFO reconnect stopped (AGENTIC_IRC_RECONNECT_MAX={cap})")
+                return
             delay = backoff + random.uniform(0, 1)
-            info(f"INFO reconnect in {delay:.1f}s")
+            info(f"INFO reconnect attempt={attempt} in {delay:.1f}s (backoff cap 60s)")
             time.sleep(delay)
             backoff = min(60.0, backoff * 2)
 
@@ -605,7 +670,10 @@ def main() -> None:
     if hasattr(signal, "SIGTERM"):
         signal.signal(signal.SIGTERM, _stop)
     if args.once:
-        c.session()
+        try:
+            c.session()
+        except TimeoutError:
+            sys.exit(1)
         return
     c.run_forever()
 

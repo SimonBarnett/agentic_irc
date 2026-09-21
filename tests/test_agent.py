@@ -24,6 +24,7 @@ def _args(home: Path, nick: str = "alice") -> argparse.Namespace:
         port=6697,
         realname="test",
         once=True,
+        password="",
     )
 
 
@@ -242,3 +243,38 @@ def test_prefix_must_match_from_nick(tmp_path: Path, monkeypatch):
     line = seal.irc_lines_v2(blob, "alice", "bob", "ee11ee11ee11ee11")[0]
     c.handle_privmsg("mallory!u@h", "#ops", line)
     assert not (c.inbox / "ee11ee11ee11ee11.bin").exists()
+
+
+def test_abort_gate_logs_and_raises(tmp_path: Path, monkeypatch, capsys):
+    monkeypatch.setenv("AGENTIC_IRC_HOME", str(tmp_path))
+    c = irc_agent.Client(_args(tmp_path, "n1"))
+    with pytest.raises(TimeoutError, match="NO 001"):
+        c._abort_gate("NO 001")
+    assert "INFO NO 001" in capsys.readouterr().out
+
+
+def test_reg_fail_numeric_logged_before_001(tmp_path: Path, monkeypatch, capsys):
+    monkeypatch.setenv("AGENTIC_IRC_HOME", str(tmp_path))
+    c = irc_agent.Client(_args(tmp_path, "n1"))
+    c.ready.clear()
+    assert "464" in irc_agent.REG_FAIL_CMDS
+    assert not c.ready.is_set()
+    irc_agent.info("INFO reg 464 Password incorrect")
+    assert "INFO reg 464" in capsys.readouterr().out
+
+
+def test_reconnect_cap_env(tmp_path: Path, monkeypatch):
+    monkeypatch.delenv("AGENTIC_IRC_RECONNECT_MAX", raising=False)
+    assert irc_agent.reconnect_cap() is None
+    monkeypatch.setenv("AGENTIC_IRC_RECONNECT_MAX", "3")
+    assert irc_agent.reconnect_cap() == 3
+    monkeypatch.setenv("AGENTIC_IRC_RECONNECT_MAX", "bad")
+    assert irc_agent.reconnect_cap() is None
+
+
+def test_irc_agent_source_sends_cap_end_after_user(tmp_path: Path):
+    src = (Path(__file__).resolve().parents[1] / "scripts" / "irc_agent.py").read_text(encoding="utf-8")
+    assert "CAP END" in src
+    assert "sasl_plain()" in src
+    assert "_abort_gate" in src
+    assert "NO 001" in src and "NO JOIN" in src

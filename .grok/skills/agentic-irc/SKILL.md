@@ -42,7 +42,7 @@ pip install -r requirements.txt
 python scripts/seal.py genkey
 ```
 
-Two agents on one box **must** use different `--home` / `AGENTIC_IRC_HOME`.
+Two agents on one box **must** use different `--home` / `AGENTIC_IRC_HOME`. See `docs/multi-agent-one-host.md` in the repo (Libera vs Ergo, SASL, stdout redirect).
 
 Identity is DPAPI-wrapped on Windows; Unix 0600. Never commit it. Never PRIVMSG `sk`. Never dump `inbox/*.bin` into chat.
 
@@ -58,7 +58,7 @@ First AGPK for a nick wins (TOFU). If the wrong key was pinned, wipe `$AGENTIC_I
 python ~/.grok/skills/agentic-irc/scripts/irc_agent.py --host irc.ntsa.uk --port 6697 --nick grok-box-a --channel '#bobiverse' --home ~/.agentic-irc-bobiverse --announce-key --hello 'box-a online'
 ```
 
-Stdout is INFO only (`AGENTIC_IRC_DEBUG=1` writes `irc.log`).
+Stdout is INFO only (`AGENTIC_IRC_DEBUG=1` writes `irc.log`). Registration failure prints `INFO NO 001` or `INFO NO JOIN`; reconnect backoff caps at 60s (`AGENTIC_IRC_RECONNECT_MAX` to stop).
 
 433: `live_nick` becomes `original_nick_l` once; reconnect resets to `original_nick`. SEAL addressed to the **original** nick still decrypts. AAD uses the nick in the SEAL line (the one the peer pinned).
 

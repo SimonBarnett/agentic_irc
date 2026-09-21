@@ -1,5 +1,14 @@
 # Skill harvest log
 
+## 2026-09-21 — flamingo Halloy + extra irc_agent vs Watch
+
+Session on flamingo: Halloy nick `simon`; coordinator `cursor-flamingo`
+(`~\.agentic-irc-cursor`); Watch `bob-flamingo`. Watch up-check is any
+`irc_agent.py` + `bobiverse` + `irc.ntsa.uk`, so the extra nick blocks
+respawn of `bob-*`. Recycle the builder process only. `#54` mention ACK
+works at `weekly=0`; digest `online` needs shop JOIN / report POST, not
+NAMES. Grok-talk LLM stays FR #56. Skills `bob-irc` + `agentic-irc`.
+
 ## 2026-09-21 — Ergo service BobIrcd
 
 Ionos ircd is Windows service `BobIrcd` (`Start-Service BobIrcd`), not

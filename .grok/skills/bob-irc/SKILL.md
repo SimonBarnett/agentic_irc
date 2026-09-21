@@ -59,11 +59,27 @@ flaps the port.
 3. Recycle **Watch-Bobiverse only**. Confirm `001` from `irc.ntsa.uk` and
    `JOIN #bobiverse` plus `JOIN #<id>`.
 
-Human monitor (flamingo): Halloy nick not `bob-*`. Type `!bobiverse`.
+Human monitor (flamingo): Halloy nick not `bob-*` (e.g. `simon`).
+`%AppData%\halloy\config.toml`: server `irc.ntsa.uk:6697` TLS,
+`password_file` = connect.password, channel `#bobiverse`. Type `!bobiverse`.
 Address a `bob-*` nick (`@bob-ionos`, `bob-flamingo:`, Query): that seat
-ACKs one English line (status + weekly). `weekly=0` still answers.
+ACKs one English line (status + weekly). `weekly=0` still answers
+(empty weekly is not deaf; #54). LLM grok-talk is parked FR #56, not UAT.
 Watch stays no grok.exe. Recycle Watch-Bobiverse after pull so the
 running `irc_agent` loads the mention ACK.
+
+`!bobiverse` `online` is shop JOIN / report POST, not NAMES. A box that
+only POINTs on `#bobiverse` still shows `I am offline` in the digest.
+
+## Recycle while a second irc_agent is up
+
+Watch `Test-BobiverseIrcAgentUp` is true if **any** `irc_agent.py` command
+line has `bobiverse` and `irc.ntsa.uk` (or `127.0.0.1`). A coordinator
+nick (`cursor-flamingo`, home `~\.agentic-irc-cursor`) blocks Watch from
+starting `bob-<id>`. Recycle the builder only: stop the process whose
+`--nick` is `bob-<id>`; start it from the pulled `scripts\irc_agent.py`
+with `--home ~\.agentic-irc-bobiverse`. Leave the extra nick running.
+Do not `Stop-ScheduledTask BobFleet-*`. Two agents still need two homes.
 
 ## Ionos Ergo down
 

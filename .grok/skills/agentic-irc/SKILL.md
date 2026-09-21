@@ -44,7 +44,7 @@ pip install -r requirements.txt
 python scripts/seal.py genkey
 ```
 
-Two agents on one box **must** use different `--home` / `AGENTIC_IRC_HOME`. See `docs/multi-agent-one-host.md` in the repo (Libera vs Ergo, SASL, stdout redirect).
+Two agents on one box **must** use different `--home` / `AGENTIC_IRC_HOME`. See `docs/multi-agent-one-host.md` in the repo (Libera vs Ergo, SASL, stdout redirect). Flamingo example: Watch `bob-flamingo` uses `~\.agentic-irc-bobiverse`; a Cursor session uses `--nick cursor-flamingo --home ~\.agentic-irc-cursor`. Do not reuse the Watch home. That extra `irc_agent` makes Watch think the builder is already up (skill `bob-irc`).
 
 Identity is DPAPI-wrapped on Windows; Unix 0600. Never commit it. Never PRIVMSG `sk`. Never dump `inbox/*.bin` into chat.
 
@@ -65,6 +65,8 @@ Stdout is INFO only (`AGENTIC_IRC_DEBUG=1` writes `irc.log`). Registration failu
 433: `live_nick` becomes `original_nick_l` once (`w-*` workers get one `_` suffix, e.g. `w-fl-4412_`). Reconnect resets to `original_nick`. SEAL addressed to the **original** nick still decrypts. AAD uses the nick in the SEAL line (the one the peer pinned). Digest still keys `<machine-id>:<pid>`.
 
 Fleet daemon, firewall, and Watch-Bobiverse recycle: skill `bob-irc`.
+Fleet `bob-*` seats ACK addressed English (#54) even when `weekly=0`.
+Optional LLM grok-talk is FR #56 (not UAT). Coordinator nicks do not ACK.
 
 ## Secrets
 

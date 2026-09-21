@@ -36,8 +36,20 @@ def is_firehose(text: str) -> bool:
     return False
 
 
+def emit(text: str) -> None:
+    text = text.replace("\ufeff", "")
+    try:
+        print(text, flush=True)
+    except UnicodeEncodeError:
+        buf = getattr(sys.stdout, "buffer", None)
+        if buf is None:
+            return
+        buf.write((text + "\n").encode("utf-8", errors="replace"))
+        buf.flush()
+
+
 def format_talk_line(raw: str) -> str | None:
-    line = raw.rstrip("\r\n")
+    line = raw.rstrip("\r\n").lstrip("\ufeff")
     if not line or line.startswith("PING ") or NUMERIC_RE.match(line):
         return None
     m = PRIVMSG_RE.match(line)
@@ -74,7 +86,7 @@ def follow(path: Path, from_start: bool = False) -> None:
             for raw in chunk.splitlines():
                 out = format_talk_line(raw)
                 if out:
-                    print(out, flush=True)
+                    emit(out)
         time.sleep(0.4)
 
 
@@ -92,7 +104,7 @@ def main() -> int:
         for raw in log.read_text(encoding="utf-8", errors="replace").splitlines():
             out = format_talk_line(raw)
             if out:
-                print(out, flush=True)
+                emit(out)
         return 0
     follow(log, from_start=args.from_start)
     return 0

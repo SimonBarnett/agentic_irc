@@ -43,6 +43,6 @@ Push `work/shop-channel-digest`. Hostile MRB on #46. Bob UAT only.
 ## Done
 
 - [x] FR + this plan on the branch (intake)
-- [ ] pytest green, no sockets
+- [x] pytest green, no sockets
 - [x] #36 write verbs documented as scrubbed
 - [x] Completion does not self-stamp UAT

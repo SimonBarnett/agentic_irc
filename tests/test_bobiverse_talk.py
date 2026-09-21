@@ -283,7 +283,7 @@ def test_quit_worker_and_bob_action(tmp_path, monkeypatch, recorder):
     assert any(
         x.startswith("PRIVMSG #bobiverse :") and "ACTION" in x and "w-fl-4412" in x for x in recorder
     )
-    assert not any("#flamingo" in x and "ACTION" in x for x in recorder)
+    assert not any(x.startswith("PRIVMSG #flamingo :") for x in recorder)
     recorder.clear()
     c.handle_quit("bob-ionos")
     doc = bobreport.load_digest(tmp_path)

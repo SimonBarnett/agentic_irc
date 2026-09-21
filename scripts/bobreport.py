@@ -264,6 +264,36 @@ def channels_for_nick(nick: str, requested: str) -> list[str]:
     return req
 
 
+def expand_join_channels(raw: str) -> list[str]:
+    """Split IRC JOIN target(s); Ergo may echo comma-joined names as one line."""
+    text = str(raw or "").strip().lstrip(":")
+    if not text:
+        return []
+    out: list[str] = []
+    seen: set[str] = set()
+    for part in text.split(","):
+        for ch in parse_channel_list(part.strip()):
+            key = ch.lower()
+            if key not in seen:
+                seen.add(key)
+                out.append(ch)
+    return out
+
+
+def worker_irc_agent_args(
+    fleet_home: Path | str,
+    machine_id: str,
+    pid: int | str,
+    *,
+    channel: str = FLEET_CHANNEL,
+) -> dict[str, str]:
+    """Git-task worker launch: nick, shop channel, per-pid home (agentic_build bridge)."""
+    nick = worker_nick(machine_id, pid)
+    home = worker_home(fleet_home, machine_id, pid)
+    shop = channels_for_nick(nick, channel)[0]
+    return {"nick": nick, "channel": shop, "home": str(home)}
+
+
 def parse_report_command(body: str) -> bool:
     text = (body or "").strip()
     if not text:

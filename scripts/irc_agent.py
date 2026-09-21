@@ -304,8 +304,13 @@ class Client:
             self._fleet_action(event_class, key, action)
 
     def handle_join(self, nick: str, channel: str) -> None:
+        expanded = bobreport.expand_join_channels(channel)
+        if len(expanded) > 1:
+            for ch in expanded:
+                self.handle_join(nick, ch)
+            return
         who = (nick or "").strip()
-        ch = bobreport.normalize_channel(channel)
+        ch = bobreport.normalize_channel(expanded[0] if expanded else channel)
         if who.lower() in self._mine_nicks():
             self._pending_joins.discard(ch.lower())
             if not self._pending_joins:
@@ -805,10 +810,11 @@ class Client:
                     if cmd == "JOIN":
                         ch = parts[1].lstrip(":") if len(parts) > 1 else ""
                         if not ch and trailing:
-                            ch = trailing
+                            ch = trailing.lstrip(":")
                         joiner = prefix.split("!", 1)[0].lstrip(":") if prefix else ""
                         if joiner:
-                            self.handle_join(joiner, ch)
+                            for one in bobreport.expand_join_channels(ch):
+                                self.handle_join(joiner, one)
                     if cmd == "PART":
                         ch = parts[1].lstrip(":") if len(parts) > 1 else ""
                         if not ch and trailing:
@@ -911,7 +917,9 @@ class Client:
         # Ergo default-usermode is +i (LUSERS: "0 users and N invisible").
         # Halloy nick lists that use WHO then omit flamingos even in-channel.
         self.send("MODE " + self.live_nick + " -i")
-        self.send("JOIN " + ",".join(self.channels))
+        # Per-channel JOIN (more reliable than comma-join on some paths / ionos shop).
+        for ch in self.channels:
+            self.send("JOIN " + ch)
         if not self.joined.wait(30):
             self._abort_gate("NO JOIN")
         if self.args.hello:

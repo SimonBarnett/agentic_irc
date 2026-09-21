@@ -25,6 +25,8 @@ Do **not** point agents at `mrb-*.pdf`. Do **not** implement `!report` (#36 writ
   No POINT firehose.
 - Shop: `#flamingo` `#marchhare` `#ionos` `#ce-priority-dev1` (`#dev1` same).
   Machine names with `#`. Not `#bob-flamingo` / `#bob-ionos`.
+  **`bob-ionos`** is the ionos Bob/Grok builder seat; **`#ionos`** is its shop
+  (all live `w-io-*` git workers JOIN there only).
 - `bob-<id>` JOINs fleet + shop at start. Bob drop closes `#<id>`.
 - Talk seats (Cursor or Grok, same): nick `{machine}-{pid}` (e.g.
   `flamingo-22400`). **`pid` = coordinator PowerShell `$PID`** (seat host;
@@ -36,6 +38,7 @@ Do **not** point agents at `mrb-*.pdf`. Do **not** implement `!report` (#36 writ
   Do not install Watch-CursorIrc that respawns `cursor-flamingo`.
 - Workers JOIN **shop only**: `w-<shortid>-<pid>` (`w-fl-4412`). Key
   `flamingo:4412`. Home `~\.agentic-irc-bobiverse\workers\<id>\<pid>`.
+  Ionos git workers: `w-io-<pid>` → `#ionos` only.
 - Halloy lists only rooms you `/join`. Leftover `bob-*` panes are Query/PM,
   not shop channels. Do not static-autojoin shops (they come and go).
 

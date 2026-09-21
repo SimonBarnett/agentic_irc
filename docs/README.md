@@ -17,6 +17,9 @@ Agents: open **live** specs below. Do not treat `mrb-*.md` / `mrb-*.pdf` as curr
 | `beacon-v1-2026-09-19.md` | Mode 3 zero-config invite / `beacon.url` |
 | `mode3-dumb-ops.md` | DUMB exec jail, operators, paths |
 | `build-and-test-plan-house-clean-irc-kit-2026-09-21.md` | Worker plan for #34 |
+| `feature-request-ionos-shop-channel-bob-ionos-2026-09-21.md` | `#ionos` shop for `bob-ionos` + `w-io-*` (issue #70) |
+| `build-and-test-plan-ionos-shop-channel-bob-ionos-2026-09-21.md` | Worker plan for #70 |
+| `bobiverse-ionos-ircd.md` | Ergo `#ionos` operator note + sister bobiverse.md cross-link |
 | `tofu-rotation.md` | AGPK pin mistakes and key rotation drill |
 
 `feature-request-report-bobiverse-digest-2026-09-21.md` (#36) is historical for the

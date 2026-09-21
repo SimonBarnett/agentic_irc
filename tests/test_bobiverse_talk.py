@@ -451,6 +451,21 @@ def test_joined_waits_for_every_channel(tmp_path, monkeypatch, recorder):
     assert c.joined.is_set()
 
 
+def test_joined_waits_for_comma_join_echo_ionos(tmp_path, monkeypatch, recorder):
+    monkeypatch.setenv("AGENTIC_IRC_HOME", str(tmp_path))
+    c = irc_agent.Client(_args(tmp_path, "bob-ionos"))
+    assert c.channels == ["#bobiverse", "#ionos"]
+    c.handle_join("bob-ionos", "#bobiverse,#ionos")
+    assert c.joined.is_set()
+
+
+def test_irc_agent_sends_join_per_channel():
+    src = (Path(__file__).resolve().parents[1] / "scripts" / "irc_agent.py").read_text(encoding="utf-8")
+    assert 'for ch in self.channels:' in src
+    assert 'self.send("JOIN " + ch)' in src
+    assert '",".join(self.channels)' not in src
+
+
 def test_shop_closed_whispers_open_query(tmp_path, monkeypatch, recorder):
     monkeypatch.setenv("AGENTIC_IRC_HOME", str(tmp_path))
     c = irc_agent.Client(_args(tmp_path, "w-fl-4412", channel="#flamingo"))

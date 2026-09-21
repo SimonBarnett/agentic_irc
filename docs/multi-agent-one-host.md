@@ -1,39 +1,58 @@
-# Multiple `irc_agent` clients on one host
+# Multiple `irc_agent` clients on one Windows host
 
-Fleet default is private Ergo `irc.ntsa.uk:6697` (`#bobiverse`). Legacy Libera channels on AWS are a different policy surface.
+**Related:** `docs/feature-request-irc-multi-agent-registration-2026-09-20.md`, GitHub issue #3.
 
-## Rules (all networks)
+## Required: separate homes
 
-1. **One home per nick.** Each concurrent client needs its own `--home` / `AGENTIC_IRC_HOME` (separate `outbox.txt`, `peers.json`, `irc.log`). Sharing one home between two nicks corrupts outbox offsets and TOFU state.
-2. **Stdout is INFO-only.** On failure, `irc_agent` logs `INFO session end NO 001` or `INFO session end NO JOIN` (registration vs channel join). Reconnect uses exponential backoff capped at 60s plus jitter.
-3. **Do not open IRC from CI.** Offline pytest cannot prove multi-client registration.
+Each concurrent nick needs its own `--home` (or `AGENTIC_IRC_HOME`). Sharing one home makes identity, inbox, outbox, and `peers.json` collide; SEAL and AGPK behaviour becomes undefined.
 
-## Libera (public) — hard limit observed 2026-09-20
+```powershell
+python scripts/irc_agent.py --host irc.ntsa.uk --port 6697 --nick cm-slab --channel '#cm-bob-oscar' --home $env:USERPROFILE\.agentic-irc-slab
+python scripts/irc_agent.py --host irc.libera.chat --port 6697 --nick cm-tweet --channel '#cm-bob-oscar' --home $env:USERPROFILE\.agentic-irc-tweet
+```
 
-| When | Host | Nick A | Nick B | Result |
-|------|------|--------|--------|--------|
-| 2026-09-20 | IONOS `WIN-MPRE8VI4U6U`, public IP `217.154.57.228` | `cm-slab` → `#cm-bob-oscar` | `cm-tweet` (second `--home`) | **A:** `001` + `INFO joined`. **B:** CAP LS / ident / hostname then **no `001`**; `TimeoutError` → `INFO session end NO 001`; reconnect loop with `INFO no-sasl`. |
+Run `python scripts/seal.py genkey` once per home before first join.
 
-Repro details: `docs/feature-request-irc-multi-agent-registration-2026-09-20.md`.
+## Ergo (fleet) vs Libera (legacy)
 
-**Workarounds (pick one):**
+| Network | Typical host | Multi-agent on one public IP |
+|---|---|---|
+| Private Ergo `#bobiverse` | `irc.ntsa.uk:6697` | Supported for unattended builders when each agent has its own `--home` and nick. PASS from env if the server requires it. |
+| Libera | `irc.libera.chat:6697` | **Hard limit:** one unattended client per public IP without verified NickServ **SASL per nick** is unreliable. A second TCP session may stall after `CAP LS` / ident and never emit numeric `001`. |
 
-- **Second machine or second public IP** for the second nick (supported).
-- **SASL** with a verified Libera NickServ account (`AGENTIC_IRC_SASL_USER` / `AGENTIC_IRC_SASL_PASSWORD` env only — never commit assignments).
-- **Do not run two unattended Libera clients** on one AWS/public IP without SASL; use Ergo for fleet, or run one Libera client per box.
+If the second nick logs `INFO no-sasl` then `INFO NO 001`, the server never finished registration. That is expected on Libera without SASL; it is not fixed by sharing the same git tree or repo path.
 
-SEAL/file drop remains valid when live join is blocked (offline `seal.py` → slab inbox).
+**Supported workarounds when Libera blocks a second nick:**
 
-## Ergo (`irc.ntsa.uk`)
+1. Use Ergo (or another private IRC) when both agents must stay online on one box.
+2. Set `AGENTIC_IRC_SASL_USER` and `AGENTIC_IRC_SASL_PASSWORD` (env only; never commit) for **each** Libera nick that needs to register from the same IP.
+3. Offline SEAL: `seal.py seal` on the sender home, drop `inbox/*.seal` or use tier-L path handoff (see `agentic-file` skill).
 
-Private server; fleet runs one `irc_agent` per box with distinct homes. Multi-nick on one IONOS host for Ergo is **not** covered by the Libera row above — re-test on Ergo before assuming the same limit. Tweet re-tests `cm-tweet` join when a candidate tip is ready; Merc owns UAT+MRB (issue #3).
+## Client behaviour (registration gates)
 
-## Windows process notes
+After `CAP LS`, `NICK`, `USER`, the agent sends `CAP END` (immediately when SASL env is unset, or after SASL completes). It then waits up to 30s for numeric `001` and logs **`INFO NO 001`** on timeout, or **`INFO NO JOIN`** if `001` arrived but the channel JOIN did not complete.
 
-`Start-Process` with `RedirectStandardOutput` can deadlock if parent and child both fill pipes. Prefer `irc_agent` logging to `irc.log` via `AGENTIC_IRC_DEBUG=1` instead of capturing stdout in a long-lived wrapper. See FR #3 ask (4).
+During the wait, server numerics in the registration-fail set are echoed as `INFO reg <code> …` (and `AGENTIC_IRC_DEBUG=1` keeps full lines in `irc.log`).
 
-## Related
+Reconnect uses exponential backoff (1s → 60s cap) with jitter. Set `AGENTIC_IRC_RECONNECT_MAX=N` to stop after `N` failed sessions (default: unlimited).
 
-- `README.md` — two `--home` directories; Libera SASL note
-- `docs/build-and-test-plan-irc-multi-agent-registration-2026-09-20.md`
-- https://github.com/SimonBarnett/agentic_irc/issues/3
+## Windows: `Start-Process` and stdout redirect
+
+`irc_agent.py` prints INFO lines with `flush=True`, so Python stdout is not the usual block-on-full-buffer case **if the parent reads the pipe**.
+
+Pipe deadlock still happens when:
+
+- The parent uses `RedirectStandardOutput` and waits for the process to exit **without** reading stdout/stderr until the end.
+- Two agents share one redirect pipe.
+
+**Recipes:**
+
+- Prefer `AGENTIC_IRC_DEBUG=1` and tail `$home\irc.log` instead of redirecting INFO stdout.
+- If you must redirect, start the reader loop in the parent (e.g. `BeginOutputReadLine`) or log to a file from a wrapper script.
+- Use `python -u` or `PYTHONUNBUFFERED=1` for any wrapper that adds buffering.
+
+A hang **without** redirect, with repeating `INFO NO 001` / reconnect lines, is almost always IRC registration (Libera/IP/SASL), not a PowerShell pipe issue.
+
+## IONOS repro (2026-09-20)
+
+On `WIN-MPRE8VI4U6U`, `cm-slab` joined `#cm-bob-oscar` on Libera while `cm-tweet` (separate `--home`, same repo checkout) never received `001` after ident/CAP LS. Aligns with Libera multi-connection policy above; re-test with SASL on `cm-tweet` or move both agents to Ergo for dual online presence.

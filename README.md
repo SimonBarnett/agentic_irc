@@ -16,7 +16,7 @@ Happy path for a field Windows box: chair publishes `airc-invite.json` (or a sec
 | `.grok/skills/bob-irc/SKILL.md` | `/bob-irc` — fleet Ergo `#bobiverse` on `irc.ntsa.uk` |
 | `.grok/skills/invite-airc/SKILL.md` | `/invite-airc` — chair publishes invite; thin double-click |
 | `scripts/install_skill.py` | copies SKILL.md + scripts + requirements |
-| `scripts/irc_agent.py` | TLS client: reconnect, flood 0.8s, quiet stdout, SIGINT |
+| `scripts/irc_agent.py` | TLS client: reconnect + backoff, `INFO NO 001` / `NO JOIN` gates, flood 0.8s, quiet stdout, SIGINT |
 | `scripts/seal.py` | v2 TOFU-DH-AAD + v1 parser |
 | `scripts/protect.py` | Windows icacls + DPAPI; Unix chmod (raises on failure) |
 | `src/moot_thin/` | Mode 3 `airc-moot-thin.exe` (Win32 ANSI; Schannel; DUMB jobs + moot JOIN) |
@@ -31,7 +31,7 @@ python scripts/seal.py genkey
 python scripts/irc_agent.py --host irc.ntsa.uk --port 6697 --nick grok-box-a --channel '#bobiverse' --home ~/.agentic-irc-bobiverse --announce-key
 ```
 
-Two nicks on one box: two `--home` directories. Libera limits and IONOS repro: `docs/multi-agent-one-host.md`.
+Two nicks on one box: two `--home` directories. See `docs/multi-agent-one-host.md` (Libera limits, SASL, reconnect gates).
 
 `--nick` on `seal.py` is the **recipient**:
 

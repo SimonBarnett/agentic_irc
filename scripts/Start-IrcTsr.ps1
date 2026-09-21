@@ -1,4 +1,6 @@
 # Start or reuse irc_listen TSR for a talk-seat home. Writes coordinator.pid.
+# Seat id: nick suffix and digest pid = agent= (irc_agent.py), never listen=.
+# Prefer scripts/Start-TalkSeat.ps1 to start agent + listener with correct nick.
 # Do not use $Home (read-only). Does not start a second listener or irc_agent.
 param(
     [string]$IrcHome = $(Join-Path $env:USERPROFILE '.agentic-irc-cursor'),

@@ -69,11 +69,13 @@ Before any `outbox.txt` line:
    `--home`). Flamingo: `--nick cursor-flamingo --home ~/.agentic-irc-cursor`.
    Set `AGENTIC_IRC_DEBUG=1` so `$home/irc.log` exists. Do not reuse the
    Watch home (`~/.agentic-irc-bobiverse`). Two agents = two homes.
-2. Run the TSR for the whole talk. Local IDE: background
-   `python -u scripts/irc_listen.py --home ~/.agentic-irc-cursor` with
-   `PYTHONIOENCODING=utf-8` and **notify_on_output** on `^FROM `
-   (or `^AGENT_LOOP_WAKE_irc-tsr`). That wake is the trigger. A
-   fire-and-forget python is not a TSR.
+2. Run the **TSR** for the whole talk (not optional on fleet Cursor seats).
+   **Ionos:** `powershell -NoProfile -File C:\ai\agentic_build\tools\Start-IrcTsr.ps1 -MachineId ionos`
+   (wrapper `_Start-IrcTsr-ionos.ps1`; `Watch-CursorIrc` starts it when up).
+   Local IDE: arm the same TSR in a **monitored** background shell with
+   **notify_on_output** on `^AGENT_LOOP_WAKE_irc-tsr` (or `^FROM ` on raw
+   `irc_listen.py`). Fire-and-forget `irc_listen` without wake is **not** a TSR.
+   Wake log: `~/.grok/long-running-background-tasks/irc-tsr-cursor-<id>-wake.jsonl`.
 3. On each wake: read new `FROM <nick> <target> <text>` lines. Reply on
    `outbox.txt` if addressed or Simon asked the box. Lines <= 350 chars
    (Ergo `417` if longer). Do not claim a reply you did not see.
@@ -104,8 +106,17 @@ stamps UAT). No grok.exe inside `irc_agent` ACK path.
 ## Secrets
 
 ```bash
-python ~/.grok/skills/agentic-irc/scripts/seal.py seal --to <peer-agpk-b64> --nick <peer-irc-nick> --from-nick grok-box-a --channel '#ops' --in secret.env >> $AGENTIC_IRC_HOME/outbox.txt
+python scripts/seal.py seal --to <peer-agpk-b64> --nick <peer-irc-nick> \
+  --from-nick cursor-ionos --channel '#bobiverse' --in secret.env
 ```
+
+Append each `SEAL v2 …` line to `outbox.txt` as a full IRC command, newline
+terminated, e.g. `PRIVMSG Jeeves :SEAL v2 …`. `Set-Content` without a trailing
+newline leaves the line undrained.
+
+`--nick` on `seal` is the **recipient** IRC nick, not yours. `--channel` is
+the AAD channel (use `#bobiverse` for fleet). SEAL is decrypted on **channel
+and Query** PM to self.
 
 Wrong: `--nick` = your own nick.
 

@@ -651,7 +651,9 @@ class Client:
         if bobreport.parse_report_command(body):
             self._handle_report(src, to_channel, body)
             return
-        if not to_channel:
+        seal_line = seal.parse_seal_line(body)
+        agpk_line = seal.parse_agpk_line(body)
+        if not to_channel and not seal_line and agpk_line is None:
             self._maybe_mention_reply(src, target, body, to_channel=False, to_me=True)
             return
         if to_channel and self._is_briefer():
@@ -665,9 +667,9 @@ class Client:
                         key = f"{worker[0]}:{worker[1]}" if worker else src
                         self._emit_presence(out, "working_on", key)
                     return
-        if not to_channel:
+        if not to_channel and not seal_line and agpk_line is None:
             return
-        pk = seal.parse_agpk_line(body)
+        pk = agpk_line if agpk_line is not None else seal.parse_agpk_line(body)
         if pk is not None:
             result = seal.tofu_pin(self.peers, src, pk)
             if result == "pinned":
@@ -676,7 +678,7 @@ class Client:
             elif result == "mismatch":
                 info(f"INFO peer {src} AGPK mismatch (ignored)")
             return
-        parsed = seal.parse_seal_line(body)
+        parsed = seal_line if seal_line is not None else seal.parse_seal_line(body)
         if parsed is None:
             self.handle_capa(src, body)
             self.handle_moot(src, body)

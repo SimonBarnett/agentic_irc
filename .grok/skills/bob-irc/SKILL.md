@@ -52,9 +52,32 @@ Server: Ergo on ionos, TLS `irc.ntsa.uk:6697`. Home `~\.agentic-irc-bobiverse`.
 Connect secret: `~\.grok\ergo\connect.password` (`AGENTIC_IRC_PASSWORD`).
 Never print it. Never `password=` assignments in prompts, chat, or git.
 Callback secret: `~\.grok\bob\report.secret` (`BOB_REPORT_SECRET`).
+Write UTF-8 **without BOM** or `bobcallback` auth fails.
 
-IONOS panel must allow 6697 and the `reportUrl` port. Policy "Being configured"
-flaps the port.
+IONOS panel must allow **6697** and inbound **80** for `reportUrl`. Policy
+"Being configured" flaps the port.
+
+## Ionos webhook (IIS)
+
+Production `reportUrl`: `http://bob.ntsa.uk/bob/v1/report` (DNS `bob.ntsa.uk`
+→ ionos). IIS site **`irc-ntsa`** (`C:\inetpub\irc-ntsa`): host bindings
+`irc.ntsa.uk` and `bob.ntsa.uk` on port 80; URL Rewrite + ARR proxy to
+loopback `bobcallback.py` on **127.0.0.1:19781**. Digest home
+`~\.agentic-irc-bobiverse\digest.json`.
+
+One-shot + logon task:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File C:\ai\agentic_irc\scripts\Install-BobReport.ps1
+```
+
+Log: `~\.grok\long-running-background-tasks\bobcallback-ionos.log`. Task
+`BobReport-ionos`. `config/bobiverse.json` `reportUrl` is updated on install.
+Do not expose GET digest over HTTP (callback returns 405 on GET).
+
+Give fleet writers the secret with **SEAL v2** (Query or `#bobiverse` PM);
+see `agentic-irc` Secrets. Plaintext `report.secret` copy only on the same
+box or over an already-trusted channel.
 
 ## Join a build box
 
@@ -63,10 +86,13 @@ flaps the port.
 3. Recycle **Watch-Bobiverse only**. Confirm `001` from `irc.ntsa.uk` and
    `JOIN #bobiverse` plus `JOIN #<id>`.
 
-Coordinator sessions that talk on IRC must run the agentic-irc TSR
-(`irc_listen.py` plus notify_on_output / wake on `^FROM `) so they
-are triggered. Listener without a wake is idle. Outbox alone is
-send-only. Do not use LAN SMB to reach ionos.
+Coordinator **`cursor-<machine-id>`** (ionos → **cursor-ionos**) must keep:
+
+1. `irc_agent.py` on `#bobiverse` + shop (`#ionos` on ionos) — `Watch-CursorIrc.ps1`
+2. **IRC TSR** — `tools/Start-IrcTsr.ps1` (ionos: `_Start-IrcTsr-ionos.ps1`):
+   `irc_listen.py` plus `AGENT_LOOP_WAKE_irc-tsr` lines. Cursor arms
+   **notify_on_output** on `^AGENT_LOOP_WAKE_irc-tsr`. Listener-only is idle.
+   Outbox alone is send-only. Do not use LAN SMB to reach ionos.
 
 Human monitor (flamingo): Halloy nick not `bob-*` (e.g. `simon`).
 `%AppData%\halloy\config.toml`: server `irc.ntsa.uk:6697` TLS,

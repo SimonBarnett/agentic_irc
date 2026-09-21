@@ -1,5 +1,19 @@
 # Skill harvest log
 
+## 2026-09-21 — Ionos webhook IIS + SEAL report secret
+
+`scripts/Install-BobReport.ps1`: `reportUrl` `http://bob.ntsa.uk/bob/v1/report`,
+IIS `irc-ntsa` + ARR → `bobcallback` `127.0.0.1:19781`, task `BobReport-ionos`.
+`report.secret` must be UTF-8 no BOM. Distribute `BOB_REPORT_SECRET` + URL to
+peers via SEAL v2 (`PRIVMSG` outbox lines, newline terminated). `irc_agent`
+accepts SEAL on Query PM (not only channel). Skills `bob-irc` + `agentic-irc`.
+
+## 2026-09-21 — Start-IrcTsr.ps1 (fleet)
+
+`agentic_build/tools/Start-IrcTsr.ps1`, `Irc-Tsr-Runner.ps1`,
+`_Start-IrcTsr-ionos.ps1`; `Watch-CursorIrc` prefers TSR over bare listen.
+Wake: `^AGENT_LOOP_WAKE_irc-tsr`. Skills updated.
+
 ## 2026-09-21 — IRC TSR required (no idle)
 
 Listener without notify/wake still goes deaf when the Cursor turn ends.

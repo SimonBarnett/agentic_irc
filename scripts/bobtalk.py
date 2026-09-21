@@ -2,6 +2,7 @@
 """Conversational English lines from bob-peers JSON (one fact per line)."""
 from __future__ import annotations
 
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -12,7 +13,31 @@ FLEET_MACHINE_ORDER = ("flamingo", "marchhare", "ionos", "ce-priority-dev1")
 BOBIVERSE_CMD = "!bobiverse"
 BOBIVERSE_COOLDOWN_S = 60.0
 BOBIVERSE_AGENT_COOLDOWN_S = 120.0
+MENTION_COOLDOWN_S = 20.0
 TRAY_PREFIX = "BOB TRAY v1 "
+_PROTOCOL_HEADS = (
+    "agpk v1 ",
+    "seal v1 ",
+    "seal v2 ",
+    "file v1 ",
+    "dumb v1 ",
+    "capa v1 ",
+    "bob tray v1 ",
+    "bob digest v1 ",
+    "bob v1 ",
+    "moot v1 point ",
+    "moot v1 open ",
+    "moot v1 join ",
+    "moot v1 part ",
+    "moot v1 floor ",
+    "moot v1 yield ",
+    "moot v1 close ",
+    "moot v1 roll ",
+    "moot v1 roster ",
+    "moot v1 handoff ",
+    "!bobiverse",
+    "!report",
+)
 
 _ID_ALIASES = {"dev1": "ce-priority-dev1", "ce-priority-dev1": "ce-priority-dev1"}
 
@@ -309,3 +334,122 @@ def change_talk_line(before: dict | None, after: dict) -> str | None:
         return None
     new_lines = peer_talk_lines(after)
     return new_lines[0] if new_lines else None
+
+
+def is_fleet_bob_nick(nick: str) -> bool:
+    return str(nick or "").strip().lower().startswith("bob-")
+
+
+def should_answer_asker(nick: str) -> bool:
+    """Do not ping-pong other bob-* Watch nicks. Humans, cursor-*, w-* yes."""
+    n = str(nick or "").strip().lower()
+    if not n or is_fleet_bob_nick(n):
+        return False
+    return True
+
+
+def say_text(body: str) -> str:
+    """Channel English, or the trailing text of MOOT v1 SAY."""
+    raw = str(body or "").replace("\x01", " ").strip()
+    low = raw.lower()
+    if low.startswith("moot v1 say "):
+        if " :" in raw:
+            return raw.split(" :", 1)[1].strip()
+        parts = raw.split(None, 4)
+        return parts[-1] if len(parts) >= 5 else ""
+    return raw
+
+
+def is_protocol_line(body: str) -> bool:
+    text = str(body or "").replace("\x01", " ").strip()
+    if not text:
+        return True
+    low = text.lower()
+    if low.startswith("\x01action") or low.startswith("action "):
+        return True
+    for head in _PROTOCOL_HEADS:
+        if low.startswith(head):
+            return True
+    if low.startswith("moot v1 say "):
+        return False
+    if low.startswith("moot v1 "):
+        return True
+    return False
+
+
+def addressed_to(body: str, nicks: list[str], to_me: bool = False) -> bool:
+    if to_me:
+        return True
+    text = say_text(body)
+    if not text:
+        return False
+    low = text.lower()
+    for nick in nicks:
+        n = str(nick or "").strip()
+        if not n:
+            continue
+        nl = n.lower()
+        if re.search(rf"(?i)(?:^|[\s])@{re.escape(nl)}(?:\b|[:,])", text):
+            return True
+        if low.startswith(nl + ":") or low.startswith(nl + ","):
+            return True
+    if re.search(r"(?i)(?:^|[\s])@all\b", text) or re.search(r"(?i)(?:^|[\s])@bobiverse\b", text):
+        return True
+    return False
+
+
+def heard_snippet(body: str, nicks: list[str], limit: int = 80) -> str:
+    text = say_text(body)
+    for nick in nicks:
+        n = str(nick or "").strip()
+        if n:
+            text = re.sub(rf"(?i)@?{re.escape(n)}\s*[:,]?\s*", " ", text)
+    text = re.sub(r"(?i)@all\b|@bobiverse\b", " ", text)
+    text = " ".join(text.split()).strip()
+    if len(text) > limit:
+        return text[: limit - 3] + "..."
+    return text
+
+
+def mention_reply_line(
+    home: Path,
+    machine_id: str,
+    nicks: list[str],
+    asker: str,
+    body: str,
+    to_me: bool = False,
+) -> str | None:
+    """One English ACK. No grok.exe. weekly=0 still answers."""
+    if not is_fleet_bob_nick(nicks[0] if nicks else ""):
+        return None
+    if not should_answer_asker(asker):
+        return None
+    if is_protocol_line(body):
+        return None
+    if not addressed_to(body, nicks, to_me=to_me):
+        return None
+    mid = display_id(machine_id)
+    peer = _resolve_peer_id(home, machine_id) or {}
+    status = (peer_talk_lines(peer) or [f"{mid} is here."])[0]
+    weekly = peer.get("weekly")
+    if weekly is None or weekly == "":
+        week = "weekly=-"
+    else:
+        try:
+            w = int(weekly)
+        except (TypeError, ValueError):
+            w = None
+        if w == 0:
+            week = "weekly=0 (cannot grok-talk)"
+        elif w is None:
+            week = "weekly=-"
+        else:
+            week = f"weekly={w}"
+    heard = heard_snippet(body, list(nicks) + ["all", "bobiverse"])
+    who = str(asker or "").strip() or "there"
+    line = f"@{who} {mid} here. {week}. {status}"
+    if heard:
+        line = f"{line} Heard: {heard}"
+    if len(line) > 350:
+        line = line[:347] + "..."
+    return line

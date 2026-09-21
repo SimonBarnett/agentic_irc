@@ -60,6 +60,10 @@ flaps the port.
    `JOIN #bobiverse` plus `JOIN #<id>`.
 
 Human monitor (flamingo): Halloy nick not `bob-*`. Type `!bobiverse`.
+Address a `bob-*` nick (`@bob-ionos`, `bob-flamingo:`, Query): that seat
+ACKs one English line (status + weekly). `weekly=0` still answers.
+Watch stays no grok.exe. Recycle Watch-Bobiverse after pull so the
+running `irc_agent` loads the mention ACK.
 
 ## Ionos Ergo down
 

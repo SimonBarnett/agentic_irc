@@ -2,7 +2,7 @@
 
 **Date:** 2026-09-22
 **Repo:** https://github.com/SimonBarnett/agentic_irc
-**GitHub issue:** (fill after `gh issue create`)
+**GitHub issue:** https://github.com/SimonBarnett/agentic_irc/issues/86
 **Raised by:** Simon (`#bobiverse`: review Mode 3 dumb client for the new setup; FR + bob job)
 **Reviewer (intake):** flamingo-17568
 **UAT + hostile MRB owner:** Bob

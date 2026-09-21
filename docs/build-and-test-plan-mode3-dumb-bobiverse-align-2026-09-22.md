@@ -1,7 +1,7 @@
 # Build-and-test plan: Mode 3 DUMB vs new bobiverse setup
 
 **FR:** `docs/feature-request-mode3-dumb-bobiverse-align-2026-09-22.md`
-**Issue:** (fill after `gh issue create`)
+**Issue:** https://github.com/SimonBarnett/agentic_irc/issues/86
 **Repo:** SimonBarnett/agentic_irc
 **Kickoff:** read the FR + this plan. Implement M3B1–M3B7. Commit and push a PR. Do not stamp UAT. Do not merge main as implementer unless harvest skill says so — open a PR.
 

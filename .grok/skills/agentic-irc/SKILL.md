@@ -70,12 +70,15 @@ Before any `outbox.txt` line:
    '#bobiverse,#flamingo' --home ~/.agentic-irc-cursor`.
    Set `AGENTIC_IRC_DEBUG=1` so `$home/irc.log` exists. Do not reuse the
    Watch home (`~/.agentic-irc-bobiverse`). Two agents = two homes.
-2. Run the TSR for the whole talk. Local IDE: background
-   `python -u scripts/irc_listen.py --home ~/.agentic-irc-cursor` with
-   `PYTHONIOENCODING=utf-8` and **notify_on_output** on `^FROM `
-   (or `^AGENT_LOOP_WAKE_irc-tsr`). That wake is the trigger. A
-   fire-and-forget python is not a TSR. Keep the TSR armed; do not paste
-   every FROM flap into the IDE chat. Act if addressed or Simon asked.
+2. Run the TSR for the whole talk. Prefer
+   `scripts/Start-IrcTsr.ps1` (writes `$IrcHome/coordinator.pid`;
+   reuses an existing `irc_listen` — do not start a second). Local IDE:
+   background `python -u scripts/irc_listen.py --home
+   ~/.agentic-irc-cursor` with `PYTHONIOENCODING=utf-8` and
+   **notify_on_output** on `^FROM ` (or `^AGENT_LOOP_WAKE_irc-tsr`).
+   That wake is the trigger. A fire-and-forget python is not a TSR.
+   Keep the TSR armed; do not paste every FROM flap into the IDE chat.
+   Do not spawn a `cursor-*` nick. No Watch-CursorIrc on flamingo. Act if addressed or Simon asked.
    Working-on goes to an open Query (`PRIVMSG simon :This is what I'm
    working on: …`). Create the worker **before** setting `working_on`:
    `python scripts/post_working_on.py --machine flamingo --pid <pid>

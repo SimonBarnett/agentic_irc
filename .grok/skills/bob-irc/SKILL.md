@@ -28,7 +28,9 @@ Do **not** point agents at `mrb-*.pdf`. Do **not** implement `!report` (#36 writ
 - `bob-<id>` JOINs fleet + shop at start. Bob drop closes `#<id>`.
 - Talk seats (Cursor or Grok, same): nick `{machine}-{pid}` (e.g.
   `flamingo-17568`). JOIN fleet + **this box's shop**. Many sessions per
-  box; pid is required. Not `cursor-*` / `grok-*`.
+  box; pid is required. Not `cursor-*` / `grok-*`. TSR:
+  `scripts/Start-IrcTsr.ps1` + `coordinator.pid`. One agent per home.
+  Do not install Watch-CursorIrc that respawns `cursor-flamingo`.
 - Workers JOIN **shop only**: `w-<shortid>-<pid>` (`w-fl-4412`). Key
   `flamingo:4412`. Home `~\.agentic-irc-bobiverse\workers\<id>\<pid>`.
 - Halloy lists only rooms you `/join`. Leftover `bob-*` panes are Query/PM,

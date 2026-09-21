@@ -1,5 +1,11 @@
 # Skill harvest log
 
+## 2026-09-21 — Start-IrcTsr + coordinator.pid
+
+Talk seat: `{machine}-{pid}` only. `scripts/Start-IrcTsr.ps1` reuses
+`irc_listen` and writes `coordinator.pid`. One `irc_agent` per home.
+Do not respawn `cursor-*`. `$Home` is read-only — use `$IrcHome`.
+
 ## 2026-09-21 — Simon ping -> pong
 
 If Simon says `ping` (plain, any room or Query), the talk seat replies

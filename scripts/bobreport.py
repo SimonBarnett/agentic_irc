@@ -41,6 +41,7 @@ FLEET_MACHINE_IDS = ("flamingo", "marchhare", "ionos", "ce-priority-dev1")
 _MERGE_PEER_FIELDS = (
     "weekly",
     "cursor_label",
+    "cursor_period_end",
     "jobs",
     "repo",
     "sha",
@@ -53,6 +54,7 @@ _MERGE_PEER_FIELDS = (
     "reset",
     "kind",
     "cur",
+    "pcent",
 )
 _TRAY_MACHINE_EXPORT_KEYS = (
     "id",
@@ -76,6 +78,7 @@ _TRAY_MACHINE_EXPORT_KEYS = (
     "repo",
     "sha",
     "cursor_label",
+    "cursor_period_end",
     "kind",
     "cur",
 )
@@ -1138,6 +1141,22 @@ def export_machine_for_tray(home: Path, mid: str, ent: dict) -> dict:
     return out
 
 
+def _cursor_pool_overage(ent: dict) -> str | None:
+    for key in ("overage", "overspend", "cursor_overage", "cursor_overspend"):
+        val = ent.get(key)
+        if val is not None and str(val).strip():
+            return str(val)
+    return None
+
+
+def _cursor_pool_period(ent: dict) -> tuple[str | None, str | None]:
+    cursor_period = ent.get("cursor_period_end")
+    if cursor_period in (None, ""):
+        return None, None
+    period_s = str(cursor_period)
+    return period_s, period_s
+
+
 def build_cursor_pools(doc: dict, machines: dict[str, dict]) -> list[dict]:
     stored = _coerce_cursor_pools(doc.get("cursor_pools"))
     if stored:
@@ -1160,16 +1179,16 @@ def build_cursor_pools(doc: dict, machines: dict[str, dict]) -> list[dict]:
         if pid in seen:
             continue
         seen.add(pid)
-        period = ent.get("period_end") or ent.get("reset")
+        period_end, reset = _cursor_pool_period(ent)
         pools.append(
             {
                 "id": pid,
                 "seat": pid,
                 "label": str(ent.get("cursor_label") or "Cursor Models"),
                 "remaining": remaining,
-                "period_end": str(period) if period else None,
-                "reset": str(ent.get("reset") or period or "") or None,
-                "overage": ent.get("cur"),
+                "period_end": period_end,
+                "reset": reset,
+                "overage": _cursor_pool_overage(ent),
             }
         )
     return pools

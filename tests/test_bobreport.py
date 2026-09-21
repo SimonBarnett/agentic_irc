@@ -356,7 +356,13 @@ def test_format_digest_whisper_tray_keys_and_chunks(tmp_path):
 def test_cursor_pools_from_pcent_when_not_stored(tmp_path):
     bobreport.apply_callback(
         tmp_path,
-        {"op": "merge", "machine": "ce-priority-dev1", "pcent": {"cursor-models": 77}, "cursor_label": "Dev1 seat"},
+        {
+            "op": "merge",
+            "machine": "ce-priority-dev1",
+            "pcent": {"cursor-models": 77},
+            "cursor_label": "Dev1 seat",
+            "period_end": "2026-09-28T00:00:00Z",
+        },
     )
     obj = bobreport.build_digest_object(tmp_path, "bob-dev1")
     pools = obj["cursor_pools"]
@@ -364,3 +370,57 @@ def test_cursor_pools_from_pcent_when_not_stored(tmp_path):
     dev1 = next(p for p in pools if p.get("seat") == "ce-priority-dev1")
     assert dev1["remaining"] == 77
     assert dev1["label"] == "Dev1 seat"
+    assert dev1["period_end"] is None
+    assert dev1["reset"] is None
+
+
+def test_cursor_pools_weekly_vs_cursor_period_and_peer_pcent(tmp_path):
+    weekly_end = "2026-09-28T00:00:00Z"
+    cursor_end = "2026-10-16T00:00:00Z"
+    bobreport.apply_callback(
+        tmp_path,
+        {
+            "op": "merge",
+            "machine": "ionos",
+            "weekly": 42,
+            "period_end": weekly_end,
+            "reset": weekly_end,
+            "pcent": {"cursor-models": 55},
+            "cursor_period_end": cursor_end,
+            "cur": "-£75.03",
+        },
+    )
+    bobstat.write_peer(
+        tmp_path,
+        {
+            "ok": True,
+            "id": "flamingo",
+            "weekly": 8,
+            "period_end": "2026-09-30T00:00:00Z",
+            "pcent": {"cursor-models": 12},
+            "cursor_period_end": cursor_end,
+            "cur": "12%",
+        },
+    )
+    obj = bobreport.build_digest_object(tmp_path, "Jeeves")
+    for pool in obj["cursor_pools"]:
+        assert pool.get("period_end") != weekly_end
+        assert pool.get("reset") != weekly_end
+        assert pool.get("overage") not in ("12%", "-£75.03")
+
+    ionos = obj["machines"]["ionos"]
+    assert ionos["period_end"] == weekly_end
+    assert ionos["cursor_period_end"] == cursor_end
+    ionos_pool = next(p for p in obj["cursor_pools"] if p.get("seat") == "ionos")
+    assert ionos_pool["period_end"] == cursor_end
+    assert ionos_pool["reset"] == cursor_end
+    assert ionos_pool["remaining"] == 55
+    assert ionos_pool.get("overage") is None
+
+    flamingo_pool = next(p for p in obj["cursor_pools"] if p.get("seat") == "flamingo")
+    assert flamingo_pool["remaining"] == 12
+    assert flamingo_pool["period_end"] == cursor_end
+
+    flamingo = obj["machines"]["flamingo"]
+    assert flamingo.get("cursor_period_end") == cursor_end
+    assert flamingo.get("cur") == "12%"

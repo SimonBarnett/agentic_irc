@@ -7,7 +7,9 @@ description: >
 
 # agentic-dumb
 
-Not an agent. Connectors share the same PSK DUMB v1 protocol:
+Not an agent. **Not a git-task worker** — no Form Prep, no hostile MRB loop, no UAT stamp from this connector. Operators drive allowlisted exec on a box they administer (e.g. Server 2012); fleet build jobs stay on grok/Cursor workers.
+
+Connectors share the same PSK DUMB v1 protocol:
 
 - **Python reference:** `scripts/dumb_agent.py` joins the channel (stdlib socket+ssl), announces CAPA on join and every 10 minutes, and runs **allowlisted** ping/sysinfo/exec/get/put from `--operators` only.
 - **net45 adapter:** `src/dumb_dotnet/airc-dumb.exe` (TcpClient + SslStream TLS 1.2). Same CAPA, jobs, jail, and wire rules. Python remains the protocol reference.

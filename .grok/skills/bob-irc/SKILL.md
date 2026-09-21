@@ -9,12 +9,15 @@ description: >
 
 # Bobiverse IRC (private Ergo)
 
-Canonical facts: `agentic_build/docs/bobiverse.md` (nicks, tray, quiet talk),
-`agentic_build/docs/bobiverse-ionos-ircd.md` (Ergo, cert, service),
-`agentic_build/config/bobiverse.json` (`host` / `port` / `nicks`).
-This repo is the protocol kit (`irc_agent.py` default `irc.ntsa.uk:6697`).
-Feature spec: `docs/feature-request-bobiverse-channel-talk-tray-pull-2026-09-21.md`
-(issue #26; supersedes DM-only `!bobiverse` for humans).
+Canonical facts (do not duplicate the nick table here): `agentic_build/docs/bobiverse.md`,
+`agentic_build/config/bobiverse.json` (`host` `irc.ntsa.uk`, `port` 6697, `nicks`).
+Registry machine id for DEV1 is **`ce-priority-dev1`** → nick `bob-dev1` (alias `dev1` in speech; same id as build repo issue #89).
+
+Live specs in **this** repo only: `docs/feature-request-house-clean-irc-kit-2026-09-21.md` (issue #34),
+`docs/multi-agent-one-host.md`, `docs/beacon-v1-2026-09-19.md`. Index: `docs/README.md`.
+Do **not** point agents at `mrb-*.pdf` / `mrb-*.md` as current spec.
+
+Protocol kit: `irc_agent.py` default `irc.ntsa.uk:6697`.
 
 **Quiet talk:** `#bobiverse` stays conversational — status lines go on the
 **channel** (one fact per `PRIVMSG` on real field change). Watch still writes
@@ -26,8 +29,8 @@ short English snapshot on the channel (~60s cooldown). Agents / Watch send
 tray refresh (not duplicated on channel). Briefer: chair `bob-*` else first
 `bob-*` on the fleet moot roster. Formatter: `scripts/bobtalk.py`.
 
-Server: Ergo 2.19.1 on ionos, TLS `irc.ntsa.uk:6697`. Channel `#bobiverse`.
-Nicks `bob-flamingo` / `bob-marchhare` / `bob-ionos` / `bob-dev1`.
+Server: Ergo on ionos, TLS `irc.ntsa.uk:6697`. Channel `#bobiverse`.
+Fleet `bob-*` nicks: see `bobiverse.json` (`flamingo`, `marchhare`, `ionos`, `ce-priority-dev1`).
 Home `~\.agentic-irc-bobiverse`.
 
 Connect secret is `~\.grok\ergo\connect.password` (env `AGENTIC_IRC_PASSWORD`).

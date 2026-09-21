@@ -47,6 +47,7 @@ That writes `beacon.url` (secret gist, `https://` only). Needs `gh`.
 
 ## Hard rules
 
+- Mode 3 thin / DUMB is **not a git-task worker** — field join and connector smoke only; no Form Prep or build-loop UAT from the elder exe.
 - The invite file / gist URL **is** the 10-minute secret. Private channel still required.
 - Win95/98/NT4/XP live IRC still not claimed.
 - Empty operators refused for unattended `--key` installs; after pair, chair becomes operator.

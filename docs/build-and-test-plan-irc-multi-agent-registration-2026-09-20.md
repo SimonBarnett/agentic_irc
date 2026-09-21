@@ -7,9 +7,9 @@
 1. Read `scripts/irc_agent.py` CAP/NICK/USER/001/JOIN timeout path; compare with working `cm-slab` session logs on IONOS.
 2. Reproduce or document: second nick same public IP → no 001.
 3. Improve TimeoutError INFO (NO 001 vs NO JOIN); add reconnect backoff.
-4. Document multi-agent-on-one-box Libera limits / workarounds in README or `docs/multi-agent-one-host.md`.
+4. Document multi-agent-on-one-box Libera limits / workarounds in `docs/multi-agent-one-host.md` (dated IONOS row + workarounds).
 5. Check Windows stdout redirect / Start-Process deadlock notes.
-6. pytest + manual notes; commit/push. Tweet UAT+MRB.
+6. pytest + manual notes; commit/push. Merc UAT+MRB; Tweet cm-tweet join re-test only.
 
 ## Success
 

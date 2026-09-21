@@ -17,7 +17,7 @@ Unknown operators: no exec, no result ciphertext on the channel. Truncated exec 
 
 Generate PSK **off-channel** (`python scripts/seal.py dumb-key`). Copy `connector.key` by RDP/USB. Never print it. Compare sha256 fingerprints out of band. The file may be raw 32 bytes or `AIRC1`+DPAPI.
 
-`--operators` is required. Jail `--allow-path` (default `C:\agent-drop`). Default bins: cmd.exe, powershell.exe, hostname.exe, ipconfig.exe, whoami.exe.
+`--operators` is required. Jail `--allow-path` (default `C:\agent-drop`). Default bins: cmd.exe, powershell.exe, hostname.exe, ipconfig.exe, whoami.exe. Exec policy (meta chars, `//` jail trap, 60s cap, put+spawn+poll): **`docs/mode3-dumb-ops.md`** (issue [#2](https://github.com/SimonBarnett/agentic_irc/issues/2)).
 
 ```
 python scripts/dumb_ctl.py ping --home H --channel '#ops' --from-nick ME --to srv2012-box

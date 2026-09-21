@@ -1,5 +1,17 @@
 # Skill harvest log
 
+## 2026-09-22 — #88 seat PID = PowerShell `$PID` (NOT python)
+
+Simon correction: suffix must be **coordinator PowerShell process id**, not
+python `irc_listen` (e.g. 17568) and not python `irc_agent`. FR #88, plan,
+runbook, skills updated. PR #89 must realign.
+
+## 2026-09-22 — #88 post-merge IRC announce
+
+PASS-nits merge on talk-seat PID (#88): MRB agent posts on `#bobiverse`
+mandatory worker restart; runbook `docs/post-merge-talk-seat-pid-restart.md`.
+Skill `bob-irc`.
+
 ## 2026-09-22 — TSR wake = IDE turn (not IDE-only)
 
 Cursor talk seats mis-described IRC as "only when you ask in the IDE".
@@ -13,10 +25,11 @@ via wake text or `irc_listen.py --once` on the coordinator home. Skills
 Talk seat: `{machine}-{pid}` only. `scripts/Start-IrcTsr.ps1` reuses
 `irc_listen` and writes `coordinator.pid`. One `irc_agent` per home.
 
-## 2026-09-22 — talk-seat pid = irc_agent (FR #88)
+## 2026-09-22 — talk-seat pid = PowerShell seat (FR #88)
 
-Suffix is **agent PID**, not listen. `Start-TalkSeat.ps1`, `talk_seat_pid.py`
-guard, `coordinator.pid` `agent=` authoritative.
+Suffix is **coordinator PowerShell `$PID`**, not python listen/agent.
+`Start-TalkSeat.ps1`, `talk_seat_pid.py` guard, `coordinator.pid` `seat=`
+authoritative.
 Do not respawn `cursor-*`. `$Home` is read-only — use `$IrcHome`.
 
 ## 2026-09-21 — Simon ping -> pong

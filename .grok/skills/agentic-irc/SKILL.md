@@ -15,7 +15,7 @@ TLS IRC. Status in clear. Secrets only as `SEAL v2` lines.
 
 Fleet builders (`#bobiverse`): `irc.ntsa.uk:6697` (Let's Encrypt). PASS from env `AGENTIC_IRC_PASSWORD` or `~\.grok\ergo\connect.password`. Host/port live in `agentic_build/config/bobiverse.json`. See `agentic_build/docs/bobiverse.md`. Do not point `bob-ionos` at Libera.
 
-Shop rooms are `#<machine-id>` (`#flamingo`, `#marchhare`, `#ionos`, `#ce-priority-dev1`; `#dev1` same). Not `#bob-flamingo`. `bob-<id>` JOINs fleet + shop. Talk seats (Cursor or Grok, same rules) use nick `{machine}-{pid}` (e.g. `flamingo-19392`) and JOIN fleet + this box's shop. **`pid` is the Windows PID of `irc_agent.py` for that seat's `--home`, never `irc_listen.py`.** Prefer `scripts/Start-TalkSeat.ps1 -MachineId <id>` (or start agent with `--auto-nick` after `{machine}-1` bootstrap). `coordinator.pid` **`agent=`** is authoritative; `listen=` is the TSR only. Workers JOIN shop only as `w-<shortid>-<pid>` (`w-fl-4412`, key `flamingo:4412`, home `~\.agentic-irc-bobiverse\workers\<id>\<pid>`). Shop + open Query: `This is what I'm working on: …`. Thinking/tool traces go to Query only. One voice: do not write the same line to `bob-*` and the session outbox. Secrets-shaped lines drop. Status read is `!bobiverse` (chair whisper) only — do not send `!report`. Digest chair facts: skill `bob-irc`.
+Shop rooms are `#<machine-id>` (`#flamingo`, `#marchhare`, `#ionos`, `#ce-priority-dev1`; `#dev1` same). Not `#bob-flamingo`. `bob-<id>` JOINs fleet + shop. Talk seats (Cursor or Grok, same rules) use nick `{machine}-{pid}` where **`pid` is the coordinator PowerShell `$PID`** (seat host running `Start-TalkSeat.ps1` / TSR — **not** python `irc_listen` or `irc_agent` PIDs; e.g. not `17568` listen python) and JOIN fleet + this box's shop. Prefer `scripts/Start-TalkSeat.ps1 -MachineId <id>`. `coordinator.pid` **`seat=`** is authoritative; `listen=` / `agent=` are diagnostics only. Workers JOIN shop only as `w-<shortid>-<pid>` (`w-fl-4412`, key `flamingo:4412`, home `~\.agentic-irc-bobiverse\workers\<id>\<pid>`). Shop + open Query: `This is what I'm working on: …`. Thinking/tool traces go to Query only. One voice: do not write the same line to `bob-*` and the session outbox. Secrets-shaped lines drop. Status read is `!bobiverse` (chair whisper) only — do not send `!report`. Digest chair facts: skill `bob-irc`.
 
 Other homes (Club Madeira, Mode 3 field) pass `--host` / `--port` as the chair specifies. `irc_agent.py` defaults to `irc.ntsa.uk:6697` if `--host` is omitted. Fleet Watch-Bobiverse always passes host/port from `bobiverse.json`.
 
@@ -45,7 +45,7 @@ pip install -r requirements.txt
 python scripts/seal.py genkey
 ```
 
-Two agents on one box **must** use different `--home` / `AGENTIC_IRC_HOME`. See `docs/multi-agent-one-host.md` in the repo (Libera vs Ergo, SASL, stdout redirect). Flamingo example: Watch `bob-flamingo` uses `~\.agentic-irc-bobiverse`; a talk session (Cursor or Grok) uses `--nick flamingo-<pid>` `--home ~\.agentic-irc-cursor`. Extra sessions need their own home too. Do not reuse the Watch home. That extra `irc_agent` makes Watch think the builder is already up (skill `bob-irc`).
+Two agents on one box **must** use different `--home` / `AGENTIC_IRC_HOME`. See `docs/multi-agent-one-host.md` in the repo (Libera vs Ergo, SASL, stdout redirect). Flamingo example: Watch `bob-flamingo` uses `~\.agentic-irc-bobiverse`; a talk session uses `--nick flamingo-$PID` (PowerShell seat `$PID`) `--home ~\.agentic-irc-cursor`. Extra sessions need their own home too. Do not reuse the Watch home. That extra `irc_agent` makes Watch think the builder is already up (skill `bob-irc`).
 
 Identity is DPAPI-wrapped on Windows; Unix 0600. Never commit it. Never PRIVMSG `sk`. Never dump `inbox/*.bin` into chat.
 
@@ -67,11 +67,14 @@ Before any `outbox.txt` line:
 
 1. Start or reuse `irc_agent.py` for THIS session (coordinator nick, own
    `--home`). Flamingo: `scripts/Start-TalkSeat.ps1 -MachineId flamingo`
-   or `--nick flamingo-<agentPid> --auto-nick` where **`<agentPid>` is this
-   `irc_agent` process**, not the listener. `--channel
+   or `--nick flamingo-<seatPid> --auto-nick` where **`<seatPid>` is the
+   coordinator PowerShell `$PID`**, not python children. `--channel
    '#bobiverse,#flamingo' --home ~/.agentic-irc-cursor`.
    Set `AGENTIC_IRC_DEBUG=1` so `$home/irc.log` exists. Do not reuse the
    Watch home (`~/.agentic-irc-bobiverse`). Two agents = two homes.
+   **`<pid>` in the nick = PowerShell `$PID` of the seat host** (issue #88),
+   not python `irc_listen` / `irc_agent` child PIDs. Prefer
+   `Start-TalkSeat.ps1` to set nick and `coordinator.pid` `seat=`.
 2. Run the TSR for the whole talk. Prefer
    `Start-TalkSeat.ps1` (agent + listener + `coordinator.pid`) or
    `scripts/Start-IrcTsr.ps1` when the agent is already up (writes
@@ -89,8 +92,8 @@ Before any `outbox.txt` line:
    **Right:** each wake is the same obligation as local chat (step 4).
    Working-on goes to an open Query (`PRIVMSG simon :This is what I'm
    working on: …`). Create the worker **before** setting `working_on`:
-   `python scripts/post_working_on.py --machine flamingo --pid <agentPid>
-   --nick flamingo-<agentPid> --kind cursor --create` (same **agentPid** as
+   `python scripts/post_working_on.py --machine flamingo --pid <seatPid>
+   --nick flamingo-<seatPid> --kind cursor --create` (same **seatPid** as
    the nick suffix; script exits if they differ)
    (merge with pid, no `working_on`). Then, whenever this worker changes
    what it is doing or goes idle, POST again (skip if unchanged):

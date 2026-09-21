@@ -15,7 +15,7 @@ Run `python scripts/seal.py genkey` once per home before first join.
 
 ## Talk seats on one box
 
-Cursor/Grok talk nicks are `{machine-id}-{pid}` on Ergo (e.g. `flamingo-19392`). The **`pid` suffix is always the Windows PID of `python … irc_agent.py --home <that-seat-home>`**, never `irc_listen.py`. Digest/webhook keys use the same pid (`post_working_on.py --pid` must match the nick suffix). Use `scripts/Start-TalkSeat.ps1 -MachineId <id>` or `irc_agent.py --auto-nick` with a `{machine}-1` bootstrap nick. `coordinator.pid` lists `listen=` (TSR) and **`agent=`** (authoritative seat id).
+Cursor/Grok talk nicks are `{machine-id}-{pid}` on Ergo (e.g. `flamingo-22400`). The **`pid` suffix is the coordinator PowerShell `$PID`** (`Start-TalkSeat.ps1` seat host), never python `irc_listen` or `irc_agent` child PIDs. Digest/webhook keys use the same pid (`post_working_on.py --pid` must match the nick suffix). Use `scripts/Start-TalkSeat.ps1 -MachineId <id>`. `coordinator.pid` lists **`seat=`** (authoritative), plus `listen=` / `agent=` for diagnostics.
 
 ## Ergo (fleet) vs Libera (legacy)
 

@@ -1,12 +1,14 @@
-"""Talk-seat identity: IRC nick {machine-id}-{agentPid} uses irc_agent PID only."""
+"""Talk-seat identity: IRC nick {machine-id}-{seatPid} uses coordinator PowerShell PID."""
 from __future__ import annotations
 
+import os
 import re
 from pathlib import Path
 
 from bobreport import FLEET_MACHINE_IDS, normalize_machine_id
 
 _COORD_LINE = re.compile(r"^([a-z_]+)=(.*)$", re.IGNORECASE)
+_SEAT_ENV = "AGENTIC_IRC_SEAT_PID"
 
 
 def parse_talk_seat_nick(nick: str) -> tuple[str, str] | None:
@@ -38,30 +40,30 @@ def nick_suffix_pid(nick: str) -> str | None:
     return parsed[1] if parsed else None
 
 
-def validate_nick_agent_pid(nick: str, agent_pid: int | str) -> bool:
+def validate_nick_seat_pid(nick: str, seat_pid: int | str) -> bool:
     suffix = nick_suffix_pid(nick)
     if suffix is None:
         return True
     try:
-        return int(suffix) == int(agent_pid)
+        return int(suffix) == int(seat_pid)
     except (TypeError, ValueError):
         return False
 
 
-def check_nick_agent_pid(nick: str, agent_pid: int | str) -> str | None:
+def check_nick_seat_pid(nick: str, seat_pid: int | str) -> str | None:
     """None if OK; else human-readable INFO line (no newline)."""
     suffix = nick_suffix_pid(nick)
     if suffix is None:
         return None
     try:
-        want = int(agent_pid)
+        want = int(seat_pid)
         have = int(suffix)
     except (TypeError, ValueError):
         return "INFO talk-seat nick suffix is not a valid pid"
     if have != want:
         return (
-            f"INFO talk-seat nick suffix {have} != irc_agent PID {want} "
-            "(use agent PID, not irc_listen PID)"
+            f"INFO talk-seat nick suffix {have} != seat PowerShell PID {want} "
+            "(not python irc_listen or irc_agent PID)"
         )
     return None
 
@@ -78,15 +80,8 @@ def parse_coordinator_pid(text: str) -> dict[str, str]:
     return out
 
 
-def coordinator_agent_pid(home: Path | str) -> int | None:
-    path = Path(home) / "coordinator.pid"
-    if not path.is_file():
-        return None
-    try:
-        doc = parse_coordinator_pid(path.read_text(encoding="utf-8"))
-    except OSError:
-        return None
-    raw = (doc.get("agent") or "").strip()
+def _seat_pid_from_doc(doc: dict[str, str]) -> int | None:
+    raw = (doc.get("seat") or doc.get("host") or "").strip()
     if not raw:
         return None
     try:
@@ -95,8 +90,39 @@ def coordinator_agent_pid(home: Path | str) -> int | None:
         return None
 
 
+def coordinator_seat_pid(home: Path | str) -> int | None:
+    path = Path(home) / "coordinator.pid"
+    if not path.is_file():
+        return None
+    try:
+        doc = parse_coordinator_pid(path.read_text(encoding="utf-8"))
+    except OSError:
+        return None
+    return _seat_pid_from_doc(doc)
+
+
+def seat_pid_from_env() -> int | None:
+    raw = (os.environ.get(_SEAT_ENV) or "").strip()
+    if not raw:
+        return None
+    try:
+        return int(raw)
+    except ValueError:
+        return None
+
+
+def resolve_seat_pid(home: Path | str | None = None) -> int | None:
+    """Coordinator PowerShell PID: env AGENTIC_IRC_SEAT_PID, then coordinator.pid seat=."""
+    pid = seat_pid_from_env()
+    if pid is not None:
+        return pid
+    if home:
+        return coordinator_seat_pid(home)
+    return None
+
+
 def check_coordinator_nick(home: Path | str) -> str | None:
-    """Validate coordinator.pid nick suffix matches authoritative agent= line."""
+    """Validate coordinator.pid nick suffix matches authoritative seat= line."""
     path = Path(home) / "coordinator.pid"
     if not path.is_file():
         return None
@@ -105,23 +131,19 @@ def check_coordinator_nick(home: Path | str) -> str | None:
     except OSError:
         return None
     nick = (doc.get("nick") or "").strip()
-    agent_raw = (doc.get("agent") or "").strip()
-    if not nick or not agent_raw:
+    seat = _seat_pid_from_doc(doc)
+    if not nick or seat is None:
         return None
-    try:
-        agent_pid = int(agent_raw)
-    except ValueError:
-        return "INFO coordinator.pid agent= is not a valid pid"
-    return check_nick_agent_pid(nick, agent_pid)
+    return check_nick_seat_pid(nick, seat)
 
 
-def auto_talk_seat_nick(nick: str, agent_pid: int) -> str:
-    """If nick is a talk-seat for a machine, rewrite suffix to agent_pid."""
+def auto_talk_seat_nick(nick: str, seat_pid: int) -> str:
+    """If nick is a talk-seat for a machine, rewrite suffix to seat_pid."""
     parsed = parse_talk_seat_nick(nick)
     if not parsed:
         return nick
     mid, _ = parsed
-    return talk_seat_nick(mid, agent_pid)
+    return talk_seat_nick(mid, seat_pid)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -136,7 +158,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.home:
         err = check_coordinator_nick(args.home)
     elif args.nick and args.pid:
-        err = check_nick_agent_pid(args.nick, args.pid)
+        err = check_nick_seat_pid(args.nick, args.pid)
     else:
         print("INFO pass --home or --nick and --pid", flush=True)
         return 1

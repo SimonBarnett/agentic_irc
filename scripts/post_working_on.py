@@ -70,7 +70,7 @@ def main() -> int:
     p.add_argument("--idle", action="store_true")
     args = p.parse_args()
     nick = (args.nick or "").strip() or "%s-%s" % (args.machine, args.pid)
-    err = talk_seat_pid.check_nick_agent_pid(nick, args.pid)
+    err = talk_seat_pid.check_nick_seat_pid(nick, args.pid)
     if err:
         print(err, flush=True)
         return 2

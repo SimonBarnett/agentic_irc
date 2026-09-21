@@ -354,8 +354,35 @@ static int selftest(void)
         if (!strstr(res, "\"op\":\"exec\"") || !strstr(res, "\"rc\":") || !strstr(res, "stdout")) {
             info("FAIL exec framing %s", res);
             fails++;
-        } else
+        }         else
             info("INFO exec stdout/rc ok");
+    }
+
+    /* exec policy: empty_argv / bin / meta / jail (C thin, not Python) */
+    {
+        static const struct {
+            const char *label;
+            const char *job;
+            const char *err;
+        } cases[] = {
+            {"empty_argv", "{\"v\":1,\"op\":\"exec\",\"id\":\"0123456789abcdef\",\"argv\":[]}", "empty_argv"},
+            {"bin", "{\"v\":1,\"op\":\"exec\",\"id\":\"0123456789abcdef\",\"argv\":[\"notepad.exe\"]}", "bin"},
+            {"meta", "{\"v\":1,\"op\":\"exec\",\"id\":\"0123456789abcdef\",\"argv\":[\"cmd.exe\",\"/c\",\"a&b\"]}", "meta"},
+            {"jail_https",
+             "{\"v\":1,\"op\":\"exec\",\"id\":\"0123456789abcdef\",\"argv\":[\"cmd.exe\",\"/c\",\"https://x.ai/\"]}", "jail"},
+        };
+        int c;
+        for (c = 0; c < (int)(sizeof(cases) / sizeof(cases[0])); c++) {
+            char res[512];
+            char needle[64];
+            run_job_json(cases[c].job, "alice", &cfg, &jail, res, sizeof(res));
+            _snprintf(needle, sizeof(needle), "\"error\":\"%s\"", cases[c].err);
+            if (!strstr(res, needle)) {
+                info("FAIL exec %s want %s got %s", cases[c].label, cases[c].err, res);
+                fails++;
+            } else
+                info("INFO exec %s -> %s ok", cases[c].label, cases[c].err);
+        }
     }
 
     /* truncation */

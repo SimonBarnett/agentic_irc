@@ -230,7 +230,7 @@ namespace AircDumb
                 {
                     string[] argv = Json.GetStringArray(jobJson, "argv");
                     if (argv == null || argv.Length < 1)
-                        return Json.Err(op, jid, "bin");
+                        return Json.Err(op, jid, "empty_argv");
                     string bin0 = Path.GetFileName(argv[0]);
                     if (string.IsNullOrEmpty(bin0) || !allowBin.Contains(bin0))
                         return Json.Err(op, jid, "bin");
@@ -240,7 +240,7 @@ namespace AircDumb
                         || joined.IndexOf("//", StringComparison.Ordinal) >= 0)
                         return Json.Err(op, jid, "jail");
                     if (!allowMeta && joined.IndexOfAny(MetaChars) >= 0)
-                        return Json.Err(op, jid, "bin");
+                        return Json.Err(op, jid, "meta");
                     int timeout = Json.GetInt(jobJson, "timeout_s", 20);
                     if (timeout < 1)
                         timeout = 1;

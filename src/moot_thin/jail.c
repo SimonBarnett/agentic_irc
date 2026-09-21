@@ -183,34 +183,34 @@ int jail_exec(Jail *j, char **argv, int argc, const char *cwd, int timeout_s,
     err[0] = 0;
     *rc = 1;
     if (j->busy)
-        return -2; /* busy */
+        return JAIL_EXEC_BUSY;
     if (argc < 1)
-        return -3;
+        return JAIL_EXEC_EMPTY;
     if (!jail_bin_ok(j, argv[0]))
-        return -3;
+        return JAIL_EXEC_BIN;
     cmdline[0] = 0;
     for (i = 0; i < argc; i++) {
         char q[256];
         quote_arg(argv[i], q, sizeof(q));
         if (i) {
             if ((int)strlen(cmdline) + 2 >= (int)sizeof(cmdline))
-                return -3;
+                return JAIL_EXEC_BIN;
             strcat(cmdline, " ");
         }
         if ((int)strlen(cmdline) + (int)strlen(q) >= (int)sizeof(cmdline))
-            return -3;
+            return JAIL_EXEC_BIN;
         strcat(cmdline, q);
     }
-    if (!jail_meta_ok(cmdline))
-        return -3;
     if (strstr(cmdline, "..") || strstr(cmdline, "\\\\") || strstr(cmdline, "//"))
-        return -4;
+        return JAIL_EXEC_JAIL;
+    if (!jail_meta_ok(cmdline))
+        return JAIL_EXEC_META;
     if (!cwd || !cwd[0])
         cwd = j->root;
     if ((cwd[0] == '\\' && cwd[1] == '\\') || (cwd[0] == '/' && cwd[1] == '/'))
-        return -4;
+        return JAIL_EXEC_JAIL;
     if (!jail_in(j, cwd))
-        return -4;
+        return JAIL_EXEC_JAIL;
     GetFullPathNameA(cwd, MAX_PATH, cwd_full, NULL);
     if (timeout_s < 1)
         timeout_s = 1;
@@ -223,7 +223,7 @@ int jail_exec(Jail *j, char **argv, int argc, const char *cwd, int timeout_s,
     sa.bInheritHandle = TRUE;
     if (!CreatePipe(&or_, &ow, &sa, 0) || !CreatePipe(&er_, &ew, &sa, 0)) {
         j->busy = 0;
-        return -1;
+        return JAIL_EXEC_FAIL;
     }
     SetHandleInformation(or_, HANDLE_FLAG_INHERIT, 0);
     SetHandleInformation(er_, HANDLE_FLAG_INHERIT, 0);
@@ -240,7 +240,7 @@ int jail_exec(Jail *j, char **argv, int argc, const char *cwd, int timeout_s,
         CloseHandle(er_);
         CloseHandle(ew);
         j->busy = 0;
-        return -1;
+        return JAIL_EXEC_FAIL;
     }
     CloseHandle(ow);
     CloseHandle(ew);
@@ -289,7 +289,7 @@ int jail_exec(Jail *j, char **argv, int argc, const char *cwd, int timeout_s,
             CloseHandle(pi.hThread);
             CloseHandle(pi.hProcess);
             j->busy = 0;
-            return -5; /* timeout */
+            return JAIL_EXEC_TIMEOUT;
         }
         (void)o;
     }

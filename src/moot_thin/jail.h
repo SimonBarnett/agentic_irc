@@ -5,6 +5,15 @@
 
 #define JAIL_BIN_MAX 32
 
+/* jail_exec status (negative); 0 = subprocess ran */
+#define JAIL_EXEC_FAIL     -1
+#define JAIL_EXEC_BUSY     -2
+#define JAIL_EXEC_BIN      -3
+#define JAIL_EXEC_JAIL     -4
+#define JAIL_EXEC_TIMEOUT  -5
+#define JAIL_EXEC_EMPTY    -6
+#define JAIL_EXEC_META     -7
+
 typedef struct Jail {
     char root[MAX_PATH];
     char bins[JAIL_BIN_MAX][64];

@@ -1,5 +1,13 @@
 # Skill harvest log
 
+## 2026-09-22 — two Cursor TUIs = two homes (no steal)
+
+Second flamingo Cursor TUI must `Start-TalkSeat -IrcHome ~\.agentic-irc-cursor-2`.
+Default `~\.agentic-irc-cursor` is the first seat. Same nick on Ergo ghosts
+the live socket (login looks like it kicks the other). `Start-TalkSeat`
+refuses to kill a live `coordinator.pid` home that belongs to another nick.
+Skill `agentic-irc`.
+
 ## 2026-09-22 — #88 seat PID = PowerShell `$PID` (NOT python)
 
 Simon correction: suffix must be **coordinator PowerShell process id**, not

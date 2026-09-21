@@ -39,12 +39,31 @@ function Stop-CursorHomeAgents {
         }
     Start-Sleep -Milliseconds 400
 }
+$coordPath = Join-Path $resolved 'coordinator.pid'
+$lockNick = ''
+$lockSeat = ''
+if (Test-Path -LiteralPath $coordPath) {
+    Get-Content -LiteralPath $coordPath | ForEach-Object {
+        if ($_ -match '^nick=(.+)$') { $lockNick = $Matches[1].Trim() }
+        if ($_ -match '^seat=(.+)$') { $lockSeat = $Matches[1].Trim() }
+    }
+}
 $agent = Get-CimInstance Win32_Process -Filter "Name='python.exe'" |
     Where-Object { $_.CommandLine -match 'irc_agent.py' -and $_.CommandLine -match [regex]::Escape($resolved) } |
     Select-Object -First 1
 $needStart = $true
 if ($agent -and ($agent.CommandLine -match '--nick\s+(\S+)')) {
     if ($Matches[1] -eq $expectedNick) { $needStart = $false }
+}
+# Two Cursor TUIs on one box: default home is the first seat. A second
+# Start-TalkSeat with a different $PID must not kill that agent (Ergo
+# ghosts the live nick; Halloy looks like login-kicks-the-other).
+if ($needStart -and $agent -and $lockNick -and $lockNick -ne $expectedNick) {
+    Write-Error @"
+home $resolved is owned by nick=$lockNick seat=$lockSeat (live irc_agent).
+This call wants $expectedNick. Use a different -IrcHome (e.g. ~/.agentic-irc-cursor-2).
+Do not reuse the first talk-seat home or the same nick.
+"@
 }
 if ($needStart) {
     Stop-CursorHomeAgents

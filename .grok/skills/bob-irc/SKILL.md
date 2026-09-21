@@ -75,10 +75,10 @@ Log: `~\.grok\long-running-background-tasks\bobcallback-ionos.log`. Task
 `BobReport-ionos`. `config/bobiverse.json` `reportUrl` is updated on install.
 Do not expose GET digest over HTTP (callback returns 405 on GET).
 
-Give fleet writers the secret with **SEAL v2** (Query or `#bobiverse` PM) or
-**FILE tier S** (`agentic-file` skill: `filexfer.py --home … offer … --tier S`
-to the peer's IRC nick, channel `#bobiverse`). Plaintext copy only on the same
-box or over an already-trusted channel.
+Give fleet **users** the webhook secret with **FILE tier S** (see `agentic-file`):
+offer to `{machine}-{pid}` **and** `bob-<machine>` (`#bobiverse` AAD). Simon
+trigger: "SEAL / give the key to flamingo|marchhare|dev1". Never paste the
+secret. Plaintext copy only on the same box or an already-trusted channel.
 
 ## Join a build box
 
@@ -87,13 +87,26 @@ box or over an already-trusted channel.
 3. Recycle **Watch-Bobiverse only**. Confirm `001` from `irc.ntsa.uk` and
    `JOIN #bobiverse` plus `JOIN #<id>`.
 
-Coordinator **`cursor-<machine-id>`** (ionos → **cursor-ionos**) must keep:
+**Jeeves** (digest chair) uses **`~\.agentic-irc-jeeves`** and `BOB_DIGEST_HOME`
+pointing at `~\.agentic-irc-bobiverse`. **Never** share the bob-ionos home —
+two agents on one home QUIT/JOIN and hello/AGPK every reconnect. Watch starts
+`bob-ionos` **without** `--hello` / `--announce-key`. Chair install same.
 
-1. `irc_agent.py` on `#bobiverse` + shop (`#ionos` on ionos) — `Watch-CursorIrc.ps1`
-2. **IRC TSR** — `tools/Start-IrcTsr.ps1` (ionos: `_Start-IrcTsr-ionos.ps1`):
+Coordinator **`{machine-id}-{pid}`** (ionos e.g. **`ionos-17568`**, pinned in
+`~\.agentic-irc-cursor\coordinator.pid`). **Do not** run a second `cursor-<id>`
+on the same home. `Watch-CursorIrc` on ionos **respawned extras** (`cursor-ionos`
++ `_l` collision) — leave it **off** until it only starts the pinned
+`{machine}-{pid}` nick. Keep:
+
+1. One `irc_agent.py` as `{machine}-{pid}` on `#bobiverse` + shop (`#ionos`)
+2. **IRC TSR** (required on JOIN — without it the seat is deaf) —
+   `tools/Start-IrcTsr.ps1` (ionos: `_Start-IrcTsr-ionos.ps1`):
    `irc_listen.py` plus `AGENT_LOOP_WAKE_irc-tsr` lines. Cursor arms
    **notify_on_output** on `^AGENT_LOOP_WAKE_irc-tsr`. Listener-only is idle.
    Outbox alone is send-only. Do not use LAN SMB to reach ionos.
+   **Watchdog:** `Watch-IrcTsr.ps1` (ionos: `_Watch-IrcTsr-ionos.ps1`) polls
+   ~45s and restarts TSR if the runner died, `irc_listen` is gone, or the
+   runner is older than 600s (stuck/deaf). Not `Watch-CursorIrc`.
 
 Human monitor (flamingo): Halloy nick not `bob-*` (e.g. `simon`).
 `%AppData%\halloy\config.toml`: server `irc.ntsa.uk:6697` TLS,

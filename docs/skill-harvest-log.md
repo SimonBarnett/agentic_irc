@@ -1,5 +1,15 @@
 # Skill harvest log
 
+## 2026-09-21 — SEAL key to users + TSR watchdog
+
+Webhook `report.secret`: FILE tier S from ionos to **both** `{machine}-{pid}`
+and `bob-<machine>` (flamingo-17568 / bob-flamingo, marchhare-24028 /
+bob-marchhare). Skills `agentic-file`, `bob-irc`.
+
+TSR harden: `agentic_build/tools/Watch-IrcTsr.ps1` + `_Watch-IrcTsr-ionos.ps1`
++ logon `IrcTsrWatch-ionos`. Poll 45s; restart if dead, no listen, or runner
+>600s. Not Watch-CursorIrc. Skills `agentic-irc`, `bob-irc`.
+
 ## 2026-09-21 — FILE tier S report.secret to flamingo
 
 Simon asks on `#bobiverse` / PM: SEAL `~\.grok\bob\report.secret` to

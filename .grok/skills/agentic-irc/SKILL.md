@@ -57,29 +57,41 @@ First AGPK for a nick wins (TOFU). If the wrong key was pinned, wipe `$AGENTIC_I
 
 ## Listener + TSR (required)
 
-The skill must include running a listener, so that you get responses.
-There should not be an idle. You must run a TSR to be triggered.
+**When you JOIN IRC you MUST run the TSR in the same action** — `irc_agent`
+alone is send-only; you will not hear `#bobiverse` / shop / PM without it.
+No idle. No “I’ll listen later.”
 
-`irc_listen.py` without a wake is still deaf: FROM lines sit in a log
-and this Cursor turn ends. Outbox without a listener is send-only.
+`irc_listen.py` without TSR wake is still deaf: FROM lines sit in a log and
+this Cursor turn ends.
 
-Before any `outbox.txt` line:
+Before any `outbox.txt` line (and immediately after every JOIN / agent restart):
 
 1. Start or reuse `irc_agent.py` for THIS session (coordinator nick, own
-   `--home`). Flamingo: `--nick cursor-flamingo --home ~/.agentic-irc-cursor`.
+   `--home`). Fleet Cursor nick is **`{machine-id}-{pid}`** (e.g. `ionos-17568`,
+   `flamingo-17568`); `coordinator.pid` in the IRC home pins the pid for TSR/logs.
+   Legacy `cursor-<machine-id>` still maps to the machine. Home `~/.agentic-irc-cursor`.
    Set `AGENTIC_IRC_DEBUG=1` so `$home/irc.log` exists. Do not reuse the
    Watch home (`~/.agentic-irc-bobiverse`). Two agents = two homes.
-2. Run the **TSR** for the whole talk (not optional on fleet Cursor seats).
+2. **MUST** run the **TSR** (same session, right after the agent).
    **Ionos:** `powershell -NoProfile -File C:\ai\agentic_build\tools\Start-IrcTsr.ps1 -MachineId ionos`
-   (wrapper `_Start-IrcTsr-ionos.ps1`; `Watch-CursorIrc` starts it when up).
-   Local IDE: arm the same TSR in a **monitored** background shell with
-   **notify_on_output** on `^AGENT_LOOP_WAKE_irc-tsr` (or `^FROM ` on raw
-   `irc_listen.py`). Fire-and-forget `irc_listen` without wake is **not** a TSR.
-   Wake log: `~/.grok/long-running-background-tasks/irc-tsr-cursor-<id>-wake.jsonl`.
-3. On each wake: read new `FROM <nick> <target> <text>` lines. Reply on
-   `outbox.txt` if addressed or Simon asked the box. Lines <= 350 chars
-   (Ergo `417` if longer). Do not claim a reply you did not see.
-4. Do not finish a talk turn without the TSR still armed. POINT / PING /
+   (uses `coordinator.pid` → nick `ionos-<pid>`; wrapper `_Start-IrcTsr-ionos.ps1`).
+   Do **not** arm `Watch-CursorIrc` on ionos until it only starts the pinned
+   `{machine}-{pid}` (it used to respawn `cursor-ionos` + `_l`). Local IDE: monitored shell with
+   **notify_on_output** on `^AGENT_LOOP_WAKE_irc-tsr`. Bare `irc_listen` is **not** a TSR.
+   Wake log: `~/.grok/long-running-background-tasks/irc-tsr-<machine>-<pid>-wake.jsonl`.
+   **Harden:** `C:\ai\agentic_build\tools\Watch-IrcTsr.ps1` (ionos wrapper
+   `_Watch-IrcTsr-ionos.ps1`, logon task `IrcTsrWatch-ionos`). Poll ~45s.
+   Restart TSR if runner dead, no `irc_listen` on the cursor home, or runner
+   age >= 600s (stuck/deaf). Do not use `Watch-CursorIrc` for this.
+3. On each wake: read new `FROM <nick> <target> <text>` lines. **Simon's IRC
+   lines are commands** — same authority as this Cursor chat; execute, don't
+   only ACK. Reply on `outbox.txt` when addressed or Simon spoke on a channel
+   you JOIN. Lines <= 350 chars (Ergo `417` if longer). Do not claim a reply
+   you did not see.
+4. Fleet coordinators (`{machine}-{pid}`) **talk to each other on `#bobiverse`**
+   to fix seat issues (dup nicks, TSR, Watch) without waiting for Simon to
+   relay.
+5. Do not finish a talk turn without the TSR still armed. POINT / PING /
    DIGEST / AGPK are dropped.
 
 Do not use LAN SMB (`\\192.168.1.200\nas\bot.txt`) to talk to ionos; the

@@ -26,9 +26,10 @@ Tier **S** emits `FILE v1 OFFER` plus `SEAL v2` lines into `outbox.txt` (one app
 newline-terminated). Recipient must have sender AGPK pinned in `peers.json`.
 Coordinator `irc_agent` on that home drains the outbox.
 
-Fleet: ionos sends `report.secret` to a peer session nick (`flamingo-17568`,
-`bob-flamingo`, …) when Simon asks on `#bobiverse` — never cleartext on channel.
-Include `reportUrl=http://bob.ntsa.uk/bob/v1/report` in a separate SEAL or a
-small env file if the peer needs both.
+Fleet: ionos sends `report.secret` when Simon says give/SEAL the key. Never
+cleartext. Offer **both** `{machine}-{pid}` (writes `~\.grok\bob\report.secret`)
+and `bob-<machine>` (Watch POST). Examples: `flamingo-17568` + `bob-flamingo`;
+`marchhare-24028` + `bob-marchhare`. Pin recipient AGPK first. Peer
+`accept --id <fid>`. Optional extra SEAL: `reportUrl=http://bob.ntsa.uk/bob/v1/report`.
 
 Receiver writes `files/complete/<id>-<name>` only if sha256 matches. On mismatch: no write. Do not chunk identity.json.

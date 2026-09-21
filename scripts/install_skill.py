@@ -23,6 +23,8 @@ SCRIPTS = (
     "bobcallback.py",
     "bobtalk.py",
     "bobstat.py",
+    "grok_talk.py",
+    "grok_talk_drain.py",
 )
 SKILLS = (
     "agentic-irc",

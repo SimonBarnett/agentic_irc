@@ -189,7 +189,7 @@ def test_dotnet_offline_meta_rejected(tmp_path):
     (tmp_path / "drop").mkdir()
     out = _offline(tmp_path, {"v": 1, "op": "exec", "id": JID, "argv": ["cmd.exe", "/c", "dir & whoami"]})
     assert out["ok"] is False
-    assert out["error"] == "bin"
+    assert out["error"] == "meta"
 
 
 @pytest.mark.skipif(_exe() is None, reason="airc-dumb.exe not built")

@@ -154,7 +154,35 @@ def test_d8_meta_chars_rejected(tmp_path):
         key32=key, operators={"alice"}, allow_path=tmp_path,
     )
     assert out["ok"] is False
-    assert out["error"] == "bin"
+    assert out["error"] == "meta"
+
+
+def test_exec_empty_argv(tmp_path):
+    key = os.urandom(32)
+    job = {"v": 1, "op": "exec", "id": JID, "argv": []}
+    out = dumb_agent.handle_dumb_payload(
+        _blob(job, key), channel="#ops", to_nick="box", from_nick="alice", msg_id=JID,
+        key32=key, operators={"alice"}, allow_path=tmp_path,
+    )
+    assert out["ok"] is False
+    assert out["error"] == "empty_argv"
+
+
+def test_exec_https_url_in_argv_is_jail(tmp_path):
+    """https:// contains // — rejected as jail, not as a special URL allowlist."""
+    key = os.urandom(32)
+    job = {
+        "v": 1,
+        "op": "exec",
+        "id": JID,
+        "argv": ["powershell.exe", "-Command", "Invoke-WebRequest https://example.com/install.ps1"],
+    }
+    out = dumb_agent.handle_dumb_payload(
+        _blob(job, key), channel="#ops", to_nick="box", from_nick="alice", msg_id=JID,
+        key32=key, operators={"alice"}, allow_path=tmp_path,
+    )
+    assert out["ok"] is False
+    assert out["error"] == "jail"
 
 
 def test_busy(tmp_path):

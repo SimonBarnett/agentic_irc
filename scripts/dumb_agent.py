@@ -116,7 +116,7 @@ def run_job(
         try:
             argv = job.get("argv") or []
             if not argv:
-                return {"v": 1, "op": "exec", "id": jid, "ok": False, "error": "bin"}
+                return {"v": 1, "op": "exec", "id": jid, "ok": False, "error": "empty_argv"}
             bin0 = Path(str(argv[0])).name.lower()
             if bin0 not in {x.lower() for x in allow_bin}:
                 return {"v": 1, "op": "exec", "id": jid, "ok": False, "error": "bin"}
@@ -124,7 +124,7 @@ def run_job(
             if any(tok in joined for tok in ("..", "\\\\", "//")):
                 return {"v": 1, "op": "exec", "id": jid, "ok": False, "error": "jail"}
             if not allow_meta and any(ch in joined for ch in META_CHARS):
-                return {"v": 1, "op": "exec", "id": jid, "ok": False, "error": "bin"}
+                return {"v": 1, "op": "exec", "id": jid, "ok": False, "error": "meta"}
             timeout = int(job.get("timeout_s") or 20)
             timeout = max(1, min(60, timeout))
             cwd = job.get("cwd") or str(allow_path)

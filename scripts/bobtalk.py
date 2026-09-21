@@ -11,6 +11,8 @@ FLEET_MOOT_ID = "b0b1be15e0000001"
 FLEET_MACHINE_ORDER = ("flamingo", "marchhare", "ionos", "ce-priority-dev1")
 BOBIVERSE_CMD = "!bobiverse"
 BOBIVERSE_COOLDOWN_S = 60.0
+BOBIVERSE_AGENT_COOLDOWN_S = 120.0
+TRAY_PREFIX = "BOB TRAY v1 "
 
 _ID_ALIASES = {"dev1": "ce-priority-dev1", "ce-priority-dev1": "ce-priority-dev1"}
 
@@ -48,6 +50,16 @@ def parse_bobiverse_command(body: str) -> bool:
     return text.split(None, 1)[0].lower() == BOBIVERSE_CMD
 
 
+def is_tray_asker(nick: str) -> bool:
+    """Fleet agents / Watch use tray pull (~120s); humans read channel talk."""
+    return (nick or "").strip().lower().startswith("bob-")
+
+
+def _repo_ok(repo: object) -> bool:
+    s = str(repo or "").strip()
+    return bool(s) and s not in ("?", "-")
+
+
 def _resolve_peer_id(home: Path, machine_id: str) -> dict | None:
     mid = _ID_ALIASES.get(machine_id, machine_id)
     peer = bobstat.read_peer(home, mid)
@@ -83,6 +95,19 @@ def _running_job(peer: dict) -> dict | None:
     for j in list(peer.get("jobs") or []):
         if str(j.get("state", "")).lower() == "running":
             return j
+    return None
+
+
+def effective_repo(peer: dict, job: dict | None = None) -> str | None:
+    """Top-level repo, else running job — never treat '?' as known."""
+    if _repo_ok(peer.get("repo")):
+        return str(peer.get("repo")).strip()
+    j = job if job is not None else _running_job(peer)
+    if j and _repo_ok(j.get("repo")):
+        return str(j.get("repo")).strip()
+    for j in list(peer.get("jobs") or []):
+        if _repo_ok(j.get("repo")):
+            return str(j.get("repo")).strip()
     return None
 
 
@@ -172,8 +197,8 @@ def peer_talk_lines(peer: dict | None) -> list[str]:
         lines.append(f"{mid} is on {model} now.")
 
     kind = peer.get("kind")
-    repo = peer.get("repo") or (job.get("repo") if job else None)
-    phrase = _kind_phrase(str(kind) if kind else "", str(repo) if repo else "")
+    repo = effective_repo(peer, job)
+    phrase = _kind_phrase(str(kind) if kind else "", repo or "")
     if phrase:
         lines.append(phrase)
     elif repo:
@@ -213,6 +238,41 @@ def network_talk_lines(home: Path) -> list[str]:
     return lines
 
 
+def _tray_jobs_field(peer: dict) -> str:
+    parts: list[str] = []
+    for j in list(peer.get("jobs") or []):
+        repo = effective_repo({"repo": j.get("repo")}, j) or ""
+        state = str(j.get("state") or "running").replace(" ", "")
+        if repo and state:
+            parts.append(f"{repo}:{state}")
+    return ",".join(parts) if parts else "-"
+
+
+def format_tray_peer_line(peer: dict) -> str:
+    """One machine-readable line for tray / bob-peers refresh (no secrets)."""
+    mid = str(peer.get("id") or "").strip()
+    running = int(peer.get("running") or 0)
+    queued = int(peer.get("queued") or 0)
+    weekly = peer.get("weekly")
+    w = "-" if weekly is None or weekly == "" else str(int(weekly))
+    repo = effective_repo(peer) or "-"
+    kind = str(peer.get("kind") or "-").replace(" ", "")
+    model = str(peer.get("model") or "-").replace(" ", "")
+    seen = str(peer.get("lastSeen") or "-")
+    return (
+        f"{TRAY_PREFIX}id={mid} weekly={w} running={running} queued={queued} "
+        f"repo={repo} kind={kind} model={model} lastSeen={seen} jobs={_tray_jobs_field(peer)}"
+    )
+
+
+def tray_pull_lines(home: Path) -> list[str]:
+    """Agent !bobiverse answer: last update per fleet machine (whisper to asker)."""
+    peers = list_fleet_peers(home)
+    if not peers:
+        return [f"{TRAY_PREFIX}id=- weekly=- running=0 queued=0 repo=- kind=- model=- lastSeen=- jobs=-"]
+    return [format_tray_peer_line(p) for p in peers]
+
+
 def change_talk_line(before: dict | None, after: dict) -> str | None:
     """One short channel line when a named field flips (not lastSeen-only)."""
     if not after:
@@ -234,7 +294,7 @@ def change_talk_line(before: dict | None, after: dict) -> str | None:
         ]
         job = _running_job(doc)
         if job:
-            parts.append(str(job.get("repo") or ""))
+            parts.append(effective_repo(doc, job) or "")
         return "|".join(parts)
 
     if _sig(before) == _sig(after):

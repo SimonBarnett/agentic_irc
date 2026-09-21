@@ -168,6 +168,7 @@ class Client:
         self.sasl_903 = threading.Event()
         self.sasl_fail = threading.Event()
         self._bobiverse_last_query: dict[str, float] = {}
+        self._bobiverse_last_tray: dict[str, float] = {}
 
     def send(self, line: str) -> None:
         assert self.sock is not None
@@ -219,7 +220,7 @@ class Client:
         self._deliver_whispers(joiner, lines)
         info(f"INFO bobiverse brief to={joiner} lines={len(lines)}")
 
-    def _answer_bobiverse(self, asker: str) -> bool:
+    def _answer_bobiverse(self, asker: str, on_channel: bool) -> bool:
         who = (asker or "").strip()
         if not who or who.lower() in self._mine_nicks():
             return True
@@ -227,13 +228,26 @@ class Client:
             return True
         now = time.time()
         key = who.lower()
-        last = self._bobiverse_last_query.get(key, 0.0)
-        if now - last < bobtalk.BOBIVERSE_COOLDOWN_S:
+        tray = bobtalk.is_tray_asker(who)
+        cooldown = bobtalk.BOBIVERSE_AGENT_COOLDOWN_S if tray else bobtalk.BOBIVERSE_COOLDOWN_S
+        last_map = self._bobiverse_last_tray if tray else self._bobiverse_last_query
+        last = last_map.get(key, 0.0)
+        if now - last < cooldown:
             return True
-        self._bobiverse_last_query[key] = now
+        last_map[key] = now
+        if tray:
+            lines = bobtalk.tray_pull_lines(self.home)
+            self._deliver_whispers(who, lines)
+            info(f"INFO bobiverse tray to={who} lines={len(lines)}")
+            return True
         lines = bobtalk.network_talk_lines(self.home)
-        self._deliver_whispers(who, lines)
-        info(f"INFO bobiverse answer to={who} lines={len(lines)}")
+        if on_channel:
+            for line in lines:
+                if line:
+                    self.say(line)
+        else:
+            self._deliver_whispers(who, lines)
+        info(f"INFO bobiverse answer to={who} channel={on_channel} lines={len(lines)}")
         return True
 
     def connect(self) -> ssl.SSLSocket:
@@ -325,8 +339,13 @@ class Client:
         elif ml.verb == "POINT" and (ml.text or "").startswith("BOB v1"):
             doc = bobstat.parse_bob_point(ml.text)
             if doc:
+                before = bobstat.read_peer(self.home, doc["id"])
                 bobstat.write_peer(self.home, doc)
                 info(f"INFO bobstat id={doc['id']} from={src}")
+                if self._is_briefer():
+                    talk = bobtalk.change_talk_line(before, doc)
+                    if talk:
+                        self.say(talk)
 
     def handle_file(self, src: str, body: str) -> None:
         fl = wire.parse_file_line(body)
@@ -403,7 +422,7 @@ class Client:
         if not to_channel and not to_me:
             return
         if bobtalk.parse_bobiverse_command(body):
-            self._answer_bobiverse(src)
+            self._answer_bobiverse(src, to_channel)
             return
         if not to_channel:
             return

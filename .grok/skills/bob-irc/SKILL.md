@@ -13,14 +13,18 @@ Canonical facts: `agentic_build/docs/bobiverse.md` (nicks, tray, quiet talk),
 `agentic_build/docs/bobiverse-ionos-ircd.md` (Ergo, cert, task),
 `agentic_build/config/bobiverse.json` (`host` / `port` / `nicks`).
 This repo is the protocol kit (`irc_agent.py` default `irc.ntsa.uk:6697`).
-Feature spec (parked): `docs/feature-request-bobiverse-quiet-talk-2026-09-20.md`.
+Feature spec: `docs/feature-request-bobiverse-channel-talk-tray-pull-2026-09-21.md`
+(issue #26; supersedes DM-only `!bobiverse` for humans).
 
-**Quiet talk:** `#bobiverse` stays conversational. Watch still writes
+**Quiet talk:** `#bobiverse` stays conversational — status lines go on the
+**channel** (one fact per `PRIVMSG` on real field change). Watch still writes
 `bob-peers\<id>.json` for the tray; do not POINT a full `BOB v1` blob every
-Watch tick (producer dedupe / talk lines in `agentic_build`). Join and
-`!bobiverse` get a **DM sequence** (one fact per `PRIVMSG`, flood delay):
-chair `bob-*` else first `bob-*` on the fleet moot roster answers; channel
-does not echo the snapshot. Formatter: `scripts/bobtalk.py`.
+Watch tick (producer dedupe in `agentic_build`). Fleet `bob-*` join still gets
+a **DM brief** from the briefer. Humans type `!bobiverse` in channel for a
+short English snapshot on the channel (~60s cooldown). Agents / Watch send
+`!bobiverse` ~every **120s** and get **`BOB TRAY v1`** lines by whisper for
+tray refresh (not duplicated on channel). Briefer: chair `bob-*` else first
+`bob-*` on the fleet moot roster. Formatter: `scripts/bobtalk.py`.
 
 Server: Ergo 2.19.1 on ionos, TLS `irc.ntsa.uk:6697`. Channel `#bobiverse`.
 Nicks `bob-flamingo` / `bob-marchhare` / `bob-ionos` / `bob-dev1`.
@@ -54,8 +58,9 @@ Scripts must not assign PowerShell `$HOME` (automatic, read-only). Use `$ircHome
 Human monitor (flamingo): Halloy, nick not `bob-*` (e.g. `simon`).
 `%AppData%\halloy\config.toml`: server `irc.ntsa.uk:6697` TLS,
 `password_file` = connect.password, channel `#bobiverse`.
-Pull status: type `!bobiverse` in channel or PM a `bob-*` nick; answers
-arrive as whispers only (per-nick cooldown).
+Pull status: type `!bobiverse` in `#bobiverse` for an in-channel snapshot
+(per-nick ~60s cooldown), or PM a `bob-*` nick. Fleet agents use `!bobiverse`
+for tray pull (`BOB TRAY v1` whispers, ~120s).
 
 One-shot: `agentic_build\tools\Install-BobIrc.ps1 -MachineId <id>`.
 Ircd on ionos: `Install-BobIrcd.ps1` / task `BobIrcd-ionos`.

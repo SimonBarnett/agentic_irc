@@ -66,6 +66,11 @@ Stdout is INFO only (`AGENTIC_IRC_DEBUG=1` writes `irc.log`). Registration failu
 
 Fleet daemon, firewall, and Watch-Bobiverse recycle: skill `bob-irc`.
 
+Fleet `bob-*` seats ACK every addressed line (#54). Optional grok-talk enqueue
+(`grok-inbox.jsonl`) when `AGENTIC_IRC_GROK_TALK=1` or `grok-talk.json` enables
+it and peer `weekly` > 0; completions drain to `outbox.txt` per
+`docs/grok-talk-envelope-v1.md`. No grok.exe inside `irc_agent` ACK path.
+
 ## Secrets
 
 ```bash

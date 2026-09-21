@@ -62,8 +62,13 @@ flaps the port.
 Human monitor (flamingo): Halloy nick not `bob-*`. Type `!bobiverse`.
 Address a `bob-*` nick (`@bob-ionos`, `bob-flamingo:`, Query): that seat
 ACKs one English line (status + weekly). `weekly=0` still answers.
+Optional **grok-talk** (LLM listen+reply) is off by default: set
+`grok-talk.json` `{"grok_talk_enabled": true}` or env `AGENTIC_IRC_GROK_TALK=1`
+on a seat after UAT; requires `weekly` > 0. Jobs go to
+`grok-inbox.jsonl`; completions via `grok-outbox.jsonl` → `outbox.txt`
+(`docs/grok-talk-envelope-v1.md`, `scripts/grok_talk_drain.py`).
 Watch stays no grok.exe. Recycle Watch-Bobiverse after pull so the
-running `irc_agent` loads the mention ACK.
+running `irc_agent` loads mention ACK + grok-talk hooks.
 
 ## Ionos Ergo down
 

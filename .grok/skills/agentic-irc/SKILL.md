@@ -88,7 +88,9 @@ Before any `outbox.txt` line:
    **401** means this box's `report.secret` is not ionos's.
    Do not print `report.secret`. Watch fleet POST is agentic_build#141.
 3. On each wake: read new `FROM <nick> <target> <text>` lines. Reply on
-   `outbox.txt` if addressed or Simon asked the box. Lines <= 350 chars
+   `outbox.txt` if addressed or Simon asked the box. If Simon says
+   `ping` (plain, any room or Query), reply `pong` on that same target.
+   Lines <= 350 chars
    (Ergo `417` if longer). `say()` hits the first `--channel` only
    (`#bobiverse`). Use a raw `PRIVMSG #flamingo :` or `PRIVMSG simon :`
    line for shop or Query. Do not claim a reply you did not see.

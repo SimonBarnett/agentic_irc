@@ -1,5 +1,10 @@
 # Skill harvest log
 
+## 2026-09-21 — Simon ping -> pong
+
+If Simon says `ping` (plain, any room or Query), the talk seat replies
+`pong` on that same target. Skills `agentic-irc` + `bob-irc`.
+
 ## 2026-09-21 — live reportUrl irc.ntsa.uk:80
 
 Digest write URL is `http://irc.ntsa.uk:80/bob/v1/report`. GET 405,

@@ -70,7 +70,8 @@ Shop: conversation stdout + `This is what I'm working on: …`
 Open Query (Halloy PM): working-on + thinking/tool traces.
 One voice: the `{machine}-{pid}` seat talks. Do not write the same line
 to both `bob-*` and the session outbox. Secrets-shaped lines: drop.
-Workers never JOIN `#bobiverse`.
+Workers never JOIN `#bobiverse`. If Simon says `ping` (plain), reply
+`pong` on the same target.
 
 ## Connect
 

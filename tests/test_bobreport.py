@@ -6,6 +6,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 import bobreport
+import bobstat
 
 
 def setup_function() -> None:
@@ -134,7 +135,7 @@ def test_bobiverse_forms(tmp_path):
     assert miss == [bobreport.NO_MACHINE]
     bobreport.start_worker(tmp_path, "flamingo", 4412, "agentic_irc shop-channel FR")
     one = bobreport.format_digest_whisper_lines(tmp_path, "bob-flamingo", form="machine", machine_id="flamingo")
-    parsed = json.loads(one[0] if one[0].startswith("{") else one[-1].split(" ", 3)[-1])
+    parsed = _digest_json_from_whisper(one)
     assert parsed["id"] == "flamingo"
     assert "4412" in parsed["workers"]
     full = bobreport.format_digest_whisper_lines(tmp_path, "bob-flamingo", form="full")
@@ -233,3 +234,193 @@ def test_merge_peer_fields_fuel_and_duplicate(tmp_path):
     changed = bobreport.apply_callback(tmp_path, {**payload, "fuel": "grok.exe"})
     assert changed.ok and changed.changed
     assert bobreport.load_digest(tmp_path)["machines"]["ionos"]["fuel"] == "grok.exe"
+
+
+TRAY_MACHINE_REQUIRED = (
+    "id",
+    "nick",
+    "shop",
+    "online",
+    "status",
+    "working_on",
+    "workers",
+    "weekly",
+    "period_end",
+    "lastSeen",
+    "running",
+    "queued",
+    "jobs",
+)
+
+
+def _digest_json_from_whisper(lines: list[str]) -> dict:
+    pieces: list[str] = []
+    for line in lines:
+        if line.startswith("{"):
+            pieces.append(line)
+        elif line.startswith("BOB DIGEST v1 "):
+            pieces.append(line[len("BOB DIGEST v1 ") :].split(" ", 1)[1])
+    return json.loads("".join(pieces))
+
+
+def test_build_digest_tray_complete_shape(tmp_path):
+    bobreport.apply_callback(
+        tmp_path,
+        {
+            "op": "merge",
+            "machine": "ionos",
+            "weekly": 42,
+            "lastSeen": "2026-09-21T00:00:00Z",
+            "running": 1,
+            "queued": 0,
+            "period_end": "2026-09-28T00:00:00Z",
+            "jobs": [
+                {
+                    "repo": "SimonBarnett/agentic_irc",
+                    "sha": "abc1234",
+                    "model": "composer-2.5",
+                    "description": "systray digest",
+                    "state": "running",
+                    "run_time": "5m",
+                }
+            ],
+            "pcent": {"cursor-models": 55},
+            "cursor_label": "Composer",
+        },
+    )
+    doc = bobreport.load_digest(tmp_path)
+    doc["cursor_pools"] = [
+        {
+            "id": "ionos",
+            "label": "Cursor Models",
+            "remaining": 55,
+            "period_end": "2026-09-28T00:00:00Z",
+        }
+    ]
+    doc["chairNick"] = "Jeeves"
+    bobreport.save_digest(tmp_path, doc)
+    bobstat.write_peer(
+        tmp_path,
+        {
+            "ok": True,
+            "id": "flamingo",
+            "weekly": 8,
+            "running": 0,
+            "queued": 1,
+            "lastSeen": "2026-09-21T01:00:00Z",
+            "jobs": [],
+        },
+    )
+    obj = bobreport.build_digest_object(tmp_path, "bob-flamingo")
+    assert obj["chairNick"] == "Jeeves"
+    assert len(obj["cursor_pools"]) >= 1
+    for mid in bobreport.FLEET_MACHINE_IDS:
+        ent = obj["machines"][mid]
+        for key in TRAY_MACHINE_REQUIRED:
+            assert key in ent, f"{mid} missing {key}"
+    ionos = obj["machines"]["ionos"]
+    assert ionos["weekly"] == 42
+    assert ionos["jobs"][0]["sha"] == "abc1234"
+    assert ionos["jobs"][0]["run_time"] == "5m"
+    assert obj["machines"]["flamingo"]["weekly"] == 8
+    assert obj["machines"]["flamingo"]["queued"] == 1
+    raw = json.dumps(obj)
+    assert "password=" not in raw.lower()
+    assert "xai_api_key=" not in raw.lower()
+
+
+def test_format_digest_whisper_tray_keys_and_chunks(tmp_path):
+    bobreport.apply_callback(
+        tmp_path,
+        {
+            "op": "merge",
+            "machine": "marchhare",
+            "pcent": {"cursor-models": 12},
+            "weekly": 4,
+            "period_end": "2026-09-30T00:00:00Z",
+        },
+    )
+    agent_lines = bobreport.format_digest_whisper_lines(
+        tmp_path, "Jeeves", form="full", english=False
+    )
+    assert agent_lines
+    assert not any("I am offline" in x and x.startswith("flamingo") for x in agent_lines)
+    obj = _digest_json_from_whisper(agent_lines)
+    assert "cursor_pools" in obj
+    assert len(obj["cursor_pools"]) >= 1
+    human_lines = bobreport.format_digest_whisper_lines(tmp_path, "Jeeves", form="full", english=True)
+    assert any("I am offline" in x or "I am online" in x for x in human_lines)
+    assert _digest_json_from_whisper(human_lines)
+
+
+def test_cursor_pools_from_pcent_when_not_stored(tmp_path):
+    bobreport.apply_callback(
+        tmp_path,
+        {
+            "op": "merge",
+            "machine": "ce-priority-dev1",
+            "pcent": {"cursor-models": 77},
+            "cursor_label": "Dev1 seat",
+            "period_end": "2026-09-28T00:00:00Z",
+        },
+    )
+    obj = bobreport.build_digest_object(tmp_path, "bob-dev1")
+    pools = obj["cursor_pools"]
+    assert pools
+    dev1 = next(p for p in pools if p.get("seat") == "ce-priority-dev1")
+    assert dev1["remaining"] == 77
+    assert dev1["label"] == "Dev1 seat"
+    assert dev1["period_end"] is None
+    assert dev1["reset"] is None
+
+
+def test_cursor_pools_weekly_vs_cursor_period_and_peer_pcent(tmp_path):
+    weekly_end = "2026-09-28T00:00:00Z"
+    cursor_end = "2026-10-16T00:00:00Z"
+    bobreport.apply_callback(
+        tmp_path,
+        {
+            "op": "merge",
+            "machine": "ionos",
+            "weekly": 42,
+            "period_end": weekly_end,
+            "reset": weekly_end,
+            "pcent": {"cursor-models": 55},
+            "cursor_period_end": cursor_end,
+            "cur": "-£75.03",
+        },
+    )
+    bobstat.write_peer(
+        tmp_path,
+        {
+            "ok": True,
+            "id": "flamingo",
+            "weekly": 8,
+            "period_end": "2026-09-30T00:00:00Z",
+            "pcent": {"cursor-models": 12},
+            "cursor_period_end": cursor_end,
+            "cur": "12%",
+        },
+    )
+    obj = bobreport.build_digest_object(tmp_path, "Jeeves")
+    for pool in obj["cursor_pools"]:
+        assert pool.get("period_end") != weekly_end
+        assert pool.get("reset") != weekly_end
+        assert pool.get("overage") not in ("12%", "-£75.03")
+
+    ionos = obj["machines"]["ionos"]
+    assert ionos["period_end"] == weekly_end
+    assert ionos["cursor_period_end"] == cursor_end
+    ionos_pool = next(p for p in obj["cursor_pools"] if p.get("seat") == "ionos")
+    assert ionos_pool["period_end"] == cursor_end
+    assert ionos_pool["reset"] == cursor_end
+    assert ionos_pool["remaining"] == 55
+    assert ionos_pool.get("overage") is None
+
+    flamingo_pool = next(p for p in obj["cursor_pools"] if p.get("seat") == "flamingo")
+    assert flamingo_pool["remaining"] == 12
+    assert flamingo_pool["period_end"] == cursor_end
+
+    flamingo = obj["machines"]["flamingo"]
+    assert flamingo.get("cursor_period_end") == cursor_end
+    assert flamingo.get("cur") == "12%"

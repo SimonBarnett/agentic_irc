@@ -41,11 +41,46 @@ FLEET_MACHINE_IDS = ("flamingo", "marchhare", "ionos", "ce-priority-dev1")
 _MERGE_PEER_FIELDS = (
     "weekly",
     "cursor_label",
+    "cursor_period_end",
     "jobs",
     "repo",
     "sha",
     "model",
     "fuel",
+    "lastSeen",
+    "running",
+    "queued",
+    "period_end",
+    "reset",
+    "kind",
+    "cur",
+    "pcent",
+)
+_TRAY_MACHINE_EXPORT_KEYS = (
+    "id",
+    "nick",
+    "shop",
+    "online",
+    "status",
+    "working_on",
+    "workers",
+    "weekly",
+    "period_end",
+    "reset",
+    "lastSeen",
+    "running",
+    "queued",
+    "jobs",
+    "pcent",
+    "uptime_since",
+    "fuel",
+    "model",
+    "repo",
+    "sha",
+    "cursor_label",
+    "cursor_period_end",
+    "kind",
+    "cur",
 )
 WORKER_NICK_RE = re.compile(r"^w-([a-z0-9]+)-(\d+)_?$", re.I)
 
@@ -314,6 +349,16 @@ def _coerce_machine(mid: str, raw: object) -> dict:
     for key in _MERGE_PEER_FIELDS:
         if key in raw and raw[key] is not None:
             base[key] = raw[key]
+    if "running" in base:
+        try:
+            base["running"] = int(base["running"])
+        except (TypeError, ValueError):
+            base["running"] = 0
+    if "queued" in base:
+        try:
+            base["queued"] = int(base["queued"])
+        except (TypeError, ValueError):
+            base["queued"] = 0
     return base
 
 
@@ -331,6 +376,9 @@ def _ensure_seats(doc: dict) -> dict:
     doc.setdefault("events", [])
     if not isinstance(doc["events"], list):
         doc["events"] = []
+    pools = doc.get("cursor_pools")
+    if pools is not None and not isinstance(pools, list):
+        doc["cursor_pools"] = []
     return doc
 
 
@@ -592,6 +640,16 @@ def _apply_merge_payload(doc: dict, mid: str, payload: dict) -> list[str]:
         if key == "jobs" and not isinstance(val, list):
             continue
         ent[key] = val
+    if "running" in ent:
+        try:
+            ent["running"] = int(ent["running"])
+        except (TypeError, ValueError):
+            ent["running"] = 0
+    if "queued" in ent:
+        try:
+            ent["queued"] = int(ent["queued"])
+        except (TypeError, ValueError):
+            ent["queued"] = 0
     return actions
 
 
@@ -813,9 +871,13 @@ def apply_callback(home: Path, payload: dict, briefer_nick: str = "") -> Callbac
         doc = load_digest(home)
         ent_before = copy.deepcopy(_machine_entry(doc, mid))
         fp_before = _machine_fingerprint(ent_before)
+        pools_before = copy.deepcopy(doc.get("cursor_pools"))
+        if isinstance(payload.get("cursor_pools"), list):
+            doc["cursor_pools"] = _coerce_cursor_pools(payload["cursor_pools"])
         actions = _apply_merge_payload(doc, mid, payload)
         fp_after = _machine_fingerprint(_machine_entry(doc, mid))
-        if fp_before == fp_after:
+        pools_after = doc.get("cursor_pools")
+        if fp_before == fp_after and pools_before == pools_after:
             return CallbackOutcome(ok=True, changed=False, actions=[])
         if briefer_nick:
             doc["briefer"] = briefer_nick
@@ -940,6 +1002,198 @@ def english_summary_lines(home: Path) -> list[str]:
     return lines
 
 
+def _normalize_job_entry(raw: object) -> dict | None:
+    if not isinstance(raw, dict):
+        return None
+    repo = str(raw.get("repo") or "").strip()
+    state = str(raw.get("state") or "running").strip() or "running"
+    entry = {
+        "repo": repo,
+        "sha": str(raw.get("sha") or "").strip(),
+        "model": str(raw.get("model") or "").strip(),
+        "description": str(raw.get("description") or raw.get("desc") or "").strip(),
+        "state": state,
+        "run_time": str(raw.get("run_time") or raw.get("runtime") or "").strip(),
+    }
+    blob = json.dumps(entry, separators=(",", ":"))
+    if looks_like_secret(blob):
+        return None
+    return entry
+
+
+def _normalize_jobs_list(raw: object) -> list[dict]:
+    if not isinstance(raw, list):
+        return []
+    out: list[dict] = []
+    for item in raw:
+        norm = _normalize_job_entry(item)
+        if norm is not None:
+            out.append(norm)
+    return out
+
+
+def _coerce_cursor_pool(raw: object) -> dict | None:
+    if not isinstance(raw, dict):
+        return None
+    pool_id = str(raw.get("id") or raw.get("seat") or "").strip()
+    if not pool_id:
+        return None
+    label = str(raw.get("label") or "Cursor Models").strip()
+    remaining = raw.get("remaining")
+    if remaining is None:
+        remaining = raw.get("used")
+    if remaining is not None:
+        try:
+            remaining = int(remaining)
+        except (TypeError, ValueError):
+            remaining = None
+    period = raw.get("period_end") or raw.get("reset")
+    overage = raw.get("overage")
+    if overage is not None:
+        overage = str(overage)
+    entry = {
+        "id": pool_id,
+        "seat": str(raw.get("seat") or pool_id),
+        "label": label,
+        "remaining": remaining,
+        "period_end": str(period) if period else None,
+        "reset": str(raw.get("reset") or period or "") or None,
+        "overage": overage,
+    }
+    blob = json.dumps(entry, separators=(",", ":"))
+    if looks_like_secret(blob):
+        return None
+    return entry
+
+
+def _coerce_cursor_pools(raw: object) -> list[dict]:
+    if not isinstance(raw, list):
+        return []
+    out: list[dict] = []
+    seen: set[str] = set()
+    for item in raw:
+        pool = _coerce_cursor_pool(item)
+        if not pool:
+            continue
+        pid = str(pool.get("id") or "")
+        if pid in seen:
+            continue
+        seen.add(pid)
+        out.append(pool)
+    return out
+
+
+def _peer_fill_keys() -> tuple[str, ...]:
+    return _MERGE_PEER_FIELDS
+
+
+def export_machine_for_tray(home: Path, mid: str, ent: dict) -> dict:
+    """Tray-complete machine row: digest presence + bob-peers metrics."""
+    base = _coerce_machine(mid, ent)
+    peer = bobstat.read_peer(home, mid)
+    if peer:
+        for key in _peer_fill_keys():
+            if key not in peer or peer[key] is None or peer[key] == "":
+                continue
+            if key not in base or base.get(key) in (None, "", [], {}):
+                base[key] = peer[key]
+    for key in _peer_fill_keys():
+        if key in ent and ent[key] is not None and ent[key] != "":
+            base[key] = ent[key]
+    try:
+        base["running"] = int(base.get("running") or 0)
+    except (TypeError, ValueError):
+        base["running"] = 0
+    try:
+        base["queued"] = int(base.get("queued") or 0)
+    except (TypeError, ValueError):
+        base["queued"] = 0
+    weekly = base.get("weekly")
+    if weekly is not None and weekly != "":
+        try:
+            base["weekly"] = int(weekly)
+        except (TypeError, ValueError):
+            base["weekly"] = None
+    else:
+        base["weekly"] = None
+    base["jobs"] = _normalize_jobs_list(base.get("jobs"))
+    if base.get("period_end") in (None, ""):
+        reset = base.get("reset")
+        if reset:
+            base["period_end"] = str(reset)
+    out: dict = {}
+    for key in _TRAY_MACHINE_EXPORT_KEYS:
+        if key in base:
+            out[key] = base[key]
+    out.setdefault("id", mid)
+    out.setdefault("nick", nick_for_machine({}, mid))
+    out.setdefault("shop", shop_channel(mid))
+    out.setdefault("online", False)
+    out.setdefault("status", "I am offline" if not out.get("online") else "I am online")
+    out.setdefault("working_on", "")
+    out.setdefault("workers", {})
+    out.setdefault("weekly", None)
+    out.setdefault("period_end", None)
+    out.setdefault("lastSeen", None)
+    out.setdefault("running", 0)
+    out.setdefault("queued", 0)
+    out.setdefault("jobs", [])
+    return out
+
+
+def _cursor_pool_overage(ent: dict) -> str | None:
+    for key in ("overage", "overspend", "cursor_overage", "cursor_overspend"):
+        val = ent.get(key)
+        if val is not None and str(val).strip():
+            return str(val)
+    return None
+
+
+def _cursor_pool_period(ent: dict) -> tuple[str | None, str | None]:
+    cursor_period = ent.get("cursor_period_end")
+    if cursor_period in (None, ""):
+        return None, None
+    period_s = str(cursor_period)
+    return period_s, period_s
+
+
+def build_cursor_pools(doc: dict, machines: dict[str, dict]) -> list[dict]:
+    stored = _coerce_cursor_pools(doc.get("cursor_pools"))
+    if stored:
+        return stored
+    pools: list[dict] = []
+    seen: set[str] = set()
+    for mid in FLEET_MACHINE_IDS:
+        ent = machines.get(mid) or {}
+        pcent = ent.get("pcent") if isinstance(ent.get("pcent"), dict) else {}
+        rem = pcent.get("cursor-models")
+        if rem is None:
+            rem = pcent.get("cursor_models")
+        if rem is None:
+            continue
+        try:
+            remaining = int(rem)
+        except (TypeError, ValueError):
+            continue
+        pid = str(mid)
+        if pid in seen:
+            continue
+        seen.add(pid)
+        period_end, reset = _cursor_pool_period(ent)
+        pools.append(
+            {
+                "id": pid,
+                "seat": pid,
+                "label": str(ent.get("cursor_label") or "Cursor Models"),
+                "remaining": remaining,
+                "period_end": period_end,
+                "reset": reset,
+                "overage": _cursor_pool_overage(ent),
+            }
+        )
+    return pools
+
+
 def build_digest_object(home: Path, briefer_nick: str) -> dict:
     doc = load_digest(home)
     machines = doc.get("machines") if isinstance(doc.get("machines"), dict) else {}
@@ -949,11 +1203,20 @@ def build_digest_object(home: Path, briefer_nick: str) -> dict:
         cleaned[str(coerced["id"])] = coerced
     for mid in FLEET_MACHINE_IDS:
         cleaned.setdefault(mid, _empty_machine(mid))
+    exported: dict[str, dict] = {}
+    for mid in FLEET_MACHINE_IDS:
+        exported[mid] = export_machine_for_tray(home, mid, cleaned[mid])
+    chair = (os.environ.get(CHAIR_NICK_ENV) or "").strip() or str(
+        doc.get("chairNick") or doc.get("chair_nick") or ""
+    ).strip()
+    briefer = (briefer_nick or str(doc.get("briefer") or "")).strip()
     return {
         "v": int(doc.get("v") or 1),
         "ts": str(doc.get("ts") or _utc_now_iso()),
-        "briefer": briefer_nick or str(doc.get("briefer") or ""),
-        "machines": cleaned,
+        "briefer": briefer,
+        "chairNick": chair or briefer,
+        "machines": exported,
+        "cursor_pools": build_cursor_pools(doc, exported),
     }
 
 

@@ -436,7 +436,9 @@ class Client:
             return True
         last_map[key] = now
         briefer = bobtalk.briefer_nick(self._fleet_moot_state()) or self.live_nick
-        lines = bobreport.format_digest_whisper_lines(self.home, briefer, form=form, machine_id=machine_id)
+        lines = bobreport.format_digest_whisper_lines(
+            self.home, briefer, form=form, machine_id=machine_id, english=not tray
+        )
         self._deliver_whispers(who, lines)
         info(f"INFO bobiverse digest to={who} form={form} lines={len(lines)}")
         return True

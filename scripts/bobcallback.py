@@ -78,3 +78,93 @@ def handle_request(
     if not ok:
         return 400, b""
     return 204, b""
+
+
+class ReportHandler:
+    """stdlib BaseHTTPRequestHandler mixin state. Instantiated by serve()."""
+
+    home: Path
+    secret: str
+    allow_ips: set[str]
+    briefer_nick: str
+
+
+def make_handler(home: Path, secret: str, allow_ips: set[str], briefer_nick: str = ""):
+    from http.server import BaseHTTPRequestHandler
+
+    class _Handler(BaseHTTPRequestHandler):
+        def _run(self, method: str) -> None:
+            length = int(self.headers.get("Content-Length") or 0)
+            body = self.rfile.read(length) if length > 0 else b""
+            peer = (self.client_address or ("", 0))[0]
+            code, payload = handle_request(
+                method,
+                self.path,
+                {k: v for k, v in self.headers.items()},
+                body,
+                peer,
+                home,
+                secret,
+                allow_ips,
+                briefer_nick,
+            )
+            self.send_response(code)
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            if payload and method != "HEAD":
+                self.wfile.write(payload)
+
+        def do_GET(self) -> None:
+            self._run("GET")
+
+        def do_HEAD(self) -> None:
+            self._run("HEAD")
+
+        def do_POST(self) -> None:
+            self._run("POST")
+
+        def do_PUT(self) -> None:
+            self._run("PUT")
+
+        def log_message(self, _fmt: str, *_args: object) -> None:
+            return
+
+    return _Handler
+
+
+def serve(
+    home: Path,
+    host: str = "127.0.0.1",
+    port: int = 0,
+    secret: str | None = None,
+    allow_ips: set[str] | None = None,
+    briefer_nick: str = "",
+):
+    """Blocking write-only listener. GET never returns digest.json."""
+    from http.server import ThreadingHTTPServer
+
+    handler = make_handler(home, secret if secret is not None else load_secret(), allow_ips or load_allow_ips(), briefer_nick)
+    httpd = ThreadingHTTPServer((host, int(port)), handler)
+    return httpd
+
+
+def main() -> None:
+    import argparse
+
+    p = argparse.ArgumentParser(description="write-only POST /bob/v1/report")
+    p.add_argument("--home", default="", help="AGENTIC_IRC_HOME (digest.json)")
+    p.add_argument("--bind", default="127.0.0.1")
+    p.add_argument("--port", type=int, default=int(os.environ.get("BOB_REPORT_PORT") or "0"))
+    args = p.parse_args()
+    home = Path(args.home).expanduser() if args.home else bobreport.digest_path(Path(".")).parent
+    httpd = serve(home, host=args.bind, port=args.port)
+    host, port = httpd.server_address[:2]
+    print(f"INFO report listen {host}:{port} POST {REPORT_PATH} only", flush=True)
+    try:
+        httpd.serve_forever()
+    except KeyboardInterrupt:
+        return
+
+
+if __name__ == "__main__":
+    main()

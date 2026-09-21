@@ -89,3 +89,12 @@ def test_callback_auth_and_allowlist(tmp_path):
         allow,
     )
     assert code == 400
+
+
+def test_serve_factory_has_no_get_digest(tmp_path):
+    handler_cls = bobcallback.make_handler(tmp_path, "s", {"127.0.0.1"})
+    assert hasattr(handler_cls, "do_GET")
+    assert hasattr(handler_cls, "do_POST")
+    src = Path(bobcallback.__file__).read_text(encoding="utf-8")
+    assert "digest.json" not in src.lower() or "never returns digest" in src
+    assert "do_GET" in src and "GET never" in src

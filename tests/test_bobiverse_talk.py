@@ -61,7 +61,7 @@ def test_whisper_not_channel(tmp_path, monkeypatch, recorder):
     assert not any("#bobiverse" in x for x in recorder)
 
 
-def test_bobiverse_dm_only_briefer(tmp_path, monkeypatch, recorder):
+def test_bobiverse_human_in_channel(tmp_path, monkeypatch, recorder):
     monkeypatch.setenv("AGENTIC_IRC_HOME", str(tmp_path))
     _open_moot(tmp_path)
     bobstat.write_peer(
@@ -76,9 +76,8 @@ def test_bobiverse_dm_only_briefer(tmp_path, monkeypatch, recorder):
     )
     c = irc_agent.Client(_args(tmp_path, "bob-flamingo"))
     c.handle_privmsg("simon!u@h", "#bobiverse", "!bobiverse")
-    assert all("PRIVMSG simon :" in x for x in recorder)
-    assert not any("#bobiverse" in x for x in recorder)
-    assert any("ionos is idle" in x for x in recorder)
+    assert any("#bobiverse" in x and "ionos is idle" in x for x in recorder)
+    assert not any(x.startswith("PRIVMSG simon :") for x in recorder)
 
     recorder.clear()
     c2 = irc_agent.Client(_args(tmp_path, "bob-ionos"))
@@ -86,7 +85,29 @@ def test_bobiverse_dm_only_briefer(tmp_path, monkeypatch, recorder):
     assert recorder == []
 
 
-def test_bobiverse_cooldown(tmp_path, monkeypatch, recorder):
+def test_bobiverse_tray_whisper_to_agent(tmp_path, monkeypatch, recorder):
+    monkeypatch.setenv("AGENTIC_IRC_HOME", str(tmp_path))
+    _open_moot(tmp_path)
+    bobstat.write_peer(
+        tmp_path,
+        {
+            "ok": True,
+            "id": "ionos",
+            "running": 1,
+            "queued": 0,
+            "repo": "?",
+            "jobs": [{"repo": "SimonBarnett/agentic_irc", "state": "running"}],
+        },
+    )
+    c = irc_agent.Client(_args(tmp_path, "bob-flamingo"))
+    c.handle_privmsg("bob-marchhare!u@h", "#bobiverse", "!bobiverse")
+    assert recorder
+    assert all(x.startswith("PRIVMSG bob-marchhare :") for x in recorder)
+    assert not any("#bobiverse" in x for x in recorder)
+    assert any("BOB TRAY v1" in x and "repo=SimonBarnett/agentic_irc" in x for x in recorder)
+
+
+def test_bobiverse_cooldown_human(tmp_path, monkeypatch, recorder):
     monkeypatch.setenv("AGENTIC_IRC_HOME", str(tmp_path))
     _open_moot(tmp_path)
     bobstat.write_peer(tmp_path, {"ok": True, "id": "flamingo", "running": 0, "queued": 0, "jobs": []})
@@ -96,6 +117,19 @@ def test_bobiverse_cooldown(tmp_path, monkeypatch, recorder):
     assert n1 >= 1
     c.handle_privmsg("simon!u@h", "#bobiverse", "!bobiverse")
     assert len(recorder) == n1
+
+
+def test_bobiverse_cooldown_agent_separate(tmp_path, monkeypatch, recorder):
+    monkeypatch.setenv("AGENTIC_IRC_HOME", str(tmp_path))
+    _open_moot(tmp_path)
+    bobstat.write_peer(tmp_path, {"ok": True, "id": "flamingo", "running": 0, "queued": 0, "jobs": []})
+    c = irc_agent.Client(_args(tmp_path, "bob-flamingo"))
+    c.handle_privmsg("bob-marchhare!u@h", "#bobiverse", "!bobiverse")
+    n1 = len(recorder)
+    c.handle_privmsg("bob-marchhare!u@h", "#bobiverse", "!bobiverse")
+    assert len(recorder) == n1
+    c.handle_privmsg("simon!u@h", "#bobiverse", "!bobiverse")
+    assert len(recorder) > n1
 
 
 def test_join_brief_sequence(tmp_path, monkeypatch, recorder):
@@ -138,3 +172,27 @@ def test_bobiverse_via_pm_to_bob(tmp_path, monkeypatch, recorder):
     c = irc_agent.Client(_args(tmp_path, "bob-flamingo"))
     c.handle_privmsg("simon!u@h", "bob-flamingo", "!bobiverse")
     assert recorder and recorder[0].startswith("PRIVMSG simon :")
+
+
+def test_point_change_talk_on_channel(tmp_path, monkeypatch, recorder):
+    monkeypatch.setenv("AGENTIC_IRC_HOME", str(tmp_path))
+    _open_moot(tmp_path)
+    bobstat.write_peer(
+        tmp_path,
+        {
+            "ok": True,
+            "id": "ionos",
+            "running": 0,
+            "queued": 0,
+            "jobs": [],
+        },
+    )
+    c = irc_agent.Client(_args(tmp_path, "bob-flamingo"))
+    point = (
+        "MOOT v1 POINT "
+        + MID
+        + " :BOB v1 id=ionos weekly=4 running=1 queued=0 "
+        "lastSeen=2026-09-21T00:00:00Z jobs=SimonBarnett/agentic_irc:running"
+    )
+    c.handle_privmsg("bob-ionos!u@h", "#bobiverse", point)
+    assert any("#bobiverse" in x for x in recorder)

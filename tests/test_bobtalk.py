@@ -60,6 +60,34 @@ def test_briefer_chair_else_first_bob():
     assert bobtalk.is_briefer(st2, "bob-flamingo")
 
 
+def test_ionos_repo_question_mark_from_job(tmp_path):
+    bobstat.write_peer(
+        tmp_path,
+        {
+            "ok": True,
+            "id": "ionos",
+            "running": 1,
+            "queued": 0,
+            "repo": "?",
+            "jobs": [{"repo": "SimonBarnett/agentic_irc", "state": "running"}],
+        },
+    )
+    peer = bobstat.read_peer(tmp_path, "ionos")
+    lines = bobtalk.peer_talk_lines(peer)
+    assert not any("Working on ?" in l for l in lines)
+    assert any("SimonBarnett/agentic_irc" in l for l in lines)
+    tray = bobtalk.format_tray_peer_line(peer)
+    assert "repo=SimonBarnett/agentic_irc" in tray
+
+
+def test_tray_pull_lines_order(tmp_path):
+    bobstat.write_peer(tmp_path, {"ok": True, "id": "flamingo", "running": 0, "queued": 0, "jobs": []})
+    bobstat.write_peer(tmp_path, {"ok": True, "id": "ionos", "running": 0, "queued": 0, "jobs": []})
+    lines = bobtalk.tray_pull_lines(tmp_path)
+    assert len(lines) >= 2
+    assert all(l.startswith(bobtalk.TRAY_PREFIX) for l in lines)
+
+
 def test_change_ignores_last_seen_only():
     before = {
         "id": "ionos",

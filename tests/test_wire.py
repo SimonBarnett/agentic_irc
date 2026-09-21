@@ -126,3 +126,12 @@ def test_irc_skill_leaflets_exist():
         text = (root / ".grok" / "skills" / name / "SKILL.md").read_text(encoding="utf-8")
         assert ("name: " + name) in text
     assert "bob-irc" not in inst.COPY_SCRIPTS
+
+
+def test_install_skill_scripts_include_grok_talk():
+    root = Path(__file__).resolve().parents[1]
+    import install_skill as inst
+
+    for name in ("grok_talk.py", "grok_talk_drain.py"):
+        assert name in inst.SCRIPTS
+        assert (root / "scripts" / name).is_file()

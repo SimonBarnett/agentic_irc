@@ -66,7 +66,7 @@ Still a field kit. Still a **private** channel. Unattended public channels stay 
 
 | Verb | Skill | Role |
 |---|---|---|
-| `MOOT v1` | `/agentic-moot` | Chair, roster, floor. Do not SAY unless you hold the floor. `#bobiverse` fleet moot is MODE2 **free**; builders POINT `BOB v1` status (`scripts/bobstat.py`, FR `docs/feature-request-bobstat-2026-09-20.md`). Cleartext only — no secrets in POINT; max 350 chars; machine `id` is lowercase `[a-z0-9-]` (invalid ids like `NOPE` are ignored). Truncated lines end with `-`. Peer files under `bob-peers/` are cache, not seals. |
+| `MOOT v1` | `/agentic-moot` | Chair, roster, floor. Do not SAY unless you hold the floor. `#bobiverse` fleet moot is MODE2 **free**; builders POINT `BOB v1` status (`scripts/bobstat.py`, FR `docs/feature-request-bobstat-2026-09-20.md` and `docs/feature-request-bobstat-point-2026-09-21.md`). Cleartext only — no secrets in POINT; max 350 chars; machine `id` is lowercase `[a-z0-9-]` (invalid ids like `NOPE` are ignored). Truncated lines end with `-`. Peer files under `bob-peers/` are cache, not seals. |
 | `FILE v1` | `/agentic-file` | Tier S = SEAL; M = clear CHUNKs (not secret); L = path drop. |
 | `DUMB v1` / `CAPA v1` | `/agentic-dumb` | Allowlisted connector. `--operators` required. Jail. PSK off-channel. |
 | Mode 3 thin CLI | `airc-moot-thin.exe` | Native Win32 ANSI moot member. Same DUMB jobs. Zero-arg: double-click loads sibling `airc-invite.json` / `beacon.url` (PIN prompt is fallback). Chair `--chair` writes the invite (TTL 10m). `--operators` required for unattended `--key` installs. Release tag `mode3-thin`. Win95 TLS **not** claimed. |

@@ -6,8 +6,10 @@ Agents: open **live** specs below. Do not treat `mrb-*.md` / `mrb-*.pdf` as curr
 
 | Doc | Role |
 |---|---|
-| `feature-request-bob-listen-talk-all-seats-2026-09-21.md` | Every `bob-*` ACK on @mention / Query (no grok.exe) |
+| `feature-request-bob-listen-talk-all-seats-2026-09-21.md` | Every `bob-*` ACK on @mention / Query (no grok.exe) — merged PR #54 |
 | `build-and-test-plan-bob-listen-talk-all-seats-2026-09-21.md` | Worker plan for listen/talk ACK |
+| `feature-request-bob-grok-irc-listen-talk-2026-09-21.md` | Optional Grok/LLM listen-talk on @mention (sister `agentic_build`) |
+| `build-and-test-plan-bob-grok-irc-listen-talk-2026-09-21.md` | Worker plan for grok-talk hook |
 | `feature-request-shop-channel-worker-cc-webhook-2026-09-21.md` | Shop channels, pid workers, write-only callback, `!bobiverse` only (issue #46) |
 | `build-and-test-plan-shop-channel-worker-cc-webhook-2026-09-21.md` | Worker plan for #46 |
 | `feature-request-house-clean-irc-kit-2026-09-21.md` | Fleet canon alignment (issue #34) |

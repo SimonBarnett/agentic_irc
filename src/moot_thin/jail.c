@@ -1,4 +1,5 @@
 #include "jail.h"
+#include "task_ui.h"
 
 static int powershell_present(void)
 {
@@ -278,6 +279,7 @@ int jail_exec(Jail *j, char **argv, int argc, const char *cwd, int timeout_s,
                 }
             }
         }
+        task_ui_spin_tick();
         if (wait == WAIT_OBJECT_0)
             break;
         if ((int)(GetTickCount() - t0) / 1000 >= timeout_s) {

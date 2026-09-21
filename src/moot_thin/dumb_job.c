@@ -1,5 +1,6 @@
 #include "dumb_job.h"
 #include "aes256gcm.h"
+#include "task_ui.h"
 
 int parse_dumb_line(const char *body, SealLine *out)
 {
@@ -151,12 +152,15 @@ int run_job_json(const char *job_json, const char *from_nick, const ThinConfig *
     b64[0] = 0;
     json_get_string(job_json, "op", op, sizeof(op));
     json_get_string(job_json, "id", id, sizeof(id));
+    task_ui_begin(job_json);
     if (!operator_allowed(cfg->operators, from_nick)) {
         json_err(result, resultcap, op, id, "operator");
+        task_ui_end(result);
         return 0;
     }
     if (strcmp(op, "ping") == 0) {
         _snprintf(result, resultcap, "{\"v\":1,\"op\":\"ping\",\"id\":\"%s\",\"ok\":true,\"rc\":0}", id);
+        task_ui_end(result);
         return 0;
     }
     if (strcmp(op, "sysinfo") == 0) {
@@ -170,6 +174,7 @@ int run_job_json(const char *job_json, const char *from_nick, const ThinConfig *
         _snprintf(result, resultcap,
                   "{\"v\":1,\"op\":\"sysinfo\",\"id\":\"%s\",\"ok\":true,\"sys\":{\"os\":\"win32\",\"machine\":\"%s\",\"user\":\"%s\"}}",
                   id, machine, user);
+        task_ui_end(result);
         return 0;
     }
     if (strcmp(op, "get") == 0 || strcmp(op, "put") == 0) {
@@ -179,6 +184,7 @@ int run_job_json(const char *job_json, const char *from_nick, const ThinConfig *
             json_get_string(job_json, "cwd", path, sizeof(path));
         if ((path[0] == '\\' && path[1] == '\\') || (path[0] == '/' && path[1] == '/')) {
             json_err(result, resultcap, op, id, "jail");
+            task_ui_end(result);
             return 0;
         }
         if (!(path[0] && (path[1] == ':' || path[0] == '\\' || path[0] == '/'))) {
@@ -188,11 +194,13 @@ int run_job_json(const char *job_json, const char *from_nick, const ThinConfig *
         }
         if (!jail_in(jail, path)) {
             json_err(result, resultcap, op, id, "jail");
+            task_ui_end(result);
             return 0;
         }
         bn = path_basename(path);
         if (str_ieq(bn, "identity.json") || str_ieq(bn, "connector.key") || str_ieq(bn, "peers.json")) {
             json_err(result, resultcap, op, id, "jail");
+            task_ui_end(result);
             return 0;
         }
         if (strcmp(op, "get") == 0) {
@@ -202,6 +210,7 @@ int run_job_json(const char *job_json, const char *from_nick, const ThinConfig *
             uint8_t sh[32];
             if (read_file(path, data, sizeof(data) - 1, &n) != 0) {
                 json_err(result, resultcap, op, id, "jail");
+                task_ui_end(result);
                 return 0;
             }
             sha256(data, n, sh);
@@ -212,6 +221,7 @@ int run_job_json(const char *job_json, const char *from_nick, const ThinConfig *
             _snprintf(result, resultcap,
                       "{\"v\":1,\"op\":\"get\",\"id\":\"%s\",\"ok\":true,\"sha256\":\"%s\",\"b64\":\"%s\"}",
                       id, hex, b64o);
+            task_ui_end(result);
             return 0;
         }
         {
@@ -225,11 +235,13 @@ int run_job_json(const char *job_json, const char *from_nick, const ThinConfig *
                 rn = 0;
             if (write_file(path, raw, rn) != 0) {
                 json_err(result, resultcap, op, id, "jail");
+                task_ui_end(result);
                 return 0;
             }
             sha256(raw, rn, sh);
             hex_encode(sh, 32, hex, sizeof(hex));
             _snprintf(result, resultcap, "{\"v\":1,\"op\":\"put\",\"id\":\"%s\",\"ok\":true,\"sha256\":\"%s\"}", id, hex);
+            task_ui_end(result);
             return 0;
         }
     }
@@ -251,22 +263,27 @@ int run_job_json(const char *job_json, const char *from_nick, const ThinConfig *
             free(argv[i]);
         if (st == -2) {
             json_err(result, resultcap, op, id, "busy");
+            task_ui_end(result);
             return 0;
         }
         if (st == -3) {
             json_err(result, resultcap, op, id, "bin");
+            task_ui_end(result);
             return 0;
         }
         if (st == -4) {
             json_err(result, resultcap, op, id, "jail");
+            task_ui_end(result);
             return 0;
         }
         if (st == -5) {
             json_err(result, resultcap, op, id, "timeout");
+            task_ui_end(result);
             return 0;
         }
         if (st != 0) {
             json_err(result, resultcap, op, id, "bin");
+            task_ui_end(result);
             return 0;
         }
         jail_apply_trunc(cfg->home, id, out, errb, &truncated);
@@ -275,9 +292,11 @@ int run_job_json(const char *job_json, const char *from_nick, const ThinConfig *
         _snprintf(result, resultcap,
                   "{\"v\":1,\"op\":\"exec\",\"id\":\"%s\",\"ok\":%s,\"rc\":%d,\"stdout\":\"%s\",\"stderr\":\"%s\",\"truncated\":%s}",
                   id, rc == 0 ? "true" : "false", rc, out_esc, err_esc, truncated ? "true" : "false");
+        task_ui_end(result);
         return 0;
     }
     json_err(result, resultcap, op, id, "op");
+    task_ui_end(result);
     return 0;
 }
 

@@ -29,6 +29,10 @@ Optional: MinGW-w64 i686 (`make` / `gcc -m32`).
 
 **Windows 95/98/NT4 will not load this PE.** **Windows ME excluded.** Live Libera needs Schannel TLS 1.2: expected **Windows 8 / Server 2012+**. See `docs/mode3-tls-spike.md`. This README does **not** claim a Win95 pass.
 
+## Task visibility (console)
+
+When a chair sends a DUMB job and this box has a real console, the thin client prints an English task line, animates `\\|/-` while the job runs, then **`DONE`** (green) or **`FAIL`** (red) plus a one-line error. Redirected stdout (`--selftest`, log capture) stays plain `INFO` lines. The built exe carries `airc-moot-thin.ico` for Explorer.
+
 ## First run (zero-config)
 
 Click the exe, or run it with no flags. It fills `home` from the exe directory, `allow_path` from `{home}\jail`, `nick` from the hostname, and `hello` from `{nick}-online`. If `airc-moot-thin.ini` sits beside the exe it is loaded **without** wiping those values; CLI still wins.

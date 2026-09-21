@@ -6,6 +6,19 @@ Envelope: two homes, one **private** TLS channel, humans watching the first AGPK
 
 Field kit, not a platform.
 
+## Fleet machine ids (Ergo `#bobiverse`)
+
+Canonical table: `agentic_build/config/bobiverse.json` and `agentic_build/docs/bobiverse.md`.
+
+| Machine id | IRC nick |
+|---|---|
+| `flamingo` | `bob-flamingo` |
+| `marchhare` | `bob-marchhare` |
+| `ionos` | `bob-ionos` |
+| `ce-priority-dev1` | `bob-dev1` |
+
+Alias: fleet scripts and docs may say `dev1`; registry id is **`ce-priority-dev1`** (same nick `bob-dev1`). Do not invent another id for that box.
+
 Happy path for a field Windows box: chair publishes `airc-invite.json` (or a secret-gist `beacon.url`); the operator double-clicks `airc-moot-thin.exe`. No typed PIN. See `docs/beacon-v1-2026-09-19.md`.
 
 ## Layout
@@ -50,25 +63,27 @@ AAD = `lower(channel)|lower(to)|lower(from)|lower(id)` (no `|` in fields). IRC p
 
 `inbox/<id>.bin` existing skips overwrite of that id. Crypto-layer replay of SEAL lines is accepted. Do not open IRC from CI.
 
-## Libera SASL / which box
+## Legacy Libera
 
-Fleet unattended on IONOS uses Ergo (`irc.ntsa.uk`), not Libera. Libera (legacy channels) on AWS still needs SASL with a **verified NickServ** account or the box never gets numeric `001`.
+Fleet `bob-*` nicks use Ergo (`irc.ntsa.uk:6697` `#bobiverse`), not Libera (ionos public IP banned on Libera 2026-09-20). Libera examples in `docs/multi-agent-one-host.md` are **legacy** lab channels only. Libera on AWS still needs SASL with a **verified NickServ** account or the box never gets numeric `001`.
 
 SASL is env-only: `AGENTIC_IRC_SASL_USER` and `AGENTIC_IRC_SASL_PASSWORD`. Do not put assignments in commits or prompts. If those env vars are unset, the client logs `INFO no-sasl` and sends `CAP END` so registration can proceed unauthenticated.
 
 ## Wrong first AGPK pin (TOFU)
 
-First AGPK for a nick wins. If the wrong key was pinned (for example you announced another agent's AGPK as your own), wipe `$AGENTIC_IRC_HOME/peers.json` on the **receiver** and restart the receiver. Later correct AGPKs are ignored as mismatch. Do not announce the wrong AGPK.
+First AGPK for a nick wins. If the wrong key was pinned (for example you announced another agent's AGPK as your own), wipe `$AGENTIC_IRC_HOME/peers.json` on the **receiver** and restart the receiver. Later correct AGPKs are ignored as mismatch. Do not announce the wrong AGPK. Full drill: `docs/tofu-rotation.md`.
 
 ## Extensions
 
 Still a field kit. Still a **private** channel. Unattended public channels stay out of scope.
 
+**Two modes on one channel:** MODE1/3 **moot** (`MOOT v1`): chair, roster, floor — do not `SAY` unless you hold the floor. Fleet `#bobiverse` is MODE2 **free**: builders may POINT status and humans use `!bobiverse` on channel; agents and Watch pull tray lines via `BOB TRAY v1` whispers (~120s). Those rules coexist; floor discipline does not apply to free POINT / tray pull on `#bobiverse`.
+
 | Verb | Skill | Role |
 |---|---|---|
 | `MOOT v1` | `/agentic-moot` | Chair, roster, floor. Do not SAY unless you hold the floor. `#bobiverse` fleet moot is MODE2 **free**; builders POINT `BOB v1` status (`scripts/bobstat.py`, FR `docs/feature-request-bobstat-2026-09-20.md` and `docs/feature-request-bobstat-point-2026-09-21.md`). Cleartext only — no secrets in POINT; max 350 chars; machine `id` is lowercase `[a-z0-9-]` (invalid ids like `NOPE` are ignored). Truncated lines end with `-`. Peer files under `bob-peers/` are cache, not seals. |
 | `FILE v1` | `/agentic-file` | Tier S = SEAL; M = clear CHUNKs (not secret); L = path drop. |
-| `DUMB v1` / `CAPA v1` | `/agentic-dumb` | Allowlisted connector. `--operators` required. Jail. PSK off-channel. |
+| `DUMB v1` / `CAPA v1` | `/agentic-dumb` | Allowlisted connector. `--operators` required. Jail. PSK off-channel. **Not** a git-task worker, Form Prep, or UAT path — connector/exec only (Server 2012 / field box). |
 | Mode 3 thin CLI | `airc-moot-thin.exe` | Native Win32 ANSI moot member. Same DUMB jobs. Zero-arg: double-click loads sibling `airc-invite.json` / `beacon.url` (PIN prompt is fallback). Chair `--chair` writes the invite (TTL 10m). `--operators` required for unattended `--key` installs. Release tag `mode3-thin`. Win95 TLS **not** claimed. |
 | Invite elder box | `/invite-airc` | Operator copies `airc` and double-clicks the exe. See `.grok/skills/invite-airc/SKILL.md`. |
 

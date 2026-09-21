@@ -95,6 +95,8 @@ def machine_from_nick(nick: str) -> str | None:
         return NICK_TO_MACHINE[n]
     if n.startswith("bob-"):
         return normalize_machine_id(n[4:])
+    if n.startswith("cursor-"):
+        return normalize_machine_id(n[7:])
     return None
 
 

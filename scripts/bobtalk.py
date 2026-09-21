@@ -93,7 +93,7 @@ def _repo_ok(repo: object) -> bool:
     return bool(s) and s not in ("?", "-")
 
 
-def _resolve_peer_id(home: Path, machine_id: str) -> dict | None:
+def resolve_peer(home: Path, machine_id: str) -> dict | None:
     mid = _ID_ALIASES.get(machine_id, machine_id)
     peer = bobstat.read_peer(home, mid)
     if peer:
@@ -101,6 +101,10 @@ def _resolve_peer_id(home: Path, machine_id: str) -> dict | None:
     if mid != machine_id:
         return bobstat.read_peer(home, machine_id)
     return None
+
+
+def _resolve_peer_id(home: Path, machine_id: str) -> dict | None:
+    return resolve_peer(home, machine_id)
 
 
 def list_fleet_peers(home: Path) -> list[dict]:

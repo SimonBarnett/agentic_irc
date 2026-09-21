@@ -21,6 +21,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import bobreport  # noqa: E402
 import bobstat  # noqa: E402
 import bobtalk  # noqa: E402
+import grok_talk  # noqa: E402
 import filexfer  # noqa: E402
 import moot  # noqa: E402
 import protect  # noqa: E402
@@ -178,6 +179,7 @@ class Client:
         self._pm_open: dict[str, float] = {}
         self._action_last: dict[tuple[str, str], float] = {}
         self._mention_last: dict[str, float] = {}
+        self._grok_talk_dedup: dict[tuple[str, str], float] = {}
 
     def send(self, line: str) -> None:
         assert self.sock is not None
@@ -446,6 +448,18 @@ class Client:
         else:
             self.whisper(src, line)
         info(f"INFO mention-ack to={src} dest={'chan' if to_channel else 'pm'}")
+        grok_talk.enqueue_mention(
+            self.home,
+            mid,
+            self.live_nick,
+            nicks,
+            src,
+            target,
+            body,
+            to_me=to_me,
+            to_channel=to_channel,
+            dedupe_last=self._grok_talk_dedup,
+        )
         return True
 
     def connect(self) -> ssl.SSLSocket:
@@ -793,6 +807,10 @@ class Client:
 
     def drain_outbox_once(self) -> list[str]:
         """Send complete unread outbox lines. Offset persisted; restart does not skip JOIN."""
+        try:
+            grok_talk.drain_completions_to_outbox(self.home, outbox=self.outbox)
+        except OSError:
+            pass
         path = self.outbox
         if not path.exists() or self.sock is None:
             return []
@@ -800,7 +818,11 @@ class Client:
         lines, new_last = take_outbox_lines(path, last)
         sent: list[str] = []
         for line in lines:
-            self.say(line)
+            if line.startswith("PRIVMSG "):
+                self.send(line)
+                time.sleep(FLOOD_S)
+            else:
+                self.say(line)
             sent.append(line)
         if new_last != last:
             save_outbox_pos(path, new_last)

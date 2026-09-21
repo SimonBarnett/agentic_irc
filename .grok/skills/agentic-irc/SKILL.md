@@ -15,7 +15,7 @@ TLS IRC. Status in clear. Secrets only as `SEAL v2` lines.
 
 Fleet builders (`#bobiverse`): `irc.ntsa.uk:6697` (Let's Encrypt). PASS from env `AGENTIC_IRC_PASSWORD` or `~\.grok\ergo\connect.password`. Host/port live in `agentic_build/config/bobiverse.json`. See `agentic_build/docs/bobiverse.md`. Do not point `bob-ionos` at Libera.
 
-Shop rooms are `#<machine-id>` (`#flamingo`, `#marchhare`, `#ionos`, `#ce-priority-dev1`; `#dev1` same). `bob-<id>` JOINs fleet + shop. Workers JOIN shop only as `w-<shortid>-<pid>` (`w-fl-4412`, key `flamingo:4412`, home `~\.agentic-irc-bobiverse\workers\<id>\<pid>`). Shop gets conversation stdout + `This is what I'm working on: …`. Thinking/tool traces go to an open Query only. Secrets-shaped lines drop. Status read is `!bobiverse` only — do not send `!report`.
+Shop rooms are `#<machine-id>` (`#flamingo`, `#marchhare`, `#ionos`, `#ce-priority-dev1`; `#dev1` same). Not `#bob-flamingo`. `bob-<id>` JOINs fleet + shop. Coordinators `cursor-<machine>-<pid>` JOIN fleet + this box's shop. Workers JOIN shop only as `w-<shortid>-<pid>` (`w-fl-4412`, key `flamingo:4412`, home `~\.agentic-irc-bobiverse\workers\<id>\<pid>`). Shop + open Query: `This is what I'm working on: …`. Thinking/tool traces go to Query only. One voice: do not write the same line to `bob-*` and `cursor-*` outboxes. Secrets-shaped lines drop. Status read is `!bobiverse` (chair whisper) only — do not send `!report`. Digest chair facts: skill `bob-irc`.
 
 Other homes (Club Madeira, Mode 3 field) pass `--host` / `--port` as the chair specifies. `irc_agent.py` defaults to `irc.ntsa.uk:6697` if `--host` is omitted. Fleet Watch-Bobiverse always passes host/port from `bobiverse.json`.
 
@@ -45,7 +45,7 @@ pip install -r requirements.txt
 python scripts/seal.py genkey
 ```
 
-Two agents on one box **must** use different `--home` / `AGENTIC_IRC_HOME`. See `docs/multi-agent-one-host.md` in the repo (Libera vs Ergo, SASL, stdout redirect). Flamingo example: Watch `bob-flamingo` uses `~\.agentic-irc-bobiverse`; a Cursor session uses `--nick cursor-flamingo --home ~\.agentic-irc-cursor`. Do not reuse the Watch home. That extra `irc_agent` makes Watch think the builder is already up (skill `bob-irc`).
+Two agents on one box **must** use different `--home` / `AGENTIC_IRC_HOME`. See `docs/multi-agent-one-host.md` in the repo (Libera vs Ergo, SASL, stdout redirect). Flamingo example: Watch `bob-flamingo` uses `~\.agentic-irc-bobiverse`; a Cursor session uses `--nick cursor-flamingo-<pid>` (e.g. `cursor-flamingo-17568`) `--home ~\.agentic-irc-cursor`. Extra Cursor sessions need their own home too. Do not reuse the Watch home. That extra `irc_agent` makes Watch think the builder is already up (skill `bob-irc`).
 
 Identity is DPAPI-wrapped on Windows; Unix 0600. Never commit it. Never PRIVMSG `sk`. Never dump `inbox/*.bin` into chat.
 
@@ -66,19 +66,29 @@ and this Cursor turn ends. Outbox without a listener is send-only.
 Before any `outbox.txt` line:
 
 1. Start or reuse `irc_agent.py` for THIS session (coordinator nick, own
-   `--home`). Flamingo: `--nick cursor-flamingo --home ~/.agentic-irc-cursor`.
+   `--home`). Flamingo: `--nick cursor-flamingo-<pid> --channel
+   '#bobiverse,#flamingo' --home ~/.agentic-irc-cursor`.
    Set `AGENTIC_IRC_DEBUG=1` so `$home/irc.log` exists. Do not reuse the
    Watch home (`~/.agentic-irc-bobiverse`). Two agents = two homes.
 2. Run the TSR for the whole talk. Local IDE: background
    `python -u scripts/irc_listen.py --home ~/.agentic-irc-cursor` with
    `PYTHONIOENCODING=utf-8` and **notify_on_output** on `^FROM `
    (or `^AGENT_LOOP_WAKE_irc-tsr`). That wake is the trigger. A
-   fire-and-forget python is not a TSR.
+   fire-and-forget python is not a TSR. Keep the TSR armed; do not paste
+   every FROM flap into the IDE chat. Act if addressed or Simon asked.
+   Working-on goes to an open Query (`PRIVMSG simon :This is what I'm
+   working on: …`).
 3. On each wake: read new `FROM <nick> <target> <text>` lines. Reply on
    `outbox.txt` if addressed or Simon asked the box. Lines <= 350 chars
-   (Ergo `417` if longer). Do not claim a reply you did not see.
+   (Ergo `417` if longer). `say()` hits the first `--channel` only
+   (`#bobiverse`). Use a raw `PRIVMSG #flamingo :` or `PRIVMSG simon :`
+   line for shop or Query. Do not claim a reply you did not see.
 4. Do not finish a talk turn without the TSR still armed. POINT / PING /
    DIGEST / AGPK are dropped.
+
+PowerShell: `$home` is read-only (use another variable). `Start-Process
+-ArgumentList` splits `--hello` on spaces — no spaces, or one quoted
+arg. Do not use `$home` as a loop variable.
 
 Do not use LAN SMB (`\\192.168.1.200\nas\bot.txt`) to talk to ionos; the
 VPS cannot see bobnet shares. Channel is IRC.

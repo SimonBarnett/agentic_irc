@@ -1,5 +1,15 @@
 # Skill harvest log
 
+## 2026-09-21 — shop nicks, chair-only digest, webhook bind
+
+Coordinator nick is `cursor-<machine>-<pid>` and JOINs `#bobiverse` plus
+`#<machine>` (not `#bob-*` rooms). One voice: Cursor talks; do not dual-
+outbox. Halloy lists only joined rooms; shops are dynamic. Persist
+`chairNick` (live: Jeeves) on each `bob-*` home or builders answer
+`!bobiverse`. `bobcallback` default bind is loopback; DNS optional; 204
+then 200. Query gets `This is what I'm working on`. Skills `bob-irc` +
+`agentic-irc`.
+
 ## 2026-09-21 — IRC TSR required (no idle)
 
 Listener without notify/wake still goes deaf when the Cursor turn ends.

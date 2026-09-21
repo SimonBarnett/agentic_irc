@@ -21,20 +21,35 @@ Do **not** point agents at `mrb-*.pdf`. Do **not** implement `!report` (#36 writ
 
 ## Rooms
 
-- Fleet: `#bobiverse` — Bob `/me` lifecycle + working-on. No POINT firehose.
+- Fleet: `#bobiverse` — everyone (bobs, coordinators, Halloy `simon`, chair).
+  No POINT firehose.
 - Shop: `#flamingo` `#marchhare` `#ionos` `#ce-priority-dev1` (`#dev1` same).
-  `bob-<id>` JOINs fleet + shop at start. Workers JOIN **shop only**.
-- Worker nick: `w-<shortid>-<pid>` (`w-fl-4412`). Key is `flamingo:4412`.
-  Home: `~\.agentic-irc-bobiverse\workers\<id>\<pid>`.
+  Machine names with `#`. Not `#bob-flamingo` / `#bob-ionos`.
+- `bob-<id>` JOINs fleet + shop at start. Bob drop closes `#<id>`.
+- Coordinators `cursor-<machine>-<pid>` (e.g. `cursor-flamingo-17568`) JOIN
+  fleet + **this box's shop**. Many Cursor sessions per box; pid is required.
+- Workers JOIN **shop only**: `w-<shortid>-<pid>` (`w-fl-4412`). Key
+  `flamingo:4412`. Home `~\.agentic-irc-bobiverse\workers\<id>\<pid>`.
+- Halloy lists only rooms you `/join`. Leftover `bob-*` panes are Query/PM,
+  not shop channels. Do not static-autojoin shops (they come and go).
 
 ## Status read / write
 
-- **Read:** `!bobiverse` / `!bobiverse ?` / `!bobiverse <id>` — **digest chair**
-  (`bob-chair` / `AGENTIC_IRC_CHAIR_NICK`) whispers JSON (~60s human / ~120s agent).
-  Digest file is **not** HTTP GET. `bob-<machine>` builders do not answer digest.
+- **Read:** `!bobiverse` / `!bobiverse ?` / `!bobiverse <id>` — **digest chair
+  only** whispers JSON (not the channel). Live chair nick is `Jeeves`
+  (`AGENTIC_IRC_CHAIR_NICK` / `digest.json` `chairNick`). Persist `chairNick`
+  on **each** `bob-*` home. Missing chairNick falls back to briefer, so
+  builders whisper too. `bob-<machine>` without `--chair` must not answer.
+  Digest file is **not** HTTP GET. Each box has its own `digest.json`;
+  flamingo local is not ionos.
 - **Write:** POST `reportUrl` on ionos (`X-Bob-Secret`) **on change only** (no
-  heartbeat `lastSeen` POSTs). See `docs/bob-report-callback-change-only.md`.
-  Chair merges into `digest.json`; builders do not fleet-narrate `#bobiverse`.
+  heartbeat `lastSeen` POSTs). `scripts/bobcallback.py` `POST /bob/v1/report`:
+  first change **204**, duplicate **200**, GET/HEAD **405**. Default bind
+  `127.0.0.1` is not peer-reachable — bind a reachable address and open the
+  IONOS port. DNS is optional (IP URL is fine). `BOB_REPORT_ALLOW` is IPs.
+  `reportUrl` belongs in `bobiverse.json` (add it if missing). See
+  `docs/bob-report-callback-change-only.md`. Producer skip-heartbeat is
+  agentic_build #141.
 - **Chair seat:** `scripts/Install-BobChair.ps1` / `irc_agent.py --chair` JOINs
   `#bobiverse` only. MOOT floor chair is separate from digest chair.
 - Machines persist (`status`: `I am online` / `I am offline`). Workers are
@@ -43,8 +58,10 @@ Do **not** point agents at `mrb-*.pdf`. Do **not** implement `!report` (#36 writ
 ## CC
 
 Shop: conversation stdout + `This is what I'm working on: …`
-Query with worker, if open: also thinking traces + tool transcripts.
-Secrets-shaped lines: drop. Workers never JOIN `#bobiverse`.
+Open Query (Halloy PM): working-on + thinking/tool traces.
+One voice: the Cursor seat talks. Do not write the same line to both
+`bob-*` and `cursor-*` outboxes. Secrets-shaped lines: drop.
+Workers never JOIN `#bobiverse`.
 
 ## Connect
 
@@ -70,7 +87,8 @@ send-only. Do not use LAN SMB to reach ionos.
 
 Human monitor (flamingo): Halloy nick not `bob-*` (e.g. `simon`).
 `%AppData%\halloy\config.toml`: server `irc.ntsa.uk:6697` TLS,
-`password_file` = connect.password, channel `#bobiverse`. Type `!bobiverse`.
+`password_file` = connect.password, channel `#bobiverse` only (shops are
+dynamic). `/join #flamingo` while that bob is up. Type `!bobiverse`.
 Address a `bob-*` nick (`@bob-ionos`, `bob-flamingo:`, Query): that seat
 ACKs one English line (status + weekly). `weekly=0` still answers
 (empty weekly is not deaf; #54). Optional **grok-talk** (LLM listen+reply;
@@ -89,8 +107,8 @@ only POINTs on `#bobiverse` still shows `I am offline` in the digest.
 
 Watch `Test-BobiverseIrcAgentUp` is true if **any** `irc_agent.py` command
 line has `bobiverse` and `irc.ntsa.uk` (or `127.0.0.1`). A coordinator
-nick (`cursor-flamingo`, home `~\.agentic-irc-cursor`) blocks Watch from
-starting `bob-<id>`. Recycle the builder only: stop the process whose
+nick (`cursor-<machine>-<pid>`, home `~\.agentic-irc-cursor`) blocks Watch
+from starting `bob-<id>`. Recycle the builder only: stop the process whose
 `--nick` is `bob-<id>`; start it from the pulled `scripts\irc_agent.py`
 with `--home ~\.agentic-irc-bobiverse`. Leave the extra nick running.
 Do not `Stop-ScheduledTask BobFleet-*`. Two agents still need two homes.

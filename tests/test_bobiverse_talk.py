@@ -312,3 +312,30 @@ def test_worker_cc_pm_open(tmp_path, monkeypatch, recorder):
 
 def test_worker_433_suffix():
     assert bobreport.parse_worker_nick("w-io-884_") == ("ionos", "884")
+
+
+def test_joined_waits_for_every_channel(tmp_path, monkeypatch, recorder):
+    monkeypatch.setenv("AGENTIC_IRC_HOME", str(tmp_path))
+    c = irc_agent.Client(_args(tmp_path, "bob-flamingo"))
+    assert {x.lower() for x in c.channels} == {"#bobiverse", "#flamingo"}
+    assert not c.joined.is_set()
+    c.handle_join("bob-flamingo", "#bobiverse")
+    assert not c.joined.is_set()
+    c.handle_join("bob-flamingo", "#flamingo")
+    assert c.joined.is_set()
+
+
+def test_shop_closed_whispers_open_query(tmp_path, monkeypatch, recorder):
+    monkeypatch.setenv("AGENTIC_IRC_HOME", str(tmp_path))
+    c = irc_agent.Client(_args(tmp_path, "w-fl-4412", channel="#flamingo"))
+    c.handle_privmsg("simon!u@h", "w-fl-4412", "hello")
+    recorder.clear()
+    c.handle_quit("bob-flamingo")
+    assert any(x == "PRIVMSG simon :shop closed" for x in recorder)
+    assert c.stop.is_set()
+
+
+def test_briefer_prefers_online_when_chair_not_bob():
+    state = {"chair": "simon", "roster": ["simon", "bob-ionos", "bob-flamingo"]}
+    assert bobtalk.briefer_nick(state) == "bob-ionos"
+    assert bobtalk.briefer_nick(state, {"bob-flamingo"}) == "bob-flamingo"

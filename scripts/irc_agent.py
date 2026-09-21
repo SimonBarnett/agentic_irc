@@ -218,8 +218,19 @@ class Client:
             return self._moot
         return disk or self._moot or {}
 
+    def _online_bob_nicks(self) -> set[str]:
+        doc = bobreport.load_digest(self.home)
+        machines = doc.get("machines") if isinstance(doc.get("machines"), dict) else {}
+        out: set[str] = set()
+        for ent in machines.values():
+            if isinstance(ent, dict) and ent.get("online"):
+                nick = str(ent.get("nick") or "").strip()
+                if nick.lower().startswith("bob-"):
+                    out.add(nick.lower())
+        return out
+
     def _is_briefer(self) -> bool:
-        return bobtalk.is_briefer(self._fleet_moot_state(), self.live_nick)
+        return bobtalk.is_briefer(self._fleet_moot_state(), self.live_nick, self._online_bob_nicks())
 
     def _deliver_whispers(self, nick: str, lines: list[str]) -> None:
         for line in lines:
@@ -276,8 +287,6 @@ class Client:
         ch = bobreport.normalize_channel(channel)
         if who.lower() in self._mine_nicks():
             self._pending_joins.discard(ch.lower())
-            if ch.lower() == self.chan.lower() or not self._pending_joins:
-                self.joined.set()
             if not self._pending_joins:
                 self.joined.set()
         if who and who.lower() not in self._mine_nicks() and ch.lower() == bobreport.FLEET_CHANNEL:
@@ -315,6 +324,11 @@ class Client:
         if not mid or not mine or mine[0] != mid:
             return
         shop = bobreport.shop_channel(mid)
+        for nick in list(self._pm_open):
+            try:
+                self.whisper(nick, "shop closed")
+            except Exception:
+                pass
         try:
             self.send("PART " + shop + " :shop closed")
             self.send("QUIT :shop closed")

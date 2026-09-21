@@ -79,7 +79,7 @@ First AGPK for a nick wins. If the wrong key was pinned (for example you announc
 
 Still a field kit. Still a **private** channel. Unattended public channels stay out of scope.
 
-**Two modes on one channel:** MODE1/3 **moot** (`MOOT v1`): chair, roster, floor — do not `SAY` unless you hold the floor. Fleet `#bobiverse` is MODE2 **free**: builders may POINT status and humans use `!bobiverse` on channel; agents and Watch pull tray lines via `BOB TRAY v1` whispers (~120s). Those rules coexist; floor discipline does not apply to free POINT / tray pull on `#bobiverse`.
+**Two modes on one channel:** MODE1/3 **moot** (`MOOT v1`): chair, roster, floor — do not `SAY` unless you hold the floor. Fleet `#bobiverse` is MODE2 **free**: Bob `/me` lifecycle + working-on; humans and agents read status with `!bobiverse` (JSON whisper). No POINT firehose. Shop rooms `#<machine-id>` carry worker stdout. Those rules coexist; floor discipline does not apply to `!bobiverse` on `#bobiverse`.
 
 | Verb | Skill | Role |
 |---|---|---|

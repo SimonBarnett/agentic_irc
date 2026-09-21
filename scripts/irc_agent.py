@@ -26,6 +26,7 @@ import filexfer  # noqa: E402
 import moot  # noqa: E402
 import protect  # noqa: E402
 import seal  # noqa: E402
+import talk_seat_pid  # noqa: E402
 import wire  # noqa: E402
 
 FLOOD_S = 0.8
@@ -959,7 +960,30 @@ def main() -> None:
         action="store_true",
         help="digest chair seat: JOIN #bobiverse only; !bobiverse + webhook digest",
     )
+    p.add_argument(
+        "--auto-nick",
+        action="store_true",
+        help="talk seat: set --nick suffix to coordinator seat PID (env or coordinator.pid)",
+    )
     args = p.parse_args()
+    home = (args.home or os.environ.get("AGENTIC_IRC_HOME") or "").strip()
+    seat_pid = talk_seat_pid.resolve_seat_pid(home or None)
+    if args.auto_nick:
+        if seat_pid is None:
+            info("INFO --auto-nick requires AGENTIC_IRC_SEAT_PID or coordinator.pid seat=")
+            sys.exit(2)
+        args.nick = talk_seat_pid.auto_talk_seat_nick(args.nick, seat_pid)
+    err = None
+    if talk_seat_pid.parse_talk_seat_nick(args.nick):
+        if seat_pid is None:
+            err = (
+                "INFO talk-seat nick requires AGENTIC_IRC_SEAT_PID or coordinator.pid seat="
+            )
+        else:
+            err = talk_seat_pid.check_nick_seat_pid(args.nick, seat_pid)
+    if err:
+        info(err)
+        sys.exit(2)
     c = Client(args)
 
     def _stop(*_a: object) -> None:

@@ -24,6 +24,12 @@ via wake text or `irc_listen.py --once` on the coordinator home. Skills
 
 Talk seat: `{machine}-{pid}` only. `scripts/Start-IrcTsr.ps1` reuses
 `irc_listen` and writes `coordinator.pid`. One `irc_agent` per home.
+
+## 2026-09-22 — talk-seat pid = PowerShell seat (FR #88)
+
+Suffix is **coordinator PowerShell `$PID`**, not python listen/agent.
+`Start-TalkSeat.ps1`, `talk_seat_pid.py` guard, `coordinator.pid` `seat=`
+authoritative.
 Do not respawn `cursor-*`. `$Home` is read-only — use `$IrcHome`.
 
 ## 2026-09-21 — Simon ping -> pong

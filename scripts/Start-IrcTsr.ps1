@@ -1,14 +1,26 @@
 # Start or reuse irc_listen TSR for a talk-seat home. Writes coordinator.pid.
+# Seat id: nick suffix and digest pid = seat= (coordinator PowerShell $PID), not listen=/agent=.
+# Prefer scripts/Start-TalkSeat.ps1 to start agent + listener with correct nick.
 # Do not use $Home (read-only). Does not start a second listener or irc_agent.
 param(
     [string]$IrcHome = $(Join-Path $env:USERPROFILE '.agentic-irc-cursor'),
-    [string]$Scripts = 'C:\ai\agentic_irc\scripts'
+    [string]$Scripts = 'C:\ai\agentic_irc\scripts',
+    [string]$SeatPid = '',
+    [string]$Nick = ''
 )
 $ErrorActionPreference = 'Stop'
 $resolved = [Environment]::ExpandEnvironmentVariables($IrcHome)
 if (-not (Test-Path -LiteralPath $resolved)) {
     New-Item -ItemType Directory -Force -Path $resolved | Out-Null
 }
+$coordPath = Join-Path $resolved 'coordinator.pid'
+$existingSeat = ''
+if (-not $SeatPid -and (Test-Path -LiteralPath $coordPath)) {
+    foreach ($line in Get-Content -LiteralPath $coordPath) {
+        if ($line -match '^seat=(.*)$') { $existingSeat = $Matches[1].Trim() }
+    }
+}
+if (-not $SeatPid) { $SeatPid = $existingSeat }
 $listen = Get-CimInstance Win32_Process -Filter "Name='python.exe'" |
     Where-Object { $_.CommandLine -match 'irc_listen.py' -and $_.CommandLine -match [regex]::Escape($resolved) } |
     Select-Object -First 1
@@ -24,12 +36,15 @@ $agent = Get-CimInstance Win32_Process -Filter "Name='python.exe'" |
     Where-Object { $_.CommandLine -match 'irc_agent.py' -and $_.CommandLine -match [regex]::Escape($resolved) } |
     Select-Object -First 1
 $agentPid = if ($agent) { $agent.ProcessId } else { '' }
-$nick = ''
-if ($agent -and $agent.CommandLine -match '--nick\s+(\S+)') { $nick = $Matches[1] }
-@(
-    "nick=$nick"
+if (-not $Nick -and $agent -and $agent.CommandLine -match '--nick\s+(\S+)') { $Nick = $Matches[1] }
+$lines = @(
+    "nick=$Nick"
     "listen=$listenPid"
     "agent=$agentPid"
     "home=$resolved"
-) | Set-Content -LiteralPath (Join-Path $resolved 'coordinator.pid') -Encoding utf8
-Write-Output "INFO TSR listen=$listenPid agent=$agentPid nick=$nick"
+)
+if ($SeatPid) {
+    $lines = @("nick=$Nick", "seat=$SeatPid", "listen=$listenPid", "agent=$agentPid", "home=$resolved")
+}
+$lines | Set-Content -LiteralPath $coordPath -Encoding utf8
+Write-Output "INFO TSR listen=$listenPid agent=$agentPid seat=$SeatPid nick=$Nick"

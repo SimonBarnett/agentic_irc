@@ -10,6 +10,7 @@ import urllib.error
 import urllib.request
 
 import bobcallback
+import talk_seat_pid
 
 DEFAULT_URL = "http://irc.ntsa.uk:80/bob/v1/report"
 
@@ -69,6 +70,10 @@ def main() -> int:
     p.add_argument("--idle", action="store_true")
     args = p.parse_args()
     nick = (args.nick or "").strip() or "%s-%s" % (args.machine, args.pid)
+    err = talk_seat_pid.check_nick_seat_pid(nick, args.pid)
+    if err:
+        print(err, flush=True)
+        return 2
     wo = "" if args.idle else (args.working_on or "").strip()
     codes = []
     if args.create or wo or args.idle:

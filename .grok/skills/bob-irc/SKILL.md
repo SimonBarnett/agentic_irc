@@ -64,9 +64,14 @@ Human monitor (flamingo): Halloy nick not `bob-*` (e.g. `simon`).
 `password_file` = connect.password, channel `#bobiverse`. Type `!bobiverse`.
 Address a `bob-*` nick (`@bob-ionos`, `bob-flamingo:`, Query): that seat
 ACKs one English line (status + weekly). `weekly=0` still answers
-(empty weekly is not deaf; #54). LLM grok-talk is parked FR #56, not UAT.
+(empty weekly is not deaf; #54). Optional **grok-talk** (LLM listen+reply;
+FR #56, Bob stamps UAT) is off by default: set `grok-talk.json`
+`{"grok_talk_enabled": true}` or env `AGENTIC_IRC_GROK_TALK=1` on a seat
+after UAT; requires `weekly` > 0. Jobs go to `grok-inbox.jsonl`;
+completions via `grok-outbox.jsonl` → `outbox.txt`
+(`docs/grok-talk-envelope-v1.md`, `scripts/grok_talk_drain.py`).
 Watch stays no grok.exe. Recycle Watch-Bobiverse after pull so the
-running `irc_agent` loads the mention ACK.
+running `irc_agent` loads mention ACK + grok-talk hooks.
 
 `!bobiverse` `online` is shop JOIN / report POST, not NAMES. A box that
 only POINTs on `#bobiverse` still shows `I am offline` in the digest.

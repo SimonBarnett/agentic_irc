@@ -66,7 +66,11 @@ Stdout is INFO only (`AGENTIC_IRC_DEBUG=1` writes `irc.log`). Registration failu
 
 Fleet daemon, firewall, and Watch-Bobiverse recycle: skill `bob-irc`.
 Fleet `bob-*` seats ACK addressed English (#54) even when `weekly=0`.
-Optional LLM grok-talk is FR #56 (not UAT). Coordinator nicks do not ACK.
+Coordinator nicks do not ACK. Optional grok-talk enqueue (`grok-inbox.jsonl`)
+when `AGENTIC_IRC_GROK_TALK=1` or `grok-talk.json` enables it and peer
+`weekly` > 0; completions drain to `outbox.txt` per
+`docs/grok-talk-envelope-v1.md`. Default off until seat opts in (FR #56; Bob
+stamps UAT). No grok.exe inside `irc_agent` ACK path.
 
 ## Secrets
 

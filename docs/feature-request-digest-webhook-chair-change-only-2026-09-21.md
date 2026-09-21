@@ -2,6 +2,7 @@
 
 **Date:** 2026-09-21  
 **Repo:** https://github.com/SimonBarnett/agentic_irc  
+**GitHub issue:** https://github.com/SimonBarnett/agentic_irc/issues/73  
 **Raised by:** Simon (Halloy / `#bobiverse` transcript — `bob-ionos` status wall)  
 **UAT + hostile MRB owner:** Bob  
 **Sister (producer):** https://github.com/SimonBarnett/agentic_build/issues/124 and `Watch-Bobiverse` / `Write-BobIrcStatus`  

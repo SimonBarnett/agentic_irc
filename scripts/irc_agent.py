@@ -228,7 +228,7 @@ class Client:
         briefer = bobtalk.briefer_nick(self._fleet_moot_state()) or self.live_nick
         outcome = bobreport.apply_report(self.home, who, briefer, body)
         if outcome.help_text:
-            self.whisper(who, outcome.help_text)
+            self._deliver_whispers(who, outcome.help_text.splitlines())
             return
         if not outcome.ok:
             if outcome.err:

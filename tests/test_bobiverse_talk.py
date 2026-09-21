@@ -215,3 +215,36 @@ def test_report_non_briefer_ignored(tmp_path, monkeypatch, recorder):
     c = irc_agent.Client(_args(tmp_path, "bob-ionos"))
     c.handle_privmsg("bob-marchhare!u@h", "#bobiverse", "!report PCENT ionos cursor-models 50")
     assert recorder == []
+
+
+def _report_help_privmsg_payloads(recorder: list[str], asker: str) -> list[str]:
+    prefix = f"PRIVMSG {asker} :"
+    return [line.split(" :", 1)[1] for line in recorder if line.startswith(prefix)]
+
+
+def test_report_help_whispers_per_line_channel_and_pm(tmp_path, monkeypatch, recorder):
+    monkeypatch.setenv("AGENTIC_IRC_HOME", str(tmp_path))
+    _open_moot(tmp_path, chair="bob-flamingo")
+    expected = bobreport.HELP_TEXT.splitlines()
+    c = irc_agent.Client(_args(tmp_path, "bob-flamingo"))
+
+    c.handle_privmsg("simon!u@h", "#bobiverse", "!report ?")
+    assert len(recorder) == len(expected)
+    assert all(x.startswith("PRIVMSG simon :") for x in recorder)
+    assert not any("#bobiverse" in x for x in recorder)
+    assert _report_help_privmsg_payloads(recorder, "simon") == expected
+    for line in recorder:
+        payload = line.split(" :", 1)[1]
+        assert "\n" not in payload and "\r" not in payload
+
+    recorder.clear()
+    c.handle_privmsg("simon!u@h", "bob-flamingo", "!report help")
+    assert len(recorder) == len(expected)
+    assert all(x.startswith("PRIVMSG simon :") for x in recorder)
+    assert not any("#bobiverse" in x for x in recorder)
+    assert _report_help_privmsg_payloads(recorder, "simon") == expected
+
+    recorder.clear()
+    c2 = irc_agent.Client(_args(tmp_path, "bob-ionos"))
+    c2.handle_privmsg("simon!u@h", "#bobiverse", "!report ?")
+    assert recorder == []

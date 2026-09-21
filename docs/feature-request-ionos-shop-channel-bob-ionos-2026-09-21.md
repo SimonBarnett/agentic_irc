@@ -2,6 +2,7 @@
 
 **Date:** 2026-09-21  
 **Repo:** https://github.com/SimonBarnett/agentic_irc  
+**GitHub issue:** https://github.com/SimonBarnett/agentic_irc/issues/70  
 **Raised by:** Simon  
 **UAT + hostile MRB owner:** Bob  
 **Related:** #46 shop channels, `agentic_build/config/bobiverse.json` (`ionos` → `bob-ionos`)

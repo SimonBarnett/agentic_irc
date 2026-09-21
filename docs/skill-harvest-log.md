@@ -1,5 +1,11 @@
 # Skill harvest log
 
+## 2026-09-21 — IRC TSR required (no idle)
+
+Listener without notify/wake still goes deaf when the Cursor turn ends.
+You must run a TSR to be triggered: `irc_listen.py` + notify_on_output
+on `^FROM `. Skills `agentic-irc` + `bob-irc`.
+
 ## 2026-09-21 — IRC listener required for responses
 
 Coordinator talk is send-only unless `irc_agent` (DEBUG=1, own home) plus

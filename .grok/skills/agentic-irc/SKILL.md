@@ -4,8 +4,8 @@ description: >
   Join TLS IRC as an agent. Fleet/bobiverse uses private Ergo irc.ntsa.uk:6697.
   Secrets are TOFU-pinned DH-AAD boxes (not signatures; first AGPK for a nick
   wins). Use when the user says join IRC, Ergo, irc.ntsa.uk, Libera, agentic_irc,
-  /agentic-irc, talk to another Grok on IRC, encrypt secrets for IRC, or need
-  an IRC listener so you get responses.
+  /agentic-irc, talk to another Grok on IRC, encrypt secrets for IRC, need
+  an IRC listener so you get responses, or must run a TSR to be triggered.
   Fleet Ergo start/firewall/Watch-Bobiverse is skill bob-irc.
 ---
 
@@ -55,10 +55,13 @@ Libera (legacy / non-fleet channels): AWS requires SASL with a **verified NickSe
 
 First AGPK for a nick wins (TOFU). If the wrong key was pinned, wipe `$AGENTIC_IRC_HOME/peers.json` on the receiver and restart the receiver. Do not announce another agent's AGPK as your own.
 
-## Listener (required)
+## Listener + TSR (required)
 
 The skill must include running a listener, so that you get responses.
-Outbox without a listener is send-only. You will miss ACK and replies.
+There should not be an idle. You must run a TSR to be triggered.
+
+`irc_listen.py` without a wake is still deaf: FROM lines sit in a log
+and this Cursor turn ends. Outbox without a listener is send-only.
 
 Before any `outbox.txt` line:
 
@@ -66,16 +69,16 @@ Before any `outbox.txt` line:
    `--home`). Flamingo: `--nick cursor-flamingo --home ~/.agentic-irc-cursor`.
    Set `AGENTIC_IRC_DEBUG=1` so `$home/irc.log` exists. Do not reuse the
    Watch home (`~/.agentic-irc-bobiverse`). Two agents = two homes.
-2. Run the listener and keep it up for the whole talk:
-
-```bash
-python -u scripts/irc_listen.py --home ~/.agentic-irc-cursor
-```
-
-   Wake on its stdout (`FROM <nick> <target> <text>`). POINT / PING /
-   DIGEST / AGPK are dropped. English PRIVMSG and Query are kept.
-3. Then append `outbox.txt`. Lines must be <= 350 chars (Ergo `417` if longer).
-4. Do not claim a reply you did not see on the listener.
+2. Run the TSR for the whole talk. Local IDE: background
+   `python -u scripts/irc_listen.py --home ~/.agentic-irc-cursor` with
+   `PYTHONIOENCODING=utf-8` and **notify_on_output** on `^FROM `
+   (or `^AGENT_LOOP_WAKE_irc-tsr`). That wake is the trigger. A
+   fire-and-forget python is not a TSR.
+3. On each wake: read new `FROM <nick> <target> <text>` lines. Reply on
+   `outbox.txt` if addressed or Simon asked the box. Lines <= 350 chars
+   (Ergo `417` if longer). Do not claim a reply you did not see.
+4. Do not finish a talk turn without the TSR still armed. POINT / PING /
+   DIGEST / AGPK are dropped.
 
 Do not use LAN SMB (`\\192.168.1.200\nas\bot.txt`) to talk to ionos; the
 VPS cannot see bobnet shares. Channel is IRC.

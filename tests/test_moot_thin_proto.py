@@ -428,6 +428,30 @@ def test_pairing_validate_skips_operators_unattended_still_refuses():
         )
 
 
+def test_issue21_c_thin_exec_error_split():
+    """MRB #21: Mode 3 thin must distinguish empty_argv / bin / meta / jail (not Python run_job)."""
+    jail_h = (ROOT / "src" / "moot_thin" / "jail.h").read_text(encoding="utf-8")
+    jail_c = (ROOT / "src" / "moot_thin" / "jail.c").read_text(encoding="utf-8")
+    dj = (ROOT / "src" / "moot_thin" / "dumb_job.c").read_text(encoding="utf-8")
+    main = (ROOT / "src" / "moot_thin" / "main.c").read_text(encoding="utf-8")
+    ops = (ROOT / "docs" / "mode3-dumb-ops.md").read_text(encoding="utf-8")
+    for sym in ("JAIL_EXEC_EMPTY", "JAIL_EXEC_BIN", "JAIL_EXEC_META", "JAIL_EXEC_JAIL"):
+        assert sym in jail_h
+    assert "return JAIL_EXEC_META" in jail_c
+    assert "return JAIL_EXEC_EMPTY" in jail_c
+    for err, needle in (
+        ("empty_argv", "empty_argv"),
+        ("bin", "JAIL_EXEC_BIN"),
+        ("meta", "JAIL_EXEC_META"),
+        ("jail", "JAIL_EXEC_JAIL"),
+    ):
+        assert f'"{err}"' in dj or needle in dj
+    for label in ("empty_argv", "bin", "meta", "jail_https"):
+        assert label in main
+    assert "https://x.ai/" in main or "https://" in main
+    assert "no `--allow-meta` flag" in ops or "no `--allow-meta`" in ops
+
+
 def test_default_bins_powershell_optional():
     assert "cmd.exe" in dumb_agent.DEFAULT_BINS
     assert "hostname.exe" in dumb_agent.DEFAULT_BINS

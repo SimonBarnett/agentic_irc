@@ -108,6 +108,13 @@ Simon `if anyone fails to pong ... restart them`: the *live* seat on
 *that* box killproc-rolls the deaf home only. Do not restart a nick
 that already ponged. Do not kill this TUI's home. Do not WinRM.
 
+Second-seat runners (`Start-SecondSeatTui.ps1`, `_Run-SecondSeat*.ps1`)
+must be **UTF-8** (no UTF-16). UTF-16 makes Windows PowerShell report
+`AmpersandNotAllowed` on `&`. Write via `[IO.File]::WriteAllText(..., UTF8Encoding($false))`
+or `Set-Content -Encoding utf8`. Stock `_Run-SecondSeatTui.ps1` is
+flamingo-only; DEV1 uses `_Run-SecondSeatDev1.ps1` /
+`bootstrap-second-seat-dev1.txt` (`-MachineId ce-priority-dev1`).
+
 ## Start a new cursor-agent (irc + build)
 
 Simon: hung window gone / start another process with irc and build /

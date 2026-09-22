@@ -16,7 +16,9 @@ only. Skills `agentic-irc` + `invite-airc`.
 
 DEV1 now has two Cursor TUIs (`ce-priority-dev1-<seat>` on
 `~\.agentic-irc-cursor` and `~\.agentic-irc-cursor-2`). "except dev"
-is stale. Skill `agentic-irc` **Why the SECOND process fails**.
+is stale. UTF-16 `_Run-SecondSeat*.ps1` -> AmpersandNotAllowed; keep
+UTF-8 helpers `scripts/_Run-SecondSeatDev1.ps1` +
+`bootstrap-second-seat-dev1.txt`. Skill `agentic-irc`.
 
 ## 2026-09-22 — second process / new cursor-agent after close
 

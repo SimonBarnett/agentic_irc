@@ -145,6 +145,29 @@ def test_mention_ack_when_weekly_zero(tmp_path):
     assert "align shop-channel" in line
 
 
+def test_mention_ack_weekly_zero_with_cursor_remaining_not_cannot(tmp_path):
+    """MUST 5 (#70): live peer shape weekly=0 + remaining_pct; ACK must not say cannot grok-talk."""
+    bobstat.write_peer(
+        tmp_path,
+        {
+            "ok": True,
+            "id": "ionos",
+            "weekly": 0,
+            "cursor_label": "82%",
+            "remaining_pct": 82,
+            "running": 0,
+            "queued": 0,
+            "jobs": [],
+        },
+    )
+    line = bobtalk.mention_reply_line(
+        tmp_path, "ionos", ["bob-ionos"], "simon", "@bob-ionos status?"
+    )
+    assert line is not None
+    assert "cannot grok-talk" not in line
+    assert "weekly=0 (cursor remaining=82%)" in line
+
+
 def test_query_counts_as_addressed(tmp_path):
     bobstat.write_peer(
         tmp_path,

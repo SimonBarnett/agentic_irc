@@ -60,7 +60,7 @@ with a full skill-load prompt. It does not:
 
 ## UNKNOWN
 
-1. Whether Cursor `--resume` accepts the stored GUID token on all builds (Grok uses `--session-id` / `--resume`).
+1. Whether Cursor `--resume` flag spelling or JSON field names drift across CLI builds after a **bound** `session_id` from first boot (Grok uses `--session-id` / `--resume`).
 3. Silence threshold tuning on very quiet seats (override `-IrcStaleSeconds`).
 
 ## Acceptance

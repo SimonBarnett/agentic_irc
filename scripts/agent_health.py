@@ -213,7 +213,7 @@ def commit_listen_offset_after_wake(
     """Advance offset only after a successful Agent TSR delivery."""
     if not agent_started:
         return current_offset
-    if exit_code is not None and exit_code != 0:
+    if exit_code != 0:
         return current_offset
     return next_offset
 
@@ -339,6 +339,12 @@ def _cli() -> int:
     p_mark.add_argument("--session-path", required=True)
     p_mark.add_argument("--session-id", required=True)
 
+    p_off = sub.add_parser("commit-offset")
+    p_off.add_argument("--agent-started", choices=("true", "false"), required=True)
+    p_off.add_argument("--exit-code", default="")
+    p_off.add_argument("--current-offset", type=int, required=True)
+    p_off.add_argument("--next-offset", type=int, required=True)
+
     args = parser.parse_args()
 
     if args.cmd == "select-sink":
@@ -396,6 +402,22 @@ def _cli() -> int:
 
     if args.cmd == "mark-cursor-bound":
         write_cursor_bound_session(args.session_path, args.session_id)
+        return 0
+
+    if args.cmd == "commit-offset":
+        started = args.agent_started == "true"
+        code: int | None
+        if args.exit_code == "":
+            code = None
+        else:
+            code = int(args.exit_code)
+        committed = commit_listen_offset_after_wake(
+            agent_started=started,
+            exit_code=code,
+            current_offset=args.current_offset,
+            next_offset=args.next_offset,
+        )
+        print(committed)
         return 0
 
     parser.error("unknown command")

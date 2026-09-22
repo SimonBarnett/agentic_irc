@@ -263,7 +263,9 @@ Do not stamp UAT. Do not push main.
 
 function Invoke-AgentOnIrcTraffic {
     param($AgentInfo, [string]$SessionId, [string]$WorkDir, [string[]]$FromLines, [string]$SinkPath)
-    if (-not $FromLines -or $FromLines.Count -eq 0) { return $false }
+    if (-not $FromLines -or $FromLines.Count -eq 0) {
+        return [pscustomobject]@{ Started = $false; ExitCode = $null }
+    }
     $sinkName = Split-Path -Leaf $SinkPath
     $payload = Invoke-AgentHealthPy -Args @(
         'format-wake', '--sink-name', $sinkName, '--lines', ($FromLines -join "`n")
@@ -301,9 +303,18 @@ function Invoke-AgentOnIrcTraffic {
         try { $code = $proc.ExitCode } catch { }
         Write-AgentLog ("Agent TSR exited pid={0} code={1}" -f $proc.Id, $code)
     }
-    if (-not $started) { return $false }
-    if ($null -ne $code -and $code -ne 0) { return $false }
-    return $true
+    return [pscustomobject]@{ Started = $started; ExitCode = $code }
+}
+
+function Commit-ListenOffsetAfterWake {
+    param([bool]$AgentStarted, [Nullable[int]]$ExitCode, [long]$CurrentOffset, [long]$NextOffset)
+    $codeArg = if ($null -eq $ExitCode) { '' } else { "$ExitCode" }
+    $startedArg = if ($AgentStarted) { 'true' } else { 'false' }
+    $out = Invoke-AgentHealthPy -Args @(
+        'commit-offset', '--agent-started', $startedArg, '--exit-code', $codeArg,
+        '--current-offset', "$CurrentOffset", '--next-offset', "$NextOffset"
+    )
+    return [long]$out
 }
 
 # --- main ---
@@ -338,9 +349,10 @@ while ($true) {
 
     $read = Read-NewIrcFromLines -Home $IrcHome -Offset $listenOffset
     if ($read.Lines.Count -gt 0) {
-        $delivered = Invoke-AgentOnIrcTraffic -AgentInfo $agent -SessionId $sessionId -WorkDir $Cwd -FromLines $read.Lines -SinkPath $read.SinkPath
-        if ($delivered) {
-            $listenOffset = $read.NextOffset
+        $wake = Invoke-AgentOnIrcTraffic -AgentInfo $agent -SessionId $sessionId -WorkDir $Cwd -FromLines $read.Lines -SinkPath $read.SinkPath
+        $committed = Commit-ListenOffsetAfterWake -AgentStarted $wake.Started -ExitCode $wake.ExitCode -CurrentOffset $listenOffset -NextOffset $read.NextOffset
+        if ($committed -ne $listenOffset) {
+            $listenOffset = $committed
         }
         else {
             Write-AgentLog 'Agent TSR delivery failed; keeping listen offset for replay'

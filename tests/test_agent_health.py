@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -128,6 +129,9 @@ def test_commit_offset_only_after_successful_wake():
         agent_started=True, exit_code=1, current_offset=0, next_offset=99
     ) == 0
     assert ah.commit_listen_offset_after_wake(
+        agent_started=True, exit_code=None, current_offset=0, next_offset=99
+    ) == 0
+    assert ah.commit_listen_offset_after_wake(
         agent_started=True, exit_code=0, current_offset=0, next_offset=99
     ) == 99
 
@@ -192,6 +196,7 @@ def test_watch_script_uses_agent_health_sink_helpers():
     assert "listen-health" in ps1
     assert "keeping listen offset for replay" in ps1
     assert "parse-cursor-session" in ps1
+    assert "commit-offset" in ps1
     cursor_boot = ps1.split("if ($AgentInfo.Engine -eq 'cursor')")[1].split("elseif ($id)")[0]
     assert "[guid]::NewGuid()" not in cursor_boot
     assert "password=" not in ps1.lower()
@@ -203,3 +208,43 @@ def test_listen_sink_candidates_include_fallbacks(tmp_path: Path):
     home.mkdir()
     kinds = [k for k, _ in ah.listen_sink_candidates(home)]
     assert kinds == ["stdout", "tsr", "irc_log"]
+
+
+def test_select_sink_skips_locked_stdout(tmp_path: Path, monkeypatch):
+    home = tmp_path / "seat"
+    home.mkdir()
+    tsr = home / "listen-tsr.log"
+    tsr.write_text("FROM locked stdout fallback x x hi\n", encoding="utf-8")
+    real_probe = ah._probe_log_path
+
+    def fake_probe(path: Path):
+        if path.name == "listen.stdout.log":
+            return True, False, None
+        return real_probe(path)
+
+    monkeypatch.setattr(ah, "_probe_log_path", fake_probe)
+    path, kind = ah.select_listen_poll_sink(home)
+    assert kind == "tsr"
+    assert path == tsr
+
+
+def test_commit_offset_cli():
+    root = Path(__file__).resolve().parents[1]
+    script = root / "scripts" / "agent_health.py"
+    out = subprocess.check_output(
+        [
+            sys.executable,
+            str(script),
+            "commit-offset",
+            "--agent-started",
+            "true",
+            "--exit-code",
+            "1",
+            "--current-offset",
+            "0",
+            "--next-offset",
+            "42",
+        ],
+        text=True,
+    ).strip()
+    assert out == "0"

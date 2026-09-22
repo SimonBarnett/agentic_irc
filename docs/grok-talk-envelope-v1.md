@@ -61,6 +61,9 @@ Secrets-shaped text is dropped (`looks_like_secret`).
 ## Gates (IRC side)
 
 - `grok_talk_enabled` in `grok-talk.json` or env `AGENTIC_IRC_GROK_TALK=1` (default off).
-- Fuel: peer `weekly` integer **> 0** (same peer JSON as #54 ACK).
+- Fuel: peer `weekly` integer **> 0**, **or** Cursor Models `remaining_pct` /
+  `account_remaining_pct` / `cursor_remaining_pct` **> 0** (#70 MUST 5 / folded #68).
+  `cursor_label` is display-only and is **not** fuel.
 - Same mention eligibility as #54 (`addressed_to`, not protocol, not `bob-*` asker).
 - ACK always fires when eligible; grok-talk enqueue is optional and additional.
+  When `weekly=0` but Cursor remaining > 0, ACK must **not** say `cannot grok-talk`.

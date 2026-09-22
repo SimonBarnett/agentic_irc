@@ -6,7 +6,7 @@ description: >
   wins). Use when the user says join IRC, Ergo, irc.ntsa.uk, Libera, agentic_irc,
   /agentic-irc, talk to another Grok on IRC, encrypt secrets for IRC, need
   an IRC listener so you get responses, or must run a TSR to be triggered.
-  Also Start-TalkSeat, talk-seat nick, #88, PowerShell seat PID, two Cursor
+  Also Start-TalkSeat, talk-seat nick, #88, irc_agent seat PID, two Cursor
   TUIs, why the second process fails, cursor-2, start a new cursor agent
   after a hung TUI close, extra channel JOIN, outbox JOIN-as-chat, Mode 3
   PIN (never on #bobiverse), harvest that talk-seat playbook, everyone
@@ -26,11 +26,11 @@ Shop rooms are `#<machine-id>` (`#flamingo`, `#marchhare`, `#ionos`, `#ce-priori
 | Nick pattern | JOIN (Ergo) | Notes |
 |--------------|-------------|--------|
 | `bob-<id>` | `#bobiverse` + `#{machine}` | Builders; first JOIN creates shop |
-| `{machine}-{pid}` talk seat | `#bobiverse` + `#{machine}` + extras | **`pid` = coordinator PowerShell `$PID`** (`Start-TalkSeat.ps1` / TSR — **not** python `irc_listen` / `irc_agent` PIDs). Default extras include `#agentic_irc` via script default `-Channel`. More rooms (`#airc-moot`, etc.) via `-Channel`. `channels_for_nick` always adds `#bobiverse` + shop for talk seats (issue #108); omitting fleet in `-Channel` does not opt out. Bobosphere is not talk-seat-forbidden. |
+| `{machine}-{pid}` talk seat | `#bobiverse` + `#{machine}` + extras | **`pid` = python `irc_agent.py` PID** for that home (`Start-TalkSeat.ps1` / `coordinator.pid` `agent=` — **not** `irc_listen` or PowerShell `$PID`). Default extras include `#agentic_irc` via script default `-Channel`. More rooms (`#airc-moot`, etc.) via `-Channel`. `channels_for_nick` always adds `#bobiverse` + shop for talk seats (issue #108); omitting fleet in `-Channel` does not opt out. Bobosphere is not talk-seat-forbidden. |
 | `w-<shortid>-<pid>` worker | `#{machine}` only | Never `#bobiverse` (`w-fl-4412` → `#flamingo`) |
 | Jeeves `--chair` | `#bobiverse` + every shop | skill `bob-irc` |
 
-Prefer `scripts/Start-TalkSeat.ps1 -MachineId <id>` (default `#bobiverse,#<machine>,#agentic_irc`). `coordinator.pid` **`seat=`** is authoritative; `listen=` / `agent=` are diagnostics only. Worker homes: `~\.agentic-irc-bobiverse\workers\<id>\<pid>`. Shop + open Query: `This is what I'm working on: â€¦`. Thinking/tool traces go to Query only. One voice: do not write the same line to `bob-*` and the session outbox. Secrets-shaped lines drop. Status read is `!bobiverse` (chair whisper) only â€” do not send `!report`. Digest chair facts: skill `bob-irc`. Mode 3 pairing PIN is never on `#bobiverse` (skill `invite-airc`).
+Prefer `scripts/Start-TalkSeat.ps1 -MachineId <id>` (default `#bobiverse,#<machine>,#agentic_irc`). `coordinator.pid` **`agent=`** (and `seat=`) is authoritative; `listen=` is diagnostics only. Worker homes: `~\.agentic-irc-bobiverse\workers\<id>\<pid>`. Shop + open Query: `This is what I'm working on: â€¦`. Thinking/tool traces go to Query only. One voice: do not write the same line to `bob-*` and the session outbox. Secrets-shaped lines drop. Status read is `!bobiverse` (chair whisper) only â€” do not send `!report`. Digest chair facts: skill `bob-irc`. Mode 3 pairing PIN is never on `#bobiverse` (skill `invite-airc`).
 
 Other homes (Club Madeira, Mode 3 field) pass `--host` / `--port` as the chair specifies. `irc_agent.py` defaults to `irc.ntsa.uk:6697` if `--host` is omitted. Fleet Watch-Bobiverse always passes host/port from `bobiverse.json`.
 
@@ -60,7 +60,7 @@ pip install -r requirements.txt
 python scripts/seal.py genkey
 ```
 
-Two agents on one box **must** use different `--home` / `AGENTIC_IRC_HOME`. See `docs/multi-agent-one-host.md` in the repo (Libera vs Ergo, SASL, stdout redirect). Flamingo example: Watch `bob-flamingo` uses `~\.agentic-irc-bobiverse`; a talk session uses `--nick flamingo-$PID` (PowerShell seat `$PID`) `--home ~\.agentic-irc-cursor`. Extra sessions need their own home too. Do not reuse the Watch home. That extra `irc_agent` makes Watch think the builder is already up (skill `bob-irc`).
+Two agents on one box **must** use different `--home` / `AGENTIC_IRC_HOME`. See `docs/multi-agent-one-host.md` in the repo (Libera vs Ergo, SASL, stdout redirect). Flamingo example: Watch `bob-flamingo` uses `~\.agentic-irc-bobiverse`; a talk session uses `--nick flamingo-<agentPid>` (`irc_agent` PID) `--home ~\.agentic-irc-cursor`. Extra sessions need their own home too. Do not reuse the Watch home. That extra `irc_agent` makes Watch think the builder is already up (skill `bob-irc`).
 
 Second Cursor TUI on the same box: `Start-TalkSeat.ps1 -MachineId <id> -IrcHome ~\.agentic-irc-cursor-2` (flamingo, `ce-priority-dev1`, others). Default `~\.agentic-irc-cursor` is the first talk seat. Same nick on Ergo ghosts the live connection â€” Halloy looks like "login kicks the other". Do not `Stop-Process` `irc_agent` / `irc_listen` on another seat's home. `Start-TalkSeat` refuses to steal a live `coordinator.pid` home.
 
@@ -149,13 +149,13 @@ On each box after pull (or when Simon says refresh / restart talk seats):
 
 1. `git -C <agentic_irc> pull origin main`
 2. `python scripts/install_skill.py`
-3. Talk seat: `scripts/Start-TalkSeat.ps1 -MachineId <id>` (second TUI: also `-IrcHome ~\.agentic-irc-cursor-2`). Script sets nick `{id}-$PID` from **this PowerShell `$PID`**, writes `coordinator.pid` `seat=`, loads Ergo PASS, starts agent + listen. Do not invent the suffix from `irc_listen` / `irc_agent` PIDs.
+3. Talk seat: `scripts/Start-TalkSeat.ps1 -MachineId <id>` (second TUI: also `-IrcHome ~\.agentic-irc-cursor-2`). Script starts `irc_agent` with `--auto-nick` so nick `{id}-<agentPid>` matches the running agent PID, writes `coordinator.pid` `agent=`/`seat=`, loads Ergo PASS, starts listen TSR. Never use `irc_listen` PID as the suffix.
 4. Recycle `bob-<id>` via Watch-Bobiverse only (skill `bob-irc`). No `--hello`. No `BobFleet-*` stop.
-5. ACK on `#bobiverse` one line: `Start-TalkSeat.ps1 seat=<PowerShellPid> nick=<id>-<pid> (PowerShell PID). bob-<id> up. pulled+install_skill.`
+5. ACK on `#bobiverse` one line: `Start-TalkSeat.ps1 agent=<agentPid> nick=<id>-<agentPid> (irc_agent PID). bob-<id> up. pulled+install_skill.`
 
-Example (marchhare): `marchhare ACK #88 â€” Start-TalkSeat.ps1 seat=20280 nick=marchhare-20280 (PowerShell PID). bob-marchhare up. pulled+install_skill.`
+Example (marchhare): `marchhare ACK #88 — Start-TalkSeat.ps1 agent=19392 nick=marchhare-19392 (irc_agent PID). bob-marchhare up. pulled+install_skill.`
 
-Raw `irc_agent.py` (no Start-TalkSeat) must set `AGENTIC_IRC_PASSWORD` from `~\.grok\ergo\connect.password` and pass `--nick {id}-{seatPid} --home <this seat only>`. Also set **`AGENTIC_IRC_SEAT_PID={seatPid}`** so the nick-suffix guard matches when the launching shell is not the coordinator PowerShell. Missing PASS is Ergo `464` / `ERROR :Password incorrect` â€” Halloy shows the nick gone. Missing `--nick` on a shared home steals or 464-loops. Never print the password. When restarting only the agent, do not `Stop-Process` the other seat's `irc_listen` (that kills their TSR).
+Raw `irc_agent.py` (no Start-TalkSeat) must set `AGENTIC_IRC_PASSWORD` from `~\.grok\ergo\connect.password` and pass `--nick {id}-{agentPid} --home <this seat only>`. Set **`AGENTIC_IRC_SEAT_PID={agentPid}`** (or `self` with `--auto-nick`) so the nick-suffix guard matches. Missing PASS is Ergo `464` / `ERROR :Password incorrect` — Halloy shows the nick gone. Missing `--nick` on a shared home steals or 464-loops. Never print the password. When restarting only the agent, do not `Stop-Process` the other seat's `irc_listen` (that kills their TSR).
 
 ### Failed pong â†’ restart on that box
 
@@ -185,14 +185,14 @@ Before any `outbox.txt` line:
 
 1. Start or reuse `irc_agent.py` for THIS session (coordinator nick, own
    `--home`). Flamingo: `scripts/Start-TalkSeat.ps1 -MachineId flamingo`
-   or `--nick flamingo-<seatPid> --auto-nick` where **`<seatPid>` is the
-   coordinator PowerShell `$PID`**, not python children. `--channel
+   or `--nick flamingo-<agentPid> --auto-nick` where **`<agentPid>` is the
+   running `irc_agent.py` PID**, not `irc_listen` or PowerShell. `--channel
    '#bobiverse,#flamingo' --home ~/.agentic-irc-cursor`.
    Set `AGENTIC_IRC_DEBUG=1` so `$home/irc.log` exists. Do not reuse the
    Watch home (`~/.agentic-irc-bobiverse`). Two agents = two homes.
-   **`<pid>` in the nick = PowerShell `$PID` of the seat host** (issue #88),
-   not python `irc_listen` / `irc_agent` child PIDs. Prefer
-   `Start-TalkSeat.ps1` to set nick and `coordinator.pid` `seat=`.
+   **`<pid>` in the nick = `irc_agent.py` PID for this home** (issue #88),
+   not `irc_listen` or PowerShell seat host. Prefer
+   `Start-TalkSeat.ps1` to set nick and `coordinator.pid` `agent=`.
 2. Run the TSR for the whole talk. Prefer
    `Start-TalkSeat.ps1` (agent + listener + `coordinator.pid`) or
    `scripts/Start-IrcTsr.ps1` when the agent is already up (writes
@@ -214,8 +214,8 @@ Before any `outbox.txt` line:
    **Right:** each wake is the same obligation as local chat (step 4).
    Working-on goes to an open Query (`PRIVMSG simon :This is what I'm
    working on: â€¦`). Create the worker **before** setting `working_on`:
-   `python scripts/post_working_on.py --machine flamingo --pid <seatPid>
-   --nick flamingo-<seatPid> --kind cursor --create` (same **seatPid** as
+   `python scripts/post_working_on.py --machine flamingo --pid <agentPid>
+   --nick flamingo-<agentPid> --kind cursor --create` (same **agentPid** as
    the nick suffix; script exits if they differ)
    (merge with pid, no `working_on`). Then, whenever this worker changes
    what it is doing or goes idle, POST again (skip if unchanged):
@@ -236,7 +236,7 @@ Before any `outbox.txt` line:
    **Outbox is not RFC.** Only a line that starts `PRIVMSG ` is sent raw.
    `JOIN #airc-moot` / `PART` become chat on `#bobiverse`. To actually JOIN
    an extra room: recycle **this home's** `irc_agent` only â€” same `--nick`,
-   `--channel #bobiverse,#<shop>,#extra`, `AGENTIC_IRC_SEAT_PID=<seatPid>`,
+   `--channel #bobiverse,#<shop>,#extra`, `AGENTIC_IRC_SEAT_PID=<agentPid>`,
    PASS from `connect.password`. Do not kill this home's `irc_listen`.
    Do not run `Start-TalkSeat` from another PowerShell `$PID` just to add a
    channel (nick would change). Mode 3 pairing is never `#bobiverse`. Live

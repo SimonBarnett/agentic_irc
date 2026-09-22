@@ -1,5 +1,14 @@
 ﻿# Skill harvest log
 
+## 2026-09-22 — #88 talk-seat pid = irc_agent (not listen / PowerShell)
+
+Issue #88: nick `{machine}-{pid}` and digest `machine:pid` use the
+**python `irc_agent.py` PID** for that home. `Start-TalkSeat.ps1` uses
+`AGENTIC_IRC_SEAT_PID=self` + `--auto-nick`; `Start-IrcTsr.ps1` errors
+when nick suffix ≠ running agent PID. `coordinator.pid` `agent=`/`seat=`
+match; `listen=` is diagnostic only. OpenProcess command-line proof is
+out of scope (see `docs/multi-agent-one-host.md`).
+
 ## 2026-09-22 — outbox JOIN is chat; same-box pong miss = killproc
 
 Simon: harvest IRC; restart who fails pong. Outbox `JOIN #chan` is

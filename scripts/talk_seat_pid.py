@@ -1,4 +1,4 @@
-"""Talk-seat identity: IRC nick {machine-id}-{seatPid} uses coordinator PowerShell PID."""
+"""Talk-seat identity: IRC nick {machine-id}-{pid} uses python irc_agent PID (never irc_listen)."""
 from __future__ import annotations
 
 import os
@@ -62,8 +62,8 @@ def check_nick_seat_pid(nick: str, seat_pid: int | str) -> str | None:
         return "INFO talk-seat nick suffix is not a valid pid"
     if have != want:
         return (
-            f"INFO talk-seat nick suffix {have} != seat PowerShell PID {want} "
-            "(not python irc_listen or irc_agent PID)"
+            f"INFO talk-seat nick suffix {have} != irc_agent PID {want} "
+            "(must not use irc_listen PID or PowerShell seat host PID)"
         )
     return None
 
@@ -80,14 +80,19 @@ def parse_coordinator_pid(text: str) -> dict[str, str]:
     return out
 
 
-def _seat_pid_from_doc(doc: dict[str, str]) -> int | None:
-    raw = (doc.get("seat") or doc.get("host") or "").strip()
+def _agent_pid_from_doc(doc: dict[str, str]) -> int | None:
+    """Authoritative talk-seat PID: agent= then seat= (legacy alias)."""
+    raw = (doc.get("agent") or doc.get("seat") or doc.get("host") or "").strip()
     if not raw:
         return None
     try:
         return int(raw)
     except ValueError:
         return None
+
+
+def _seat_pid_from_doc(doc: dict[str, str]) -> int | None:
+    return _agent_pid_from_doc(doc)
 
 
 def coordinator_seat_pid(home: Path | str) -> int | None:
@@ -111,8 +116,15 @@ def seat_pid_from_env() -> int | None:
         return None
 
 
-def resolve_seat_pid(home: Path | str | None = None) -> int | None:
-    """Coordinator PowerShell PID: env AGENTIC_IRC_SEAT_PID, then coordinator.pid seat=."""
+def resolve_seat_pid(
+    home: Path | str | None = None, *, self_pid: int | None = None
+) -> int | None:
+    """irc_agent PID: env AGENTIC_IRC_SEAT_PID (or self), then coordinator.pid agent=."""
+    raw = (os.environ.get(_SEAT_ENV) or "").strip()
+    if raw.lower() == "self":
+        if self_pid is not None and self_pid > 0:
+            return int(self_pid)
+        return None
     pid = seat_pid_from_env()
     if pid is not None:
         return pid
@@ -122,7 +134,7 @@ def resolve_seat_pid(home: Path | str | None = None) -> int | None:
 
 
 def check_coordinator_nick(home: Path | str) -> str | None:
-    """Validate coordinator.pid nick suffix matches authoritative seat= line."""
+    """Validate coordinator.pid nick suffix matches authoritative agent= / seat= line."""
     path = Path(home) / "coordinator.pid"
     if not path.is_file():
         return None

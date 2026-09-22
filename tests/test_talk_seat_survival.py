@@ -76,6 +76,10 @@ def test_start_scripts_detach_listen_and_bind_guard():
     assert "Start-Process" in tsr
     assert "listen.stdout.log" in tsr
     assert "RedirectStandardOutput" in tsr
+    assert "talk_seat_pid.py" in tsr
+    assert "--nick" in tsr and "--pid" in tsr
     assert "talk_seat_pid.py" in talk
     assert "--bind-home" in talk
+    assert "--auto-nick" in talk
+    assert "AGENTIC_IRC_SEAT_PID = 'self'" in talk
     assert "Stop-CursorHomeAgents" in talk

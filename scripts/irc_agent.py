@@ -977,21 +977,23 @@ def main() -> None:
     p.add_argument(
         "--auto-nick",
         action="store_true",
-        help="talk seat: set --nick suffix to coordinator seat PID (env or coordinator.pid)",
+        help="talk seat: set --nick suffix to irc_agent PID (env self/agent= or coordinator.pid)",
     )
     args = p.parse_args()
     home = (args.home or os.environ.get("AGENTIC_IRC_HOME") or "").strip()
-    seat_pid = talk_seat_pid.resolve_seat_pid(home or None)
+    seat_pid = talk_seat_pid.resolve_seat_pid(home or None, self_pid=os.getpid())
     if args.auto_nick:
         if seat_pid is None:
-            info("INFO --auto-nick requires AGENTIC_IRC_SEAT_PID or coordinator.pid seat=")
+            info(
+                "INFO --auto-nick requires AGENTIC_IRC_SEAT_PID (or self) or coordinator.pid agent="
+            )
             sys.exit(2)
         args.nick = talk_seat_pid.auto_talk_seat_nick(args.nick, seat_pid)
     err = None
     if talk_seat_pid.parse_talk_seat_nick(args.nick):
         if seat_pid is None:
             err = (
-                "INFO talk-seat nick requires AGENTIC_IRC_SEAT_PID or coordinator.pid seat="
+                "INFO talk-seat nick requires AGENTIC_IRC_SEAT_PID (or self) or coordinator.pid agent="
             )
         else:
             err = talk_seat_pid.check_nick_seat_pid(args.nick, seat_pid)

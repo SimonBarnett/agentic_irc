@@ -8,8 +8,7 @@
 ## LOCKED
 
 1. Worker webhook POST with working_on and shop PRIVMSG
-   (
-ick: This is what I'm working on: …) are the **same event**.
+   (`{nick}: This is what I'm working on: …`) are the **same event**.
 2. Going idle: webhook the idle **description** first (shop + POST), then
    POST state=idle. Never idle silently.
 3. Channel is #{machine}, not #bobiverse. No secrets on the shop line.

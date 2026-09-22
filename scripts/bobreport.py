@@ -257,7 +257,13 @@ def channels_for_nick(nick: str, requested: str) -> list[str]:
         return [shop_channel(worker[0])]
     talk = parse_talk_seat_nick(nick)
     if talk:
-        return [shop_channel(talk[0])]
+        shop = shop_channel(talk[0])
+        extras = [
+            c
+            for c in req
+            if c.lower() not in (FLEET_CHANNEL.lower(), shop.lower())
+        ]
+        return [shop] + extras
     mid = machine_from_nick(nick)
     if mid:
         shop = shop_channel(mid)

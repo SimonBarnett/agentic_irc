@@ -37,6 +37,9 @@ def test_channels_for_nick():
     assert bobreport.channels_for_nick("flamingo-17568", "#bobiverse,#flamingo") == [
         "#flamingo"
     ]
+    assert bobreport.channels_for_nick(
+        "marchhare-20280", "#bobiverse,#marchhare,#agentic_irc,#airc-moot"
+    ) == ["#marchhare", "#agentic_irc", "#airc-moot"]
     assert bobreport.channels_for_nick("ce-priority-dev1-16948", "#bobiverse") == [
         "#ce-priority-dev1"
     ]

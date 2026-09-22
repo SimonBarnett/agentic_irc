@@ -48,12 +48,20 @@ with a full skill-load prompt. It does not:
    traffic, it triggers the agent wake. No human paste.
 8. No UAT stamp from workers. Bob owns UAT.
 
+## Status (worker, 2026-09-22)
+
+| Item | State |
+|------|--------|
+| `scripts/Watch-AgentHealth.ps1` | In repo (`--grok` / `--cursor`) |
+| Session store | `~/.grok/bob-bridge/watch-agent-health-{cursor\|grok}.session` |
+| IRC stale threshold | 900s default (`-IrcStaleSeconds`) |
+| Offline tests | `tests/test_agent_health.py` + `scripts/agent_health.py` |
+| Bob UAT / MRB | Not stamped by worker |
+
 ## UNKNOWN
 
-1. On-disk path / flag for Cursor vs Grok session id resume.
-2. Whether `Watch-AgentHealth.ps1` lands in this repo (`scripts/`)
-   or stays a Desktop copy that calls repo helpers.
-3. Silence threshold (seconds) before TSR is treated as failed.
+1. Whether Cursor `--resume` accepts the stored GUID token on all builds (Grok uses `--session-id` / `--resume`).
+3. Silence threshold tuning on very quiet seats (override `-IrcStaleSeconds`).
 
 ## Acceptance
 

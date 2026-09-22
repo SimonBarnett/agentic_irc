@@ -143,7 +143,7 @@ def test_version_sync():
     ver = (ROOT / "src" / "moot_thin" / "VERSION").read_text(encoding="utf-8").strip()
     main = (ROOT / "src" / "moot_thin" / "main.c").read_text(encoding="utf-8")
     assert f'"{ver}"' in main
-    assert ver == "0.3.1"
+    assert ver == "0.3.2"
 
 
 def test_live_tls_contracts_in_source():
@@ -481,7 +481,7 @@ def test_mode3_visibility_issue_4_task_ui_and_icon():
     ico = ROOT / "src" / "moot_thin" / "airc-moot-thin.ico"
     assert ico.exists() and ico.stat().st_size > 200
     ver = (ROOT / "src" / "moot_thin" / "VERSION").read_text(encoding="utf-8").strip()
-    assert ver == "0.3.1"
+    assert ver == "0.3.2"
     main = (ROOT / "src" / "moot_thin" / "main.c").read_text(encoding="utf-8")
-    assert 'AIRC_THIN_VERSION "0.3.1"' in main
+    assert 'AIRC_THIN_VERSION "0.3.2"' in main
     assert "task_ui_set_enabled(0)" in main

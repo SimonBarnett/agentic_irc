@@ -141,7 +141,8 @@ class Client:
         self.original_nick = args.nick
         self.live_nick = args.nick
         if getattr(args, "chair", False):
-            self.channels = [bobreport.FLEET_CHANNEL]
+            # Jeeves: #bobiverse + every #{machine} (Simon 2026-09-22).
+            self.channels = bobreport.chair_channels()
         else:
             self.channels = bobreport.channels_for_nick(args.nick, args.channel)
         if not self.channels:
@@ -958,7 +959,7 @@ def main() -> None:
     p.add_argument(
         "--chair",
         action="store_true",
-        help="digest chair seat: JOIN #bobiverse only; !bobiverse + webhook digest",
+        help="digest chair (Jeeves): JOIN #bobiverse + every #{machine}; !bobiverse + webhook digest",
     )
     p.add_argument(
         "--auto-nick",

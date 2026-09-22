@@ -142,6 +142,20 @@ def machine_from_nick(nick: str) -> str | None:
     return None
 
 
+def parse_talk_seat_nick(nick: str) -> str | None:
+    """{machine}-{PowerShellPid} talk seat → machine id. Not bob-* / w-*."""
+    n = (nick or "").strip().lower()
+    if not n or n.startswith("bob-") or parse_worker_nick(n):
+        return None
+    for mid in sorted(FLEET_MACHINE_IDS, key=len, reverse=True):
+        prefix = f"{mid}-"
+        if n.startswith(prefix):
+            rest = n[len(prefix) :]
+            if rest.isdigit():
+                return mid
+    return None
+
+
 def nick_for_machine(doc_machines: dict, machine_id: str) -> str:
     mid = normalize_machine_id(machine_id) or machine_id
     for nick, mid_map in NICK_TO_MACHINE.items():
@@ -155,6 +169,12 @@ def shop_channel(machine_id: str) -> str:
     if not mid:
         raise ValueError("bad machine id")
     return f"#{mid}"
+
+
+def chair_channels() -> list[str]:
+    """Jeeves / digest chair: bobosphere + every fleet shop (Simon 2026-09-22)."""
+    shops = [shop_channel(mid) for mid in FLEET_MACHINE_IDS]
+    return [FLEET_CHANNEL] + shops
 
 
 def normalize_channel(raw: str) -> str:
@@ -221,7 +241,11 @@ def parse_channel_list(raw: str) -> list[str]:
 
 
 def channels_for_nick(nick: str, requested: str) -> list[str]:
-    """bob-* → fleet + shop; w-* → shop only; others keep --channel."""
+    """bob-* → fleet + shop; talk seats + w-* → shop (+ extras); only bobs in #bobiverse.
+
+    First JOIN creates #{machine} on Ergo. Talk seats ({machine}-{pid}) share the
+    shop with bob-{machine}; they must not linger in the bobosphere.
+    """
     req = parse_channel_list(requested)
     worker = parse_worker_nick(nick)
     if worker:
@@ -230,6 +254,12 @@ def channels_for_nick(nick: str, requested: str) -> list[str]:
     if mid:
         shop = shop_channel(mid)
         return [FLEET_CHANNEL, shop]
+    talk_mid = parse_talk_seat_nick(nick)
+    if talk_mid:
+        shop = shop_channel(talk_mid)
+        fleet = FLEET_CHANNEL.lower()
+        extras = [c for c in req if c.lower() not in (fleet, shop.lower())]
+        return [shop] + extras
     return req
 
 

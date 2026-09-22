@@ -133,7 +133,13 @@ def test_chair_answers_bobiverse_builder_silent(tmp_path, monkeypatch, recorder)
     assert recorder == []
     chair = irc_agent.Client(_args(tmp_path, "bob-chair", chair=True))
     assert bobreport.load_digest(tmp_path).get("chairNick") == "bob-chair"
-    assert chair.channels == ["#bobiverse"]
+    assert chair.channels == [
+        "#bobiverse",
+        "#flamingo",
+        "#marchhare",
+        "#ionos",
+        "#ce-priority-dev1",
+    ]
     chair.handle_privmsg("simon!u@h", "#bobiverse", "!bobiverse")
     assert any(x.startswith("PRIVMSG simon :") for x in recorder)
     assert not any("BOB DIGEST" in x and "#bobiverse" in x for x in recorder)

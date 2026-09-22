@@ -370,6 +370,51 @@ def test_build_digest_tray_complete_shape(tmp_path):
     assert "xai_api_key=" not in raw.lower()
 
 
+def test_digest_json_chunk_reassembly_round_trip(tmp_path, monkeypatch):
+    monkeypatch.setattr(bobreport, "MAX_DIGEST_LINE", 120)
+    bobreport.apply_callback(
+        tmp_path,
+        {
+            "op": "merge",
+            "machine": "ionos",
+            "weekly": 33,
+            "period_end": "2026-09-28T00:00:00Z",
+            "pcent": {"cursor-models": 44, "other-models": 22, "grok-weekly": 11},
+            "jobs": [
+                {
+                    "repo": "SimonBarnett/agentic_irc",
+                    "sha": "deadbeef",
+                    "model": "composer-2.5",
+                    "description": "chunk reassembly coverage",
+                    "state": "running",
+                    "run_time": "3m",
+                }
+            ],
+        },
+    )
+    bobstat.write_peer(
+        tmp_path,
+        {
+            "ok": True,
+            "id": "flamingo",
+            "weekly": 9,
+            "running": 1,
+            "queued": 0,
+            "lastSeen": "2026-09-21T12:00:00Z",
+            "jobs": [{"repo": "SimonBarnett/agentic_build", "state": "queued"}],
+        },
+    )
+    lines = bobreport.format_digest_whisper_lines(
+        tmp_path, "Jeeves", form="full", english=False
+    )
+    digest_lines = [ln for ln in lines if ln.startswith("BOB DIGEST v1 ")]
+    assert len(digest_lines) >= 2
+    obj = _digest_json_from_whisper(lines)
+    assert obj["chairNick"]
+    assert len(obj["cursor_pools"]) >= 1
+    assert obj["machines"]["ionos"]["jobs"][0]["run_time"] == "3m"
+
+
 def test_format_digest_whisper_tray_keys_and_chunks(tmp_path):
     bobreport.apply_callback(
         tmp_path,

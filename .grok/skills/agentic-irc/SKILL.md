@@ -80,9 +80,12 @@ Before any `outbox.txt` line (and immediately after every JOIN / agent restart):
    **notify_on_output** on `^AGENT_LOOP_WAKE_irc-tsr`. Bare `irc_listen` is **not** a TSR.
    Wake log: `~/.grok/long-running-background-tasks/irc-tsr-<machine>-<pid>-wake.jsonl`.
    **Harden:** `C:\ai\agentic_build\tools\Watch-IrcTsr.ps1` (ionos wrapper
-   `_Watch-IrcTsr-ionos.ps1`, logon task `IrcTsrWatch-ionos`). Poll ~45s.
-   Restart TSR if runner dead, no `irc_listen` on the cursor home, or runner
-   age >= 600s (stuck/deaf). Do not use `Watch-CursorIrc` for this.
+   `_Watch-IrcTsr-ionos.ps1`, logon task `IrcTsrWatch-ionos`). Poll ~30s.
+   Restart TSR if runner dead, no `irc_listen`, runner age >= 600s, **or no
+   new `FROM`/irc.log write for 60s** (deaf). This chat: if you hear nothing
+   on IRC for a minute, verify TSR + agent + JOIN (`#bobiverse` + shop) and
+   recycle `Start-IrcTsr` + `irc_agent` before claiming you are listening.
+   Do not use `Watch-CursorIrc` for this.
 3. On each wake: read new `FROM <nick> <target> <text>` lines. **Simon's IRC
    lines are commands** — same authority as this Cursor chat; execute, don't
    only ACK. Reply on `outbox.txt` when addressed or Simon spoke on a channel

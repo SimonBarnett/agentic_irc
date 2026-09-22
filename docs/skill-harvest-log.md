@@ -1,5 +1,11 @@
 # Skill harvest log
 
+## 2026-09-22 — IRC 60s silence: verify connection
+
+If no new `FROM` / `irc.log` write for 60s, assume deaf: recycle
+`Start-IrcTsr` + `irc_agent`. `Watch-IrcTsr.ps1` `-SilenceSec 60` poll 30s.
+Skills `agentic-irc` + `bob-irc`.
+
 ## 2026-09-21 — SEAL key to users + TSR watchdog
 
 Webhook `report.secret`: FILE tier S from ionos to **both** `{machine}-{pid}`

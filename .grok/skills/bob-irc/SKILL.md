@@ -105,8 +105,10 @@ on the same home. `Watch-CursorIrc` on ionos **respawned extras** (`cursor-ionos
    **notify_on_output** on `^AGENT_LOOP_WAKE_irc-tsr`. Listener-only is idle.
    Outbox alone is send-only. Do not use LAN SMB to reach ionos.
    **Watchdog:** `Watch-IrcTsr.ps1` (ionos: `_Watch-IrcTsr-ionos.ps1`) polls
-   ~45s and restarts TSR if the runner died, `irc_listen` is gone, or the
-   runner is older than 600s (stuck/deaf). Not `Watch-CursorIrc`.
+   ~30s and restarts TSR if the runner died, `irc_listen` is gone, the
+   runner is older than 600s, or **wake/irc.log is silent for 60s**. Cursor
+   turns: same 60s rule — verify connection, then recycle TSR+agent. Not
+   `Watch-CursorIrc`.
 
 Human monitor (flamingo): Halloy nick not `bob-*` (e.g. `simon`).
 `%AppData%\halloy\config.toml`: server `irc.ntsa.uk:6697` TLS,

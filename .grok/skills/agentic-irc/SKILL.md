@@ -21,16 +21,16 @@ TLS IRC. Status in clear. Secrets only as `SEAL v2` lines.
 
 Fleet builders (`#bobiverse`): `irc.ntsa.uk:6697` (Let's Encrypt). PASS from env `AGENTIC_IRC_PASSWORD` or `~\.grok\ergo\connect.password`. Host/port live in `agentic_build/config/bobiverse.json`. See `agentic_build/docs/bobiverse.md`. Do not point `bob-ionos` at Libera.
 
-Shop rooms are `#<machine-id>` (`#flamingo`, `#marchhare`, `#ionos`, `#ce-priority-dev1`; `#dev1` same). FR work talk room: `#agentic_irc` (Simon + talk seats; not `bob-*`). Not `#bob-flamingo`.
+Shop rooms are `#<machine-id>` (`#flamingo`, `#marchhare`, `#ionos`, `#ce-priority-dev1`; `#dev1` same). FR work talk room: `#agentic_irc` (Simon + talk seats; not `bob-*`). Not `#bob-flamingo`. **`bob-ionos`** is the ionos Bob/Grok fleet agent; **`#ionos`** is its shop with all `w-io-*` workers.
 
 | Nick pattern | JOIN (Ergo) | Notes |
 |--------------|-------------|--------|
-| `bob-<id>` | `#bobiverse` + `#{machine}` | Builders; first JOIN creates shop |
+| `bob-<id>` | `#bobiverse` + `#{machine}` | Builders; first JOIN creates shop (`bob-ionos` → `#ionos`) |
 | `{machine}-{pid}` talk seat | `#bobiverse` + `#{machine}` + extras | **`pid` = coordinator PowerShell `$PID`** (`Start-TalkSeat.ps1` / TSR — **not** python `irc_listen` / `irc_agent` PIDs). Default extras include `#agentic_irc` via script default `-Channel`. More rooms (`#airc-moot`, etc.) via `-Channel`. `channels_for_nick` always adds `#bobiverse` + shop for talk seats (issue #108); omitting fleet in `-Channel` does not opt out. Bobosphere is not talk-seat-forbidden. |
-| `w-<shortid>-<pid>` worker | `#{machine}` only | Never `#bobiverse` (`w-fl-4412` → `#flamingo`) |
+| `w-<shortid>-<pid>` worker | `#{machine}` only | Never `#bobiverse`. Ionos: `w-io-<pid>` → `#ionos`. Spawn helper: `scripts/start_worker_irc_agent.py` (UTF-8) must exist under `C:\ai\agentic_irc\scripts` or `D:\ai\agentic_irc\scripts` (sister search paths). Callers: `agentic_build` `Start-BobCursor` + `Start-BobWorker` after that install. |
 | Jeeves `--chair` | `#bobiverse` + every shop | skill `bob-irc` |
 
-Prefer `scripts/Start-TalkSeat.ps1 -MachineId <id>` (default `#bobiverse,#<machine>,#agentic_irc`). `coordinator.pid` **`seat=`** is authoritative; `listen=` / `agent=` are diagnostics only. Worker homes: `~\.agentic-irc-bobiverse\workers\<id>\<pid>`. Shop + open Query: `This is what I'm working on: â€¦`. Thinking/tool traces go to Query only. One voice: do not write the same line to `bob-*` and the session outbox. Secrets-shaped lines drop. Status read is `!bobiverse` (chair whisper) only â€” do not send `!report`. Digest chair facts: skill `bob-irc`. Mode 3 pairing PIN is never on `#bobiverse` (skill `invite-airc`).
+Prefer `scripts/Start-TalkSeat.ps1 -MachineId <id>` (default `#bobiverse,#<machine>,#agentic_irc`). `coordinator.pid` **`seat=`** is authoritative; `listen=` / `agent=` are diagnostics only. Worker homes: `~\.agentic-irc-bobiverse\workers\<id>\<pid>`. Shop + open Query: `This is what I'm working on: …`. Thinking/tool traces go to Query only. One voice: do not write the same line to `bob-*` and the session outbox. Secrets-shaped lines drop. Status read is `!bobiverse` (chair whisper) only — do not send `!report`. Digest chair facts: skill `bob-irc`. Mode 3 pairing PIN is never on `#bobiverse` (skill `invite-airc`).
 
 Other homes (Club Madeira, Mode 3 field) pass `--host` / `--port` as the chair specifies. `irc_agent.py` defaults to `irc.ntsa.uk:6697` if `--host` is omitted. Fleet Watch-Bobiverse always passes host/port from `bobiverse.json`.
 
@@ -309,8 +309,10 @@ Stdout is INFO only (`AGENTIC_IRC_DEBUG=1` writes `irc.log`). Registration failu
 Fleet daemon, firewall, and Watch-Bobiverse recycle: skill `bob-irc`.
 Fleet `bob-*` seats ACK addressed English (#54) even when `weekly=0`.
 Coordinator nicks do not ACK. Optional grok-talk enqueue (`grok-inbox.jsonl`)
-when `AGENTIC_IRC_GROK_TALK=1` or `grok-talk.json` enables it and peer
-`weekly` > 0; completions drain to `outbox.txt` per
+when `AGENTIC_IRC_GROK_TALK=1` or `grok-talk.json` enables it and peer fuel
+is `weekly` > 0 **or** Cursor `remaining_pct` on `bob-peers` (POINT
+`remaining=` or `refresh_peer_cursor_remaining`; not `cursor_label`);
+completions drain to `outbox.txt` per
 `docs/grok-talk-envelope-v1.md`. Default off until seat opts in (FR #56; Bob
 stamps UAT). No grok.exe inside `irc_agent` ACK path.
 

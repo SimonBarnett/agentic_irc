@@ -304,8 +304,13 @@ class Client:
             self._fleet_action(event_class, key, action)
 
     def handle_join(self, nick: str, channel: str) -> None:
+        expanded = bobreport.expand_join_channels(channel)
+        if len(expanded) > 1:
+            for ch in expanded:
+                self.handle_join(nick, ch)
+            return
         who = (nick or "").strip()
-        ch = bobreport.normalize_channel(channel)
+        ch = bobreport.normalize_channel(expanded[0] if expanded else channel)
         if who.lower() in self._mine_nicks():
             self._pending_joins.discard(ch.lower())
             if not self._pending_joins:
@@ -455,6 +460,21 @@ class Client:
         info(f"INFO bobiverse digest to={who} form={form} lines={len(lines)}")
         return True
 
+    def _local_machine_id(self) -> str | None:
+        return bobreport.machine_from_nick(self.original_nick)
+
+    def _maybe_refresh_cursor_fuel(self, peer_id: str) -> None:
+        """Local seat only: merge Cursor usage when Watch/POINT lack remaining_* (#70 MUST 5)."""
+        local = self._local_machine_id()
+        if not local or str(peer_id or "") != local:
+            return
+        if not bobtalk.is_fleet_bob_nick(self.original_nick):
+            return
+        try:
+            bobstat.refresh_peer_cursor_remaining(self.home, local)
+        except OSError:
+            pass
+
     def _maybe_mention_reply(self, src: str, target: str, body: str, to_channel: bool, to_me: bool) -> bool:
         """ACK when a human/worker addresses this bob-* nick. No grok.exe."""
         if getattr(self.args, "chair", False):
@@ -463,6 +483,7 @@ class Client:
             return False
         nicks = [self.live_nick, self.original_nick]
         mid = bobreport.machine_from_nick(self.original_nick) or self.original_nick
+        self._maybe_refresh_cursor_fuel(mid)
         line = bobtalk.mention_reply_line(self.home, mid, nicks, src, body, to_me=to_me)
         if not line:
             return False
@@ -585,6 +606,7 @@ class Client:
             doc = bobstat.parse_bob_point(ml.text)
             if doc:
                 bobstat.write_peer(self.home, doc)
+                self._maybe_refresh_cursor_fuel(str(doc.get("id") or ""))
                 info(f"INFO bobstat id={doc['id']} from={src}")
 
     def handle_file(self, src: str, body: str) -> None:
@@ -805,10 +827,11 @@ class Client:
                     if cmd == "JOIN":
                         ch = parts[1].lstrip(":") if len(parts) > 1 else ""
                         if not ch and trailing:
-                            ch = trailing
+                            ch = trailing.lstrip(":")
                         joiner = prefix.split("!", 1)[0].lstrip(":") if prefix else ""
                         if joiner:
-                            self.handle_join(joiner, ch)
+                            for one in bobreport.expand_join_channels(ch):
+                                self.handle_join(joiner, one)
                     if cmd == "PART":
                         ch = parts[1].lstrip(":") if len(parts) > 1 else ""
                         if not ch and trailing:
@@ -911,9 +934,14 @@ class Client:
         # Ergo default-usermode is +i (LUSERS: "0 users and N invisible").
         # Halloy nick lists that use WHO then omit flamingos even in-channel.
         self.send("MODE " + self.live_nick + " -i")
-        self.send("JOIN " + ",".join(self.channels))
+        # Per-channel JOIN (more reliable than comma-join on some paths / ionos shop).
+        for ch in self.channels:
+            self.send("JOIN " + ch)
         if not self.joined.wait(30):
             self._abort_gate("NO JOIN")
+        mid = self._local_machine_id()
+        if mid:
+            self._maybe_refresh_cursor_fuel(mid)
         if self.args.hello:
             self.say(self.args.hello)
         if self.args.announce_key:
@@ -921,7 +949,7 @@ class Client:
                 info("INFO no identity; skip AGPK")
             else:
                 self.say("AGPK v1 " + self.ident["pk"])
-        info(f"INFO joined {self.chan} as {self.live_nick}")
+        info(f"INFO joined {','.join(self.channels)} as {self.live_nick}")
         while not self.stop.is_set() and not self.dead.wait(timeout=1):
             pass
 

@@ -34,6 +34,11 @@ def test_channels_for_nick():
         "#flamingo",
     ]
     assert bobreport.channels_for_nick("w-fl-4412", "#bobiverse") == ["#flamingo"]
+    assert bobreport.channels_for_nick("bob-ionos", "#bobiverse") == [
+        "#bobiverse",
+        "#ionos",
+    ]
+    assert bobreport.channels_for_nick("w-io-4412", "#bobiverse") == ["#ionos"]
     assert bobreport.channels_for_nick("alice", "#ops") == ["#ops"]
     assert bobreport.normalize_channel("#dev1") == "#ce-priority-dev1"
     # Talk seats share #{machine} with bob-* and rejoin #bobiverse (issue #108).
@@ -53,6 +58,24 @@ def test_channels_for_nick():
         "#marchhare",
         "#ionos",
         "#ce-priority-dev1",
+    ]
+
+
+def test_worker_irc_agent_args_ionos():
+    args = bobreport.worker_irc_agent_args("/tmp/fleet", "ionos", 4412)
+    assert args["nick"] == "w-io-4412"
+    assert args["channel"] == "#ionos"
+    assert args["home"].replace("\\", "/").endswith("workers/ionos/4412")
+
+
+def test_expand_join_channels():
+    assert bobreport.expand_join_channels("#bobiverse,#ionos") == [
+        "#bobiverse",
+        "#ionos",
+    ]
+    assert bobreport.expand_join_channels(":#bobiverse,#ionos") == [
+        "#bobiverse",
+        "#ionos",
     ]
 
 

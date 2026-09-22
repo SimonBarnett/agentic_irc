@@ -25,6 +25,8 @@ Do **not** point agents at `mrb-*.pdf`. Do **not** implement `!report` (#36 writ
   No POINT firehose.
 - Shop: `#flamingo` `#marchhare` `#ionos` `#ce-priority-dev1` (`#dev1` same).
   Machine names with `#`. Not `#bob-flamingo` / `#bob-ionos`.
+  **`bob-ionos`** is the ionos Bob/Grok builder seat; **`#ionos`** is its shop
+  (all live `w-io-*` git workers JOIN there only).
 - `bob-<id>` JOINs fleet + shop at start. Bob drop closes `#<id>`.
 - Talk seats (Cursor or Grok, same): nick `{machine}-{pid}` (e.g.
   `flamingo-22400`). **`pid` = coordinator PowerShell `$PID`** (seat host;
@@ -36,6 +38,7 @@ Do **not** point agents at `mrb-*.pdf`. Do **not** implement `!report` (#36 writ
   Do not install Watch-CursorIrc that respawns `cursor-flamingo`.
 - Workers JOIN **shop only**: `w-<shortid>-<pid>` (`w-fl-4412`). Key
   `flamingo:4412`. Home `~\.agentic-irc-bobiverse\workers\<id>\<pid>`.
+  Ionos git workers: `w-io-<pid>` → `#ionos` only.
 - Halloy lists only rooms you `/join`. Leftover `bob-*` panes are Query/PM,
   not shop channels. Do not static-autojoin shops (they come and go).
 
@@ -131,7 +134,9 @@ ACKs one English line (status + weekly). `weekly=0` still answers
 (empty weekly is not deaf; #54). Optional **grok-talk** (LLM listen+reply;
 FR #56, Bob stamps UAT) is off by default: set `grok-talk.json`
 `{"grok_talk_enabled": true}` or env `AGENTIC_IRC_GROK_TALK=1` on a seat
-after UAT; requires `weekly` > 0. Jobs go to `grok-inbox.jsonl`;
+after UAT; fuel is peer `weekly` > 0 **or** Cursor Models
+`remaining_pct` / aliases on `bob-peers/<id>.json` (not tray `cursor_label`).
+Jobs go to `grok-inbox.jsonl`;
 completions via `grok-outbox.jsonl` → `outbox.txt`
 (`docs/grok-talk-envelope-v1.md`, `scripts/grok_talk_drain.py`).
 Watch stays no grok.exe. Recycle Watch-Bobiverse after pull so the
@@ -143,9 +148,10 @@ only POINTs on `#bobiverse` still shows `I am offline` in the digest.
 ## Recycle while a second irc_agent is up
 
 Watch `Test-BobiverseIrcAgentUp` is true if **any** `irc_agent.py` command
-line has `bobiverse` and `irc.ntsa.uk` (or `127.0.0.1`). A coordinator
-nick (`{machine}-{pid}`, home `~\.agentic-irc-cursor`) blocks Watch
-from starting `bob-<id>`. Recycle the builder only: stop the process whose
+line matches `--nick bob-` and private Ergo (`irc.ntsa.uk` or `127.0.0.1`).
+Worker homes under `.../workers/...` must **not** satisfy that probe (#70).
+A coordinator nick (`{machine}-{pid}`, home `~\.agentic-irc-cursor`) is
+separate from `bob-<id>`. Recycle the builder only: stop the process whose
 `--nick` is `bob-<id>`; start it from the pulled `scripts\irc_agent.py`
 with `--home ~\.agentic-irc-bobiverse`. Leave the extra nick running.
 Do not `Stop-ScheduledTask BobFleet-*`. Two agents still need two homes.

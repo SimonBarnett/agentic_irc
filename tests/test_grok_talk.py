@@ -122,6 +122,53 @@ def test_no_enqueue_when_weekly_zero(tmp_path, monkeypatch):
     assert not grok_talk.inbox_path(tmp_path).exists()
 
 
+def test_enqueue_when_weekly_zero_but_cursor_remaining(tmp_path, monkeypatch):
+    """MUST 5: weekly=0 + POINT remaining on live ionos peer still enqueues."""
+    from ionos_peer_live import apply_point_remaining
+
+    _enable_grok_talk(tmp_path, monkeypatch)
+    apply_point_remaining(tmp_path, 42)
+    dedupe: dict[tuple[str, str], float] = {}
+    job = grok_talk.enqueue_mention(
+        tmp_path,
+        "ionos",
+        "bob-ionos",
+        ["bob-ionos"],
+        "simon",
+        "#bobiverse",
+        "@bob-ionos what is status?",
+        to_me=False,
+        to_channel=True,
+        dedupe_last=dedupe,
+        now=2000.0,
+    )
+    assert job
+    assert grok_talk.inbox_path(tmp_path).is_file()
+
+
+def test_no_enqueue_when_weekly_zero_and_remaining_zero(tmp_path, monkeypatch):
+    from ionos_peer_live import write_live_watch_peer
+
+    _enable_grok_talk(tmp_path, monkeypatch)
+    write_live_watch_peer(tmp_path)
+    dedupe: dict[tuple[str, str], float] = {}
+    assert (
+        grok_talk.enqueue_mention(
+            tmp_path,
+            "ionos",
+            "bob-ionos",
+            ["bob-ionos"],
+            "simon",
+            "#bobiverse",
+            "@bob-ionos ping",
+            to_me=False,
+            to_channel=True,
+            dedupe_last=dedupe,
+        )
+        is None
+    )
+
+
 def test_no_enqueue_protocol_or_bob_asker(tmp_path, monkeypatch):
     _enable_grok_talk(tmp_path, monkeypatch)
     bobstat.write_peer(

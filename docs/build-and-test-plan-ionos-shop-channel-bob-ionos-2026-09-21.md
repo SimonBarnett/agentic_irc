@@ -13,11 +13,19 @@
 - Find where git workers start `irc_agent` (agentic_build bridge / worker home).
 - Ensure machine id `ionos` → worker nick `w-io-<pid>` and shop `#ionos`.
 
-## Phase 3 — Tests + docs
+## Phase 3 — Tests + docs (shop JOIN)
 
 - Pytest: `channels_for_nick('bob-ionos', '#bobiverse')` → `#bobiverse`, `#ionos`.
 - Pytest: worker nick → `#ionos` only.
 - Update `.grok/skills/bob-irc/SKILL.md` (and harvest to agentic_build if required).
+
+## Phase 4 — Grok-talk enqueue on ionos (merged #68)
+
+- Extend `should_enqueue` / fuel gate: weekly > 0 **or** Cursor remaining > 0
+  (test double for remaining; no `cursor_label` as fuel).
+- ACK line must not say `cannot grok-talk` when enqueue fires.
+- Align `docs/grok-talk-envelope-v1.md` and skills. No `grok_talk_worker.py`.
+- Pytest AC1–AC3 from FR (same mention rules as #56).
 
 ## Evidence for MRB
 

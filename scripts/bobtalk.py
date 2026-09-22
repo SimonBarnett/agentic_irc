@@ -463,7 +463,21 @@ def mention_reply_line(
         except (TypeError, ValueError):
             w = None
         if w == 0:
-            week = "weekly=0 (cannot grok-talk)"
+            # MUST 5 (#70): weekly=0 still enqueues when Cursor remaining > 0.
+            rem = None
+            for key in ("remaining_pct", "account_remaining_pct", "cursor_remaining_pct"):
+                raw = peer.get(key)
+                if raw is None or raw == "":
+                    continue
+                try:
+                    rem = float(raw)
+                    break
+                except (TypeError, ValueError):
+                    continue
+            if rem is not None and rem > 0:
+                week = f"weekly=0 (cursor remaining={int(rem)}%)"
+            else:
+                week = "weekly=0 (cannot grok-talk)"
         elif w is None:
             week = "weekly=-"
         else:

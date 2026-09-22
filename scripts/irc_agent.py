@@ -379,6 +379,16 @@ class Client:
         for piece in bobreport.split_irc_text(line):
             self.send("PRIVMSG " + shop + " :" + piece)
             time.sleep(FLOOD_S)
+        # Same moment as shop announce: write-only digest webhook (Simon 2026-09-22).
+        try:
+            import post_working_on as _pwo
+
+            payload = _pwo.base_payload(mid, int(pid), nick, "cursor", "running")
+            payload["working_on"] = raw
+            code = _pwo.post(payload)
+            info(f"INFO working_on webhook POST {code} machine={mid} pid={pid}")
+        except Exception as exc:  # noqa: BLE001 — never break IRC announce on webhook fail
+            info(f"INFO working_on webhook skip: {exc}")
 
     def apply_digest_callback(self, payload: dict) -> None:
         if not self._is_digest_operator():
@@ -393,6 +403,8 @@ class Client:
         key = f"{mid}:{pid_raw}" if mid and pid_raw is not None else str(mid or "merge")
         out = bobreport.PresenceOutcome(ok=True, actions=actions, machine_id=mid)
         self._emit_presence(out, "working_on", key)
+        # Shop announce is the worker's job (post_working_on outbox / cc_send), same
+        # moment as the webhook — bob/Jeeves only ACTION on #bobiverse here.
 
     def cc_send(self, kind: str, text: str) -> None:
         k = (kind or "").strip().lower().replace("-", "_")

@@ -8,6 +8,7 @@ import os
 import sys
 import urllib.error
 import urllib.request
+from pathlib import Path
 
 import bobcallback
 import talk_seat_pid
@@ -43,6 +44,43 @@ def post(payload: dict) -> int:
             return int(resp.status)
     except urllib.error.HTTPError as exc:
         return int(exc.code)
+
+
+def enqueue_shop_working_on(machine: str, nick: str, working_on: str, home: str | None = None) -> None:
+    """Append PRIVMSG to worker outbox so #{machine} sees the job with the webhook."""
+    import bobreport
+
+    mid = bobreport.normalize_machine_id(machine)
+    text = (working_on or "").strip()
+    who = (nick or "").strip()
+    if not mid or not text or not who:
+        return
+    if bobreport.looks_like_secret(text):
+        return
+    if home:
+        root = Path(home).expanduser()
+    else:
+        env_home = (
+            os.environ.get("AGENTIC_IRC_HOME") or os.environ.get("BOB_IRC_HOME") or ""
+        ).strip()
+        parsed = bobreport.parse_worker_nick(who)
+        if parsed:
+            base = Path.home() / ".agentic-irc-bobiverse"
+            root = bobreport.worker_home(base, parsed[0], parsed[1])
+        elif env_home:
+            root = Path(env_home).expanduser()
+        else:
+            root = Path.home() / ".agentic-irc-bobiverse"
+    outbox = root / "outbox.txt"
+    try:
+        outbox.parent.mkdir(parents=True, exist_ok=True)
+        shop = bobreport.shop_channel(mid)
+        line = bobreport.working_on_shop_line(who, text)
+        with outbox.open("a", encoding="utf-8") as fh:
+            fh.write(f"PRIVMSG {shop} :{line}\n")
+        print(f"INFO shop outbox {outbox} -> {shop}", flush=True)
+    except OSError as exc:
+        print(f"INFO shop outbox skip: {exc}", flush=True)
 
 
 def base_payload(machine: str, pid: int, nick: str, kind: str, state: str) -> dict:
@@ -101,6 +139,8 @@ def main() -> int:
             flush=True,
         )
         codes.append(code)
+        # Same moment as webhook: queue shop PRIVMSG for the worker irc_agent.
+        enqueue_shop_working_on(args.machine, nick, wo)
     if not codes:
         print("INFO nothing to POST; pass --create and/or --working-on or --idle", flush=True)
         return 1

@@ -3,7 +3,7 @@
 **Date:** 2026-09-22  
 **MRB:** https://github.com/SimonBarnett/agentic_irc/issues/140  
 **FR:** `docs/feature-request-offline-nicks-stay-in-chat-users-2026-09-22.md`  
-**Git SHA:** `4b18ed6` (branch `work/fix-issue-140-offline-nicks`)
+**Git SHA:** `6003139` (branch `work/fix-issue-140-offline-nicks`)
 
 ## UNKNOWN 2 → LOCKED
 

@@ -1,5 +1,11 @@
 ﻿# Skill harvest log
 
+## 2026-09-22 — hung seat end/roll is skill killproc
+
+Simon: killproc to end hung agents. Owner is agentic_build skill
+`killproc` / `tools/Stop-HungAgent.ps1`. This skill points at it from
+**Other flamingo looks disconnected**.
+
 ## 2026-09-22 — other flamingo looks disconnected
 
 Simon: where did the other flamingo go / why keep disconnecting.

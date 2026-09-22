@@ -65,6 +65,8 @@ Diagnose on flamingo:
 
 Fix for the second window: `Start-TalkSeat.ps1 -MachineId flamingo -IrcHome ~\.agentic-irc-cursor-2` in **that** TUI, notify `^FROM ` on **that** home only. Do not write the first seat's `outbox.txt`.
 
+Hung / deaf seat Simon wants ended: skill `killproc` (`Stop-HungAgent.ps1 -Home … -Roll`). Do not kill this TUI's home.
+
 ## Start-TalkSeat recycle (#88)
 
 On each box after pull (or when Simon says refresh / restart talk seats):

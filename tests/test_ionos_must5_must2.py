@@ -20,6 +20,7 @@ ROOT = Path(__file__).resolve().parents[1]
 FIX = Path(__file__).resolve().parent / "fixtures"
 SPAWN = ROOT / "scripts" / "start_worker_irc_agent.py"
 USAGE_FIX = FIX / "cursor-usage-82pct.json"
+LIVE_FIX = FIX / "ionos-peer-live-2026-09-21.json"
 
 
 def numeric_missing(peer: dict) -> bool:
@@ -142,6 +143,46 @@ def test_cursor_label_alone_is_not_fuel(tmp_path):
     assert got.get("cursor_label") == "82%"
     assert numeric_missing(got)
     assert grok_talk.fuel_ok(tmp_path, "ionos") is False
+
+
+def test_live_ionos_peer_replay_after_point_or_usage_refresh(tmp_path):
+    """Replay Watch-shaped ionos.json (live keys) → fuel only via POINT or usage merge."""
+    fixture = json.loads(LIVE_FIX.read_text(encoding="utf-8"))
+    bobstat.write_peer(tmp_path, fixture)
+    got = bobstat.read_peer(tmp_path, "ionos")
+    assert got is not None
+    assert numeric_missing(got)
+    assert grok_talk.fuel_ok(tmp_path, "ionos") is False
+
+    usage = json.loads(USAGE_FIX.read_text(encoding="utf-8"))
+    assert bobstat.refresh_peer_cursor_remaining(tmp_path, "ionos", usage_doc=usage)
+    on_disk = json.loads((tmp_path / "bob-peers" / "ionos.json").read_text(encoding="utf-8"))
+    assert on_disk.get("remaining_pct") == 82
+    assert grok_talk.fuel_ok(tmp_path, "ionos") is True
+    line = bobtalk.mention_reply_line(
+        tmp_path, "ionos", ["bob-ionos"], "simon", "@bob-ionos status?"
+    )
+    assert line is not None
+    assert "cannot grok-talk" not in line
+
+
+def test_point_cur_label_does_not_fuel_usage_refresh_does(tmp_path):
+    """Sister POINT with cur= only (no remaining=) stays non-fuel until usage refresh."""
+    write_live_watch_peer(tmp_path)
+    point = (
+        "BOB v1 id=ionos weekly=0 running=1 queued=1 "
+        "lastSeen=2026-09-21T17:55:15Z jobs=- cur=82%"
+    )
+    doc = bobstat.parse_bob_point(point)
+    assert doc is not None
+    bobstat.write_peer(tmp_path, doc)
+    got = bobstat.read_peer(tmp_path, "ionos")
+    assert got.get("cursor_label") == "82%"
+    assert numeric_missing(got)
+    assert grok_talk.fuel_ok(tmp_path, "ionos") is False
+    usage = json.loads(USAGE_FIX.read_text(encoding="utf-8"))
+    assert bobstat.refresh_peer_cursor_remaining(tmp_path, "ionos", usage_doc=usage)
+    assert grok_talk.fuel_ok(tmp_path, "ionos") is True
 
 
 def test_start_worker_irc_agent_utf8_py_compile_and_dry_run(tmp_path):

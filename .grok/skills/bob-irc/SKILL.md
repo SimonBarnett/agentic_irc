@@ -148,9 +148,10 @@ only POINTs on `#bobiverse` still shows `I am offline` in the digest.
 ## Recycle while a second irc_agent is up
 
 Watch `Test-BobiverseIrcAgentUp` is true if **any** `irc_agent.py` command
-line has `bobiverse` and `irc.ntsa.uk` (or `127.0.0.1`). A coordinator
-nick (`{machine}-{pid}`, home `~\.agentic-irc-cursor`) blocks Watch
-from starting `bob-<id>`. Recycle the builder only: stop the process whose
+line matches `--nick bob-` and private Ergo (`irc.ntsa.uk` or `127.0.0.1`).
+Worker homes under `.../workers/...` must **not** satisfy that probe (#70).
+A coordinator nick (`{machine}-{pid}`, home `~\.agentic-irc-cursor`) is
+separate from `bob-<id>`. Recycle the builder only: stop the process whose
 `--nick` is `bob-<id>`; start it from the pulled `scripts\irc_agent.py`
 with `--home ~\.agentic-irc-bobiverse`. Leave the extra nick running.
 Do not `Stop-ScheduledTask BobFleet-*`. Two agents still need two homes.

@@ -460,6 +460,21 @@ class Client:
         info(f"INFO bobiverse digest to={who} form={form} lines={len(lines)}")
         return True
 
+    def _local_machine_id(self) -> str | None:
+        return bobreport.machine_from_nick(self.original_nick)
+
+    def _maybe_refresh_cursor_fuel(self, peer_id: str) -> None:
+        """Local seat only: merge Cursor usage when Watch/POINT lack remaining_* (#70 MUST 5)."""
+        local = self._local_machine_id()
+        if not local or str(peer_id or "") != local:
+            return
+        if not bobtalk.is_fleet_bob_nick(self.original_nick):
+            return
+        try:
+            bobstat.refresh_peer_cursor_remaining(self.home, local)
+        except OSError:
+            pass
+
     def _maybe_mention_reply(self, src: str, target: str, body: str, to_channel: bool, to_me: bool) -> bool:
         """ACK when a human/worker addresses this bob-* nick. No grok.exe."""
         if getattr(self.args, "chair", False):
@@ -468,6 +483,7 @@ class Client:
             return False
         nicks = [self.live_nick, self.original_nick]
         mid = bobreport.machine_from_nick(self.original_nick) or self.original_nick
+        self._maybe_refresh_cursor_fuel(mid)
         line = bobtalk.mention_reply_line(self.home, mid, nicks, src, body, to_me=to_me)
         if not line:
             return False
@@ -590,6 +606,7 @@ class Client:
             doc = bobstat.parse_bob_point(ml.text)
             if doc:
                 bobstat.write_peer(self.home, doc)
+                self._maybe_refresh_cursor_fuel(str(doc.get("id") or ""))
                 info(f"INFO bobstat id={doc['id']} from={src}")
 
     def handle_file(self, src: str, body: str) -> None:
@@ -922,12 +939,9 @@ class Client:
             self.send("JOIN " + ch)
         if not self.joined.wait(30):
             self._abort_gate("NO JOIN")
-        mid = bobreport.machine_from_nick(self.original_nick)
-        if mid and bobtalk.is_fleet_bob_nick(self.original_nick):
-            try:
-                bobstat.refresh_peer_cursor_remaining(self.home, mid)
-            except OSError:
-                pass
+        mid = self._local_machine_id()
+        if mid:
+            self._maybe_refresh_cursor_fuel(mid)
         if self.args.hello:
             self.say(self.args.hello)
         if self.args.announce_key:

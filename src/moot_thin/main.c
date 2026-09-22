@@ -710,6 +710,57 @@ static int session(ThinConfig *cfg, Jail *jail, uint8_t *key, int *have_key, Pai
         irc_free(irc);
         return -1;
     }
+    /* Ergo fleet gate: PASS from AGENTIC_IRC_PASSWORD, exe-dir ergo.password /
+     * connect.password, or ~/.grok/ergo/connect.password. Never log the secret. */
+    {
+        char pass[256];
+        char ppath[MAX_PATH];
+        const char *envp;
+        const char *home;
+        FILE *pf;
+        size_t n;
+        int i;
+        const char *sib[] = { "ergo.password", "connect.password", NULL };
+        pass[0] = 0;
+        envp = getenv("AGENTIC_IRC_PASSWORD");
+        if (envp && envp[0]) {
+            strncpy(pass, envp, sizeof(pass) - 1);
+            pass[sizeof(pass) - 1] = 0;
+        }
+        for (i = 0; !pass[0] && sib[i]; i++) {
+            _snprintf(ppath, sizeof(ppath), "%s\\%s", cfg->exe_dir, sib[i]);
+            pf = fopen(ppath, "rb");
+            if (!pf)
+                continue;
+            n = fread(pass, 1, sizeof(pass) - 1, pf);
+            fclose(pf);
+            pass[n] = 0;
+            while (n > 0 && (pass[n - 1] == '\n' || pass[n - 1] == '\r' || pass[n - 1] == ' '))
+                pass[--n] = 0;
+        }
+        home = getenv("USERPROFILE");
+        if (!pass[0] && home && home[0]) {
+            _snprintf(ppath, sizeof(ppath), "%s\\.grok\\ergo\\connect.password", home);
+            pf = fopen(ppath, "rb");
+            if (pf) {
+                n = fread(pass, 1, sizeof(pass) - 1, pf);
+                fclose(pf);
+                pass[n] = 0;
+                while (n > 0 && (pass[n - 1] == '\n' || pass[n - 1] == '\r' || pass[n - 1] == ' '))
+                    pass[--n] = 0;
+            }
+        }
+        if (pass[0]) {
+            char pline[300];
+            _snprintf(pline, sizeof(pline), "PASS %s", pass);
+            irc_send_line(irc, pline);
+            SecureZeroMemory(pass, sizeof(pass));
+            SecureZeroMemory(pline, sizeof(pline));
+            info("INFO PASS sent (Ergo)");
+        } else {
+            info("INFO no Ergo PASS (set AGENTIC_IRC_PASSWORD or ergo.password beside exe)");
+        }
+    }
     irc_send_line(irc, "CAP LS 302");
     {
         char n[80], u[160];

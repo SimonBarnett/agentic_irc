@@ -1,5 +1,17 @@
 ﻿# Skill harvest log
 
+## 2026-09-22 — outbox JOIN is chat; same-box pong miss = killproc
+
+Simon: harvest IRC; restart who fails pong. Outbox `JOIN #chan` is
+`say()` on `#bobiverse` (`drain_outbox_once` only raw-sends
+`PRIVMSG `). Real extra JOIN = recycle this home's `irc_agent` with
+extras in `--channel`, keep `irc_listen`, set `AGENTIC_IRC_SEAT_PID`.
+`{machine}-{pid}` keeps the list; `bob-*` drops extras. Mode 3 PIN:
+Query/Cursor only, never `#bobiverse`; thin >= 0.3.2 Ergo PASS; do not
+run the chair folder as the client; park leftover Libera `paired.ini`.
+Failed pong = working seat `killproc` the other home on **this** box
+only. Skills `agentic-irc` + `invite-airc`.
+
 ## 2026-09-22 — second process / new cursor-agent after close
 
 Simon: harvest the second-seat night. Why 2nd fails = same nick ghost

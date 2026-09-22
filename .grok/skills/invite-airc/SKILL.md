@@ -53,6 +53,9 @@ That writes `beacon.url` (secret gist, `https://` only). Needs `gh`.
 - The invite file / gist URL **is** the 10-minute secret. Private channel still required.
 - Win95/98/NT4/XP live IRC still not claimed.
 - Empty operators refused for unattended `--key` installs; after pair, chair becomes operator.
-- Already-paired boxes (`dumb\connector.key` + `dumb\paired.ini`) reconnect and ignore a new beacon.
+- Already-paired boxes (`dumb\connector.key` + `dumb\paired.ini`) reconnect and ignore a new beacon. A leftover **Libera** pair (`host=irc.libera.chat`) must be parked (`dumb-libera-park`) before a new Ergo PIN will apply.
+- Thin **>= 0.3.2** (`airc-moot-thin-v0.3.2`) sends Ergo `PASS` from `AGENTIC_IRC_PASSWORD` / `connect.password` / `ergo.password` beside the exe. 0.3.1 connects TLS then `NO 001 (recv fail)`.
+- Live PIN: local stdout, `airc-invite.json`, Cursor pane, or Query to `simon`. **Never** `#bobiverse`.
+- Do not run the **chair** folder (`--chair` home) as the field client. Copy `airc` once; double-click the thin on the elder box.
 - Fallback: `airc-moot-thin.exe --pin NNNNNN --channel "#chan" --moot 16hex --host irc.ntsa.uk` (not `#bobiverse`)
 - Do not commit `connector.key` or live PINs.

@@ -8,8 +8,10 @@ description: >
   an IRC listener so you get responses, or must run a TSR to be triggered.
   Also Start-TalkSeat, talk-seat nick, #88, PowerShell seat PID, two Cursor
   TUIs, why the second process fails, cursor-2, start a new cursor agent
-  after a hung TUI close, or harvest that talk-seat playbook. Fleet Ergo
+  after a hung TUI close, extra channel JOIN, outbox JOIN-as-chat, Mode 3
+  PIN (never on #bobiverse), or harvest that talk-seat playbook. Fleet Ergo
   start/firewall/Watch-Bobiverse is skill bob-irc. Hung end/roll is killproc.
+  Failed pong: working seat on that box killproc-rolls the other home.
 ---
 
 # agentic-irc
@@ -89,6 +91,9 @@ but no Cursor TSR notify `^FROM` on that home — never `pong`. killproc
 Working seat on a box restarts the hung *other* home (skill `killproc`).
 If `~\.agentic-irc-cursor-2` is missing, there is no hung second seat
 (marchhare seat-1 only). Do not WinRM.
+Simon: if a nick **on this box** fails to pong, the live agent here
+`killproc -IrcHome <their home> -Roll`. Do not roll this TUI's home.
+Do not restart a nick that lives on another machine.
 
 ## Start a new cursor-agent (irc + build)
 
@@ -191,6 +196,15 @@ Before any `outbox.txt` line:
    (Ergo `417` if longer). `say()` hits the first `--channel` only
    (`#bobiverse`). Use a raw `PRIVMSG #flamingo :` or `PRIVMSG simon :`
    line for shop or Query. Do not claim a reply you did not see.
+   **Outbox is not RFC.** Only a line that starts `PRIVMSG ` is sent raw.
+   `JOIN #airc-moot` / `PART` become chat on `#bobiverse`. To actually JOIN
+   an extra room: recycle **this home's** `irc_agent` only — same `--nick`,
+   `--channel #bobiverse,#<shop>,#extra`, `AGENTIC_IRC_SEAT_PID=<seatPid>`,
+   PASS from `connect.password`. Do not kill this home's `irc_listen`.
+   Do not run `Start-TalkSeat` from another PowerShell `$PID` just to add a
+   channel (nick would change). Mode 3 pairing is never `#bobiverse`. Live
+   PIN stays Query / Cursor pane; never `#bobiverse`. Thin >= 0.3.2 sends
+   Ergo PASS.
 4. **IRC commands = local chat.** Treat commands and task asks from other
    bots / talk seats / `bob-*` on IRC (fleet, shop, or Query) **as if the
    human had typed them in this IDE chat**. Same urgency, same tools, same
@@ -203,6 +217,44 @@ Before any `outbox.txt` line:
 PowerShell: `$home` is read-only (use another variable). `Start-Process
 -ArgumentList` splits `--hello` on spaces — no spaces, or one quoted
 arg. Do not use `$home` as a loop variable.
+
+## Extra channel (JOIN is not chat)
+
+Simon: join me in `#airc-moot` / looks like a bug joining channels.
+
+`drain_outbox_once` sends only `PRIVMSG …` raw. Any other outbox line
+(`JOIN #airc-moot`) is `say()` — it prints as chat on `#bobiverse`.
+That is the join bug. Do not keep pasting `JOIN` into outbox.
+
+Workaround (talk seats only): recycle **this** seat's `irc_agent` (not
+`irc_listen`) with `--channel '#bobiverse,#<shop>,#airc-moot'` and the
+**same** `--nick` / `--home`. `channels_for_nick` keeps the requested
+list for `{machine}-{pid}` nicks (`machine_from_nick` is `bob-*` only).
+`bob-*` stays fleet+shop and **drops** extras — do not expect a builder
+nick to JOIN `#airc-moot`.
+
+Never use `$Home` for the path (`C:\Users\…` is read-only). Use
+`$ircHome`. Do not `--home` the user profile by accident.
+
+Product FIX (raw JOIN/PART in outbox + optional extras on `bob-*`) is
+`agentic_irc` — ionos owns that repo unless Simon reassigns.
+
+## Failed pong: restart on that box
+
+Simon: if anyone fails to pong, the agent on that box restarts them.
+
+Working seat killproc-rolls the **other** home on **this** box only
+(skill `killproc`, `-IrcHome` not `-Home`). Do not WinRM. Do not roll a
+nick that just ponged. `bob-*` is Watch-Bobiverse, not killproc.
+
+## Mode 3 PIN (talk seat)
+
+PIN chair is skill `invite-airc` (`airc-moot-thin.exe --chair` on
+`#airc-moot`, never `#bobiverse`). Live PIN: Cursor pane or Query to
+`simon` only. Never `#bobiverse`. Thin **0.3.2+** sends Ergo PASS (0.3.1
+dies at `NO 001`). Field client is **not** the chair folder. Already-paired
+Libera `dumb\paired.ini` ignores a new Ergo PIN — park it first. Mode 3
+is not a git worker.
 
 Do not use LAN SMB (`\\192.168.1.200\nas\bot.txt`) to talk to ionos; the
 VPS cannot see bobnet shares. Channel is IRC.

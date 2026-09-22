@@ -45,13 +45,15 @@ function Get-HomePythonProcs {
 }
 function Stop-CursorHomeAgents {
     param([string]$HomePath)
+    $gracePath = Join-Path $Scripts 'agent_control.py'
+    if (Test-Path -LiteralPath $gracePath) {
+        & $py $gracePath --home $HomePath --reason 'talk-seat recycle' --wait-s 12 2>&1 | Out-Null
+    }
     Get-CimInstance Win32_Process -Filter "Name='python.exe'" |
         Where-Object {
             $_.CommandLine -match 'irc_(agent|listen)\.py' -and
             $_.CommandLine -match [regex]::Escape($HomePath)
         } | ForEach-Object {
-            Stop-Process -Id $_.ProcessId -ErrorAction SilentlyContinue
-            Start-Sleep -Milliseconds 600
             Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue
         }
     Start-Sleep -Milliseconds 400

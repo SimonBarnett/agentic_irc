@@ -217,6 +217,15 @@ def seat_liveness_poll_s() -> float:
     return max(3.0, min(120.0, n))
 
 
+def seat_liveness_disabled() -> bool:
+    return (os.environ.get("AGENTIC_IRC_SEAT_LIVENESS") or "").strip().lower() in (
+        "0",
+        "off",
+        "false",
+        "no",
+    )
+
+
 def talk_seat_monitor_pid(nick: str, home: Path | str) -> int | None:
     """PowerShell seat PID for a talk-seat nick (coordinator.pid when readable, else nick suffix)."""
     parsed = parse_talk_seat_nick(nick)

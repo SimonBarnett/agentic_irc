@@ -1,6 +1,7 @@
-# Issue #128 — offline nick drop (P0 measure)
+# Issue #128 — offline nick drop (P0 measure + P1)
 
-**Date:** 2026-09-22
+**Date:** 2026-09-22  
+**Ergo:** `irc.ntsa.uk` ergo-2.19.1 (bobiverse)
 
 ## Symptom
 
@@ -8,18 +9,34 @@ Talk-seat nicks (`flamingo-<seatPid>`, etc.) stayed in Ergo `#bobiverse` NAMES
 after the seat stopped answering. Halloy user lists matched Ergo NAMES, so
 offline flamingos looked present.
 
-## Mechanisms (measured / inferred)
+## LOCKED bound (UNKNOWN 2 → measured)
 
-| Case | IRC session | Fix in this PR |
-|------|-------------|----------------|
-| Coordinator PowerShell (`seat=`) exits while detached `irc_agent` keeps running | Nick stays until TCP ends | `irc_agent` polls the talk-seat coordinator PID (nick suffix, or `coordinator.pid` `seat=` when readable); sends `QUIT` when gone (default 15s, `AGENTIC_IRC_SEAT_LIVENESS_S`) |
-| `Stop-Process -Force` on `irc_agent` | No `QUIT` → ghost until Ergo TCP timeout | `Start-TalkSeat` stops agent with non-force first (~600ms) so SIGTERM handler can `QUIT` |
-| Box power-off / half-open TCP | Server-side ping timeout (Ergo-specific; not measured in CI) | Out of agent scope; bounded by Ergo ping settings |
+| Case | NAMES drop time (live measure) | Acceptance bound |
+|------|-------------------------------|------------------|
+| Abrupt TCP close (no QUIT, client RST) | **≤10 s** (`deadtcp-*` probe 2026-09-22) | — |
+| Half-open / box-off (no client RST; server idle-timeouts) | Ergo `idle-timeouts`: ping **90s**, disconnect **150s** after last client send | **240 s** worst-case |
 
-Live seats that still answer server `PING` with `PONG` are unchanged. Liveness
-only drops the nick when the coordinator seat process is gone.
+**LOCKED 1 / Acceptance 1:** offline talk-seat nicks must leave `#bobiverse`,
+shop, and `#agentic_irc` NAMES within **240 seconds** (Ergo worst-case). Client
+paths below aim to clear sooner.
 
-## Bounded time
+Live probe log (redacted): `docs/evidence/ergo-dead-tcp-measure.log`
 
-Client-side: up to `AGENTIC_IRC_SEAT_LIVENESS_S` (default 15s, clamp 3–120s)
-after the coordinator exits. Ergo may add server ping interval on silent TCP.
+## Mechanisms (P1)
+
+| Case | Fix |
+|------|-----|
+| Coordinator PowerShell (`seat=`) exits; `irc_agent` still up | `seat_liveness_loop` → `QUIT` when coordinator PID gone (`AGENTIC_IRC_SEAT_LIVENESS_S`, default 15s) |
+| `Start-TalkSeat` recycle / kill agent | `agent_control.py` writes `agent.quit.request`; agent `QUIT`s before `Stop-Process -Force` |
+| Home has no `irc_agent` (crash/kill); nick may ghost | `bob-*` fleet agent `talk_seat_ghost.maybe_prune_local_ghosts` → brief `ghost_quit_session` |
+| Deaf / hung seat (coordinator alive, no server lines / PONG overdue) | `seat_recv_idle_s` (default 150s) or `pong_grace_s` (default 45s) → `QUIT` |
+| Box-off / half-open TCP only | Ergo server bound **240s**; Halloy matches within that window |
+
+Live seats that still receive server traffic and answer `PING` with `PONG` are
+unchanged.
+
+## Evidence notes (no contradict LOCKED 1)
+
+- Coordinator-gone QUIT loop: `tests/test_offline_nick_liveness.py`
+- Graceful stop + ghost prune + idle/PONG: same pack + `tests/test_agent_control.py`, `tests/test_talk_seat_ghost.py`
+- A live `flamingo-*` seat that still PONGs is not dropped by coordinator PID polling (only when PID is gone or recv/PONG paths fire).

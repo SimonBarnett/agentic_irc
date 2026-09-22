@@ -38,6 +38,43 @@ SHORT_ID: dict[str, str] = {
 }
 SHORT_TO_MACHINE = {v: k for k, v in SHORT_ID.items()}
 FLEET_MACHINE_IDS = ("flamingo", "marchhare", "ionos", "ce-priority-dev1")
+_FLEET_MACHINE_ID_SET = frozenset(FLEET_MACHINE_IDS)
+CURSOR_SPENDING_POOLS: tuple[tuple[str, str], ...] = (
+    ("cursor-models", "Cursor Models"),
+    ("other-models", "Other Models"),
+    ("grok-weekly", "Grok Weekly"),
+    ("on-demand", "On-demand"),
+)
+CURSOR_POOL_IDS = frozenset(pid for pid, _ in CURSOR_SPENDING_POOLS)
+CURSOR_POOL_LABEL_BY_ID = dict(CURSOR_SPENDING_POOLS)
+_CURSOR_POOL_ID_ALIASES: dict[str, str] = {
+    "cursor_models": "cursor-models",
+    "cursor_models_remaining": "cursor-models",
+    "low cost models": "cursor-models",
+    "low-cost-models": "cursor-models",
+    "high cost models": "other-models",
+    "high-cost-models": "other-models",
+    "other_models": "other-models",
+    "grok chat": "grok-weekly",
+    "grok-chat": "grok-weekly",
+    "grok_chat": "grok-weekly",
+    "grok_weekly": "grok-weekly",
+    "sand": "grok-weekly",
+    "on_demand": "on-demand",
+}
+_XAI_SEAT_LABELS = frozenset({"smart catalogue", "club madeira", "ntsa"})
+_PCENT_KEYS_BY_POOL: dict[str, tuple[str, ...]] = {
+    "cursor-models": (
+        "cursor-models",
+        "cursor_models",
+        "cursor_models_remaining",
+        "low cost models",
+        "low-cost-models",
+    ),
+    "other-models": ("other-models", "other_models", "high cost models", "high-cost-models"),
+    "grok-weekly": ("grok-weekly", "grok_weekly", "grok-chat", "grok_chat", "grok chat", "sand"),
+    "on-demand": ("on-demand", "on_demand"),
+}
 _MERGE_PEER_FIELDS = (
     "weekly",
     "cursor_label",
@@ -1093,13 +1130,47 @@ def _normalize_jobs_list(raw: object) -> list[dict]:
     return out
 
 
+def _normalize_cursor_pool_id(raw: object) -> str | None:
+    if raw is None:
+        return None
+    key = str(raw).strip()
+    if not key:
+        return None
+    lower = key.lower()
+    if lower in _XAI_SEAT_LABELS:
+        return None
+    if lower in _CURSOR_POOL_ID_ALIASES:
+        return _CURSOR_POOL_ID_ALIASES[lower]
+    if lower in CURSOR_POOL_IDS:
+        return lower
+    if lower in _FLEET_MACHINE_ID_SET or normalize_machine_id(lower) in _FLEET_MACHINE_ID_SET:
+        return None
+    if lower in _CURSOR_POOL_ID_ALIASES.values():
+        return lower
+    return key
+
+
+def _official_cursor_pool_label(pool_id: str, raw_label: object) -> str:
+    official = CURSOR_POOL_LABEL_BY_ID.get(pool_id)
+    if official:
+        return official
+    label = str(raw_label or "").strip()
+    if label and label.lower() not in _XAI_SEAT_LABELS:
+        return label
+    return pool_id
+
+
 def _coerce_cursor_pool(raw: object) -> dict | None:
     if not isinstance(raw, dict):
         return None
-    pool_id = str(raw.get("id") or raw.get("seat") or "").strip()
+    pool_id = _normalize_cursor_pool_id(raw.get("group") or raw.get("id"))
+    if not pool_id:
+        pool_id = _normalize_cursor_pool_id(raw.get("seat"))
     if not pool_id:
         return None
-    label = str(raw.get("label") or "Cursor Models").strip()
+    label = _official_cursor_pool_label(pool_id, raw.get("label"))
+    if label.lower() in _XAI_SEAT_LABELS:
+        return None
     remaining = raw.get("remaining")
     if remaining is None:
         remaining = raw.get("used")
@@ -1114,7 +1185,7 @@ def _coerce_cursor_pool(raw: object) -> dict | None:
         overage = str(overage)
     entry = {
         "id": pool_id,
-        "seat": str(raw.get("seat") or pool_id),
+        "seat": pool_id,
         "label": label,
         "remaining": remaining,
         "period_end": str(period) if period else None,
@@ -1218,38 +1289,59 @@ def _cursor_pool_period(ent: dict) -> tuple[str | None, str | None]:
     return period_s, period_s
 
 
+def _pcent_remaining_for_pool(pcent: dict, pool_id: str) -> int | None:
+    for key in _PCENT_KEYS_BY_POOL.get(pool_id, (pool_id,)):
+        raw = pcent.get(key)
+        if raw is None:
+            continue
+        try:
+            return int(raw)
+        except (TypeError, ValueError):
+            continue
+    return None
+
+
+def _best_machine_pcent_for_pool(
+    machines: dict[str, dict], pool_id: str
+) -> tuple[int | None, dict | None]:
+    best_rem: int | None = None
+    best_ent: dict | None = None
+    for mid in FLEET_MACHINE_IDS:
+        ent = machines.get(mid) or {}
+        pcent = ent.get("pcent") if isinstance(ent.get("pcent"), dict) else {}
+        rem = _pcent_remaining_for_pool(pcent, pool_id)
+        if rem is None:
+            continue
+        if best_rem is None or rem > best_rem:
+            best_rem = rem
+            best_ent = ent
+    return best_rem, best_ent
+
+
 def build_cursor_pools(doc: dict, machines: dict[str, dict]) -> list[dict]:
     stored = _coerce_cursor_pools(doc.get("cursor_pools"))
     if stored:
         return stored
     pools: list[dict] = []
-    seen: set[str] = set()
-    for mid in FLEET_MACHINE_IDS:
-        ent = machines.get(mid) or {}
-        pcent = ent.get("pcent") if isinstance(ent.get("pcent"), dict) else {}
-        rem = pcent.get("cursor-models")
-        if rem is None:
-            rem = pcent.get("cursor_models")
-        if rem is None:
+    for pool_id, label in CURSOR_SPENDING_POOLS:
+        remaining, ent = _best_machine_pcent_for_pool(machines, pool_id)
+        if remaining is None:
             continue
-        try:
-            remaining = int(rem)
-        except (TypeError, ValueError):
-            continue
-        pid = str(mid)
-        if pid in seen:
-            continue
-        seen.add(pid)
-        period_end, reset = _cursor_pool_period(ent)
+        period_end, reset = (None, None)
+        overage = None
+        if ent:
+            period_end, reset = _cursor_pool_period(ent)
+            if pool_id == "on-demand":
+                overage = _cursor_pool_overage(ent)
         pools.append(
             {
-                "id": pid,
-                "seat": pid,
-                "label": str(ent.get("cursor_label") or "Cursor Models"),
+                "id": pool_id,
+                "seat": pool_id,
+                "label": label,
                 "remaining": remaining,
                 "period_end": period_end,
                 "reset": reset,
-                "overage": _cursor_pool_overage(ent),
+                "overage": overage,
             }
         )
     return pools

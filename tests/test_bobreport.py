@@ -332,7 +332,7 @@ def test_build_digest_tray_complete_shape(tmp_path):
     doc = bobreport.load_digest(tmp_path)
     doc["cursor_pools"] = [
         {
-            "id": "ionos",
+            "group": "cursor-models",
             "label": "Cursor Models",
             "remaining": 55,
             "period_end": "2026-09-28T00:00:00Z",
@@ -408,11 +408,12 @@ def test_cursor_pools_from_pcent_when_not_stored(tmp_path):
     obj = bobreport.build_digest_object(tmp_path, "bob-dev1")
     pools = obj["cursor_pools"]
     assert pools
-    dev1 = next(p for p in pools if p.get("seat") == "ce-priority-dev1")
-    assert dev1["remaining"] == 77
-    assert dev1["label"] == "Dev1 seat"
-    assert dev1["period_end"] is None
-    assert dev1["reset"] is None
+    models = next(p for p in pools if p.get("id") == "cursor-models")
+    assert models["remaining"] == 77
+    assert models["label"] == "Cursor Models"
+    assert models["seat"] == "cursor-models"
+    assert models["period_end"] is None
+    assert models["reset"] is None
 
 
 def test_cursor_pools_weekly_vs_cursor_period_and_peer_pcent(tmp_path):
@@ -452,16 +453,50 @@ def test_cursor_pools_weekly_vs_cursor_period_and_peer_pcent(tmp_path):
     ionos = obj["machines"]["ionos"]
     assert ionos["period_end"] == weekly_end
     assert ionos["cursor_period_end"] == cursor_end
-    ionos_pool = next(p for p in obj["cursor_pools"] if p.get("seat") == "ionos")
-    assert ionos_pool["period_end"] == cursor_end
-    assert ionos_pool["reset"] == cursor_end
-    assert ionos_pool["remaining"] == 55
-    assert ionos_pool.get("overage") is None
-
-    flamingo_pool = next(p for p in obj["cursor_pools"] if p.get("seat") == "flamingo")
-    assert flamingo_pool["remaining"] == 12
-    assert flamingo_pool["period_end"] == cursor_end
+    models_pool = next(p for p in obj["cursor_pools"] if p.get("id") == "cursor-models")
+    assert models_pool["period_end"] == cursor_end
+    assert models_pool["reset"] == cursor_end
+    assert models_pool["remaining"] == 55
+    assert models_pool.get("overage") is None
+    assert models_pool["seat"] == "cursor-models"
 
     flamingo = obj["machines"]["flamingo"]
     assert flamingo.get("cursor_period_end") == cursor_end
     assert flamingo.get("cur") == "12%"
+
+
+def test_cursor_pools_official_groups_reject_xai_seat_labels(tmp_path):
+    bobreport.apply_callback(
+        tmp_path,
+        {
+            "op": "merge",
+            "machine": "marchhare",
+            "pcent": {"cursor-models": 40, "other-models": 22, "grok-weekly": 88},
+            "cursor_label": "Smart Catalogue",
+        },
+    )
+    doc = bobreport.load_digest(tmp_path)
+    doc["cursor_pools"] = [
+        {"id": "ionos", "label": "Club Madeira", "remaining": 10},
+        {"id": "ntsa", "label": "ntsa", "remaining": 5},
+        {
+            "group": "cursor-models",
+            "label": "Smart Catalogue",
+            "remaining": 99,
+        },
+    ]
+    bobreport.save_digest(tmp_path, doc)
+    obj = bobreport.build_digest_object(tmp_path, "Jeeves")
+    pools = obj["cursor_pools"]
+    ids = {p["id"] for p in pools}
+    labels = {p["label"] for p in pools}
+    assert "ionos" not in ids
+    assert "ntsa" not in ids
+    assert "Smart Catalogue" not in labels
+    assert "Club Madeira" not in labels
+    assert "ntsa" not in labels
+    assert "cursor-models" in ids
+    assert labels.intersection({"Cursor Models", "Other Models", "Grok Weekly"})
+    models = next(p for p in pools if p["id"] == "cursor-models")
+    assert models["label"] == "Cursor Models"
+    assert models["remaining"] == 99

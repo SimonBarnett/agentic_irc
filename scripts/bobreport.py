@@ -1406,3 +1406,175 @@ def format_digest_whisper_lines(
     raw = json.dumps(build_digest_object(home, briefer_nick), separators=(",", ":"), sort_keys=True)
     lines.extend(_chunk_json(raw))
     return lines
+
+
+_PEER_DELTA_SKIP = frozenset({"lastSeen", "ts"})
+
+
+def should_periodic_bobiverse_pull(nick: str, *, chair: bool = False) -> bool:
+    """Fleet bob-* Watch seats pull digest; talk seats and workers do not (issue #129)."""
+    import talk_seat_pid
+
+    if chair:
+        return False
+    if not bobtalk.is_fleet_bob_nick(nick):
+        return False
+    if talk_seat_pid.parse_talk_seat_nick(nick):
+        return False
+    if parse_worker_nick(nick):
+        return False
+    return True
+
+
+class DigestWhisperAssembler:
+    """Reassemble BOB DIGEST v1 i/n whisper lines into one JSON object."""
+
+    def __init__(self) -> None:
+        self._from: str | None = None
+        self._parts: dict[int, tuple[int, str]] = {}
+
+    def reset(self) -> None:
+        self._from = None
+        self._parts = {}
+
+    def feed(self, from_nick: str, text: str) -> dict | None:
+        raw = (text or "").strip()
+        if not raw:
+            return None
+        who = (from_nick or "").strip()
+        if raw.startswith("{") and raw.endswith("}"):
+            try:
+                obj = json.loads(raw)
+            except json.JSONDecodeError:
+                return None
+            self.reset()
+            return obj if isinstance(obj, dict) else None
+        if not raw.startswith(DIGEST_PREFIX):
+            return None
+        rest = raw[len(DIGEST_PREFIX) :]
+        if " " not in rest:
+            return None
+        head, piece = rest.split(" ", 1)
+        if "/" not in head:
+            return None
+        try:
+            i_s, n_s = head.split("/", 1)
+            i = int(i_s)
+            n = int(n_s)
+        except ValueError:
+            return None
+        if n < 1 or i < 1 or i > n:
+            return None
+        if self._from and who.lower() != self._from.lower():
+            self.reset()
+        self._from = who
+        self._parts[i] = (n, piece)
+        if len(self._parts) != n or not all(j in self._parts for j in range(1, n + 1)):
+            return None
+        blob = "".join(self._parts[j][1] for j in range(1, n + 1))
+        self.reset()
+        try:
+            obj = json.loads(blob)
+        except json.JSONDecodeError:
+            return None
+        return obj if isinstance(obj, dict) else None
+
+
+def _delta_norm(key: str, val: object) -> object:
+    if key in ("running", "queued", "weekly"):
+        if val in (None, "", "-"):
+            return None
+        try:
+            return int(val)
+        except (TypeError, ValueError):
+            return val
+    if key == "jobs":
+        if not isinstance(val, list):
+            return val
+        return json.dumps(_normalize_jobs_list(val), sort_keys=True, separators=(",", ":"))
+    if key == "pcent" and isinstance(val, dict):
+        return json.dumps(val, sort_keys=True, separators=(",", ":"))
+    if val in (None, ""):
+        return None
+    return val
+
+
+def _peer_delta_value(peer: dict, chair: dict, key: str) -> object | None:
+    pv = peer.get(key)
+    cv = chair.get(key)
+    if _delta_norm(key, pv) == _delta_norm(key, cv):
+        return None
+    if pv in (None, ""):
+        return None
+    if looks_like_secret(str(pv)):
+        return None
+    return pv
+
+
+def merge_payload_local_peer_ahead_of_chair(
+    home: Path, machine_id: str, chair_machine: dict
+) -> dict | None:
+    """Build change-only webhook merge when local bob-peer differs from chair digest (#129)."""
+    mid = normalize_machine_id(machine_id)
+    if not mid or not isinstance(chair_machine, dict):
+        return None
+    peer = bobstat.read_peer(home, mid)
+    if not peer:
+        return None
+    payload: dict = {"op": "merge", "machine": mid}
+    changed = False
+    for key in _MERGE_PEER_FIELDS:
+        if key in _PEER_DELTA_SKIP:
+            continue
+        val = _peer_delta_value(peer, chair_machine, key)
+        if val is not None:
+            payload[key] = val
+            changed = True
+    for key in ("online", "status", "working_on"):
+        val = _peer_delta_value(peer, chair_machine, key)
+        if val is not None:
+            payload[key] = val
+            changed = True
+    if not changed:
+        return None
+    blob = json.dumps(payload, separators=(",", ":"))
+    if looks_like_secret(blob):
+        return None
+    return payload
+
+
+def ingest_fleet_digest_pull(home: Path, pull: dict) -> None:
+    """Apply chair !bobiverse JSON to local digest.json and bob-peers (tray pull)."""
+    if not isinstance(pull, dict):
+        return
+    machines = pull.get("machines")
+    if not isinstance(machines, dict):
+        return
+    doc = load_digest(home)
+    for key in ("v", "ts", "briefer", "chairNick", "chair_nick"):
+        if key in pull and pull[key] not in (None, ""):
+            doc[key] = pull[key]
+    if isinstance(pull.get("cursor_pools"), list):
+        doc["cursor_pools"] = _coerce_cursor_pools(pull["cursor_pools"])
+    merged = doc.get("machines") if isinstance(doc.get("machines"), dict) else {}
+    for raw_mid, ent in machines.items():
+        mid = normalize_machine_id(str(raw_mid))
+        if not mid or not isinstance(ent, dict):
+            continue
+        merged[mid] = copy.deepcopy(ent)
+    doc["machines"] = merged
+    save_digest(home, doc)
+    for raw_mid, ent in machines.items():
+        mid = normalize_machine_id(str(raw_mid))
+        if not mid or not isinstance(ent, dict):
+            continue
+        peer_doc: dict = {"id": mid}
+        for key in _MERGE_PEER_FIELDS:
+            if key in ent and ent[key] not in (None, ""):
+                peer_doc[key] = ent[key]
+        for key in ("online", "status", "working_on", "nick"):
+            if key in ent and ent[key] not in (None, ""):
+                peer_doc[key] = ent[key]
+        if len(peer_doc) > 1:
+            peer_doc["ok"] = True
+            bobstat.write_peer(home, peer_doc)

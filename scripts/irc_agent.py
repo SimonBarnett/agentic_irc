@@ -898,6 +898,9 @@ class Client:
         if not self.ready.wait(30):
             self._abort_gate("NO 001")
         time.sleep(1)
+        # Ergo default-usermode is +i (LUSERS: "0 users and N invisible").
+        # Halloy nick lists that use WHO then omit flamingos even in-channel.
+        self.send("MODE " + self.live_nick + " -i")
         self.send("JOIN " + ",".join(self.channels))
         if not self.joined.wait(30):
             self._abort_gate("NO JOIN")

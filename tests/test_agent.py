@@ -278,6 +278,7 @@ def test_irc_agent_source_sends_cap_end_after_user(tmp_path: Path):
     assert "sasl_plain()" in src
     assert "_abort_gate" in src
     assert "NO 001" in src and "NO JOIN" in src
+    assert 'MODE " + self.live_nick + " -i' in src
 
 
 def test_bob_nick_acks_channel_mention(tmp_path: Path, monkeypatch):

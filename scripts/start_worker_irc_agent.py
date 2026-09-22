@@ -30,7 +30,6 @@ def main(argv: list[str] | None = None) -> int:
 
     launch = bobreport.worker_irc_agent_args(args.fleet_home, args.machine_id, args.pid)
     home = Path(launch["home"])
-    home.mkdir(parents=True, exist_ok=True)
     agent = SCRIPTS / "irc_agent.py"
     cmd = [
         args.python,
@@ -50,6 +49,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.dry_run:
         print(" ".join(cmd))
         return 0
+    home.mkdir(parents=True, exist_ok=True)
     creationflags = 0
     if sys.platform == "win32":
         creationflags = subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS  # type: ignore[attr-defined]

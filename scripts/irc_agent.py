@@ -922,6 +922,12 @@ class Client:
             self.send("JOIN " + ch)
         if not self.joined.wait(30):
             self._abort_gate("NO JOIN")
+        mid = bobreport.machine_from_nick(self.original_nick)
+        if mid and bobtalk.is_fleet_bob_nick(self.original_nick):
+            try:
+                bobstat.refresh_peer_cursor_remaining(self.home, mid)
+            except OSError:
+                pass
         if self.args.hello:
             self.say(self.args.hello)
         if self.args.announce_key:
@@ -929,7 +935,7 @@ class Client:
                 info("INFO no identity; skip AGPK")
             else:
                 self.say("AGPK v1 " + self.ident["pk"])
-        info(f"INFO joined {self.chan} as {self.live_nick}")
+        info(f"INFO joined {','.join(self.channels)} as {self.live_nick}")
         while not self.stop.is_set() and not self.dead.wait(timeout=1):
             pass
 

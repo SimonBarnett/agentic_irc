@@ -25,6 +25,8 @@ SCRIPTS = (
     "bobstat.py",
     "grok_talk.py",
     "grok_talk_drain.py",
+    "start_worker_irc_agent.py",
+    "write_bob_peer.py",
     "irc_listen.py",
     "post_working_on.py",
 )

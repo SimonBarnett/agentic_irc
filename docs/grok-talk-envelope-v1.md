@@ -66,8 +66,10 @@ Secrets-shaped text is dropped (`looks_like_secret`).
   `cursor_label` is display-only and is **not** fuel.
   `bobstat.write_peer` persists those three aliases when any is set (or when BOB
   POINT carries `remaining=`), and keeps prior numeric remaining across POINT
-  updates that omit it. Sister `Write-BobIrcStatus` refreshes `bob-peers/<id>.json`
-  with the same keys.
+  updates that omit it. Watch may write peer JSON directly; when that JSON omits
+  numeric remaining but weekly is 0, fleet `irc_agent` may call
+  `bobstat.refresh_peer_cursor_remaining` (sister `Get-CursorAgentUsage.py`, not
+  `cursor_label`) or operators may run `scripts/write_bob_peer.py --refresh-cursor`.
 - Same mention eligibility as #54 (`addressed_to`, not protocol, not `bob-*` asker).
 - ACK always fires when eligible; grok-talk enqueue is optional and additional.
   When `weekly=0` but Cursor remaining > 0, ACK must **not** say `cannot grok-talk`.

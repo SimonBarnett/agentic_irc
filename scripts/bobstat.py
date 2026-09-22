@@ -13,7 +13,10 @@ remaining_pct / account_remaining_pct / cursor_remaining_pct on bob-peers).
 from __future__ import annotations
 
 import json
+import os
 import re
+import subprocess
+import sys
 from pathlib import Path
 
 BOB_PREFIX = "BOB v1 "
@@ -49,6 +52,47 @@ def normalize_remaining_aliases(doc: dict) -> dict:
         except (TypeError, ValueError):
             continue
     return doc
+
+
+def _parse_remaining_pct(raw: object) -> int | None:
+    if raw is None or raw == "":
+        return None
+    try:
+        n = int(float(raw))
+    except (TypeError, ValueError):
+        return None
+    if 0 <= n <= 100:
+        return n
+    return None
+
+
+def _pcent_cursor_remaining(doc: dict) -> int | None:
+    pcent = doc.get("pcent")
+    if not isinstance(pcent, dict):
+        return None
+    for key in ("cursor-models", "cursor_models", "cursor_models_remaining"):
+        n = _parse_remaining_pct(pcent.get(key))
+        if n is not None:
+            return n
+    return None
+
+
+def numeric_remaining_from_doc(doc: dict) -> int | None:
+    """Cursor Models remaining % from peer/POINT fields. Never cursor_label."""
+    for key in REMAINING_KEYS + ("remaining",):
+        n = _parse_remaining_pct(doc.get(key))
+        if n is not None:
+            return n
+    return _pcent_cursor_remaining(doc)
+
+
+def coerce_peer_doc(doc: dict) -> dict:
+    """Normalize Watch/POINT peer JSON before persist or fuel read."""
+    out = dict(doc)
+    rem = numeric_remaining_from_doc(out)
+    if rem is not None:
+        apply_remaining_aliases(out, rem)
+    return normalize_remaining_aliases(out)
 
 
 def merge_preserved_remaining(prev: dict | None, incoming: dict) -> dict:
@@ -196,7 +240,8 @@ def write_peer(home: Path, doc: dict) -> Path | None:
             prev = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
             prev = None
-    parsed = merge_preserved_remaining(prev, normalize_remaining_aliases(dict(parsed)))
+    parsed = coerce_peer_doc(dict(parsed))
+    parsed = merge_preserved_remaining(prev, parsed)
     path.write_text(json.dumps(parsed, indent=2) + "\n", encoding="utf-8")
     return path
 
@@ -206,6 +251,83 @@ def read_peer(home: Path, machine_id: str) -> dict | None:
     try:
         if not path.exists():
             return None
-        return json.loads(path.read_text(encoding="utf-8"))
+        return coerce_peer_doc(json.loads(path.read_text(encoding="utf-8")))
     except (OSError, json.JSONDecodeError):
         return None
+
+
+def cursor_usage_script_paths() -> list[Path]:
+    out: list[Path] = []
+    for env in ("AGENTIC_BUILD_ROOT", "BOB_BUILD_ROOT"):
+        raw = (os.environ.get(env) or "").strip()
+        if raw:
+            out.append(Path(raw) / "tools" / "Get-CursorAgentUsage.py")
+    for root in (r"C:\ai\agentic_build", r"D:\ai\agentic_build"):
+        out.append(Path(root) / "tools" / "Get-CursorAgentUsage.py")
+    seen: set[str] = set()
+    uniq: list[Path] = []
+    for p in out:
+        key = str(p).lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        uniq.append(p)
+    return uniq
+
+
+def load_cursor_usage_doc() -> dict | None:
+    """Sister Get-CursorAgentUsage.py JSON (Cursor Models remaining, not cursor_label)."""
+    py = sys.executable
+    for script in cursor_usage_script_paths():
+        if not script.is_file():
+            continue
+        try:
+            proc = subprocess.run(
+                [py, str(script)],
+                capture_output=True,
+                text=True,
+                timeout=30,
+                check=False,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            continue
+        raw = (proc.stdout or "").strip()
+        if not raw or raw == "{}":
+            continue
+        try:
+            doc = json.loads(raw)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(doc, dict) and doc.get("ok"):
+            return doc
+    return None
+
+
+def refresh_peer_cursor_remaining(
+    home: Path,
+    machine_id: str,
+    *,
+    usage_doc: dict | None = None,
+) -> bool:
+    """Persist Cursor remaining on bob-peers when weekly=0 and file lacks numeric fuel."""
+    peer = read_peer(home, machine_id)
+    if not peer:
+        return False
+    weekly = peer.get("weekly")
+    try:
+        if weekly is not None and weekly != "" and int(weekly) > 0:
+            return False
+    except (TypeError, ValueError):
+        pass
+    if numeric_remaining_from_doc(peer) not in (None, 0):
+        return False
+    usage = usage_doc if usage_doc is not None else load_cursor_usage_doc()
+    if not usage:
+        return False
+    rem = _parse_remaining_pct(usage.get("remaining_pct"))
+    if rem is None or rem <= 0:
+        return False
+    merged = coerce_peer_doc(dict(peer))
+    apply_remaining_aliases(merged, rem)
+    write_peer(home, merged)
+    return True

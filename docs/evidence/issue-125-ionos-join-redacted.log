@@ -1,0 +1,12 @@
+# Redacted irc.log snippet (issue #125 evidence)
+# After fleet bob-ionos recycle with dual-channel irc_agent on this SHA:
+#   INFO joined #bobiverse,#ionos as bob-ionos
+# Ergo JOIN lines (passwords and host details omitted):
+#
+# :bob-ionos!~bob-ionos@<redacted> JOIN #bobiverse
+# :bob-ionos!~bob-ionos@<redacted> JOIN #ionos
+#
+# Worker shop client while git job live (Start-BobWorkerIrcAgent / start_worker_irc_agent.py):
+# :w-io-<pid>!~w-io-<pid>@<redacted> JOIN #ionos
+#
+# Capture on ionos after merge+pull of this branch into C:\ai\agentic_irc and Watch recycle.

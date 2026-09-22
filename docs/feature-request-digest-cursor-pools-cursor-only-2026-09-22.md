@@ -10,19 +10,25 @@
 TipForm / digest shows **Cursor** quotas labelled **Smart Catalogue / Club Madeira / ntsa**.
 Simon: those are **xAI** accounts — not Cursor Spending pools.
 
-Docs to read (`agentic_build` skills, not invent):
+## Official Cursor Spending (RTFM — not TipForm aliases)
 
-- `box-usage` / `bob-fleet-tray`: Cursor Spending has **at least three** pools:
-  1. **grok chat** (Sand)
-  2. **high cost models**
-  3. **low cost models**
-  Simon: grok chat is one; there are more — RTFM Spending / `Get-CursorAgentUsage.py`.
+https://cursor.com/help/models-and-usage/usage-limits — two **monthly** included pools:
 
-`config/bob-seats.json` maps machines → email seats (SC / Club Madeira / ntsa). That seat map is **not** a list of Cursor quota pool names. Do not paint those seat labels as Cursor pool rows.
+1. **Cursor Models** (Grok 4.7/4.6/4.5, Composer 2.5)
+2. **Other Models** (third-party)
+
+https://cursor.com/help/grok-bot/plans — Grok Bot also has:
+
+3. **Weekly usage** (included, weekly reset) — grok-chat / Sand pool
+4. **On-demand** / Spending **Monthly Limit** (extra after weekly)
+
+Legacy TipForm aliases (`grok chat` / `high cost models` / `low cost models`) map roughly to (3)/(2)/(1) but MUST NOT lock the wire to only those three names if Spending exposes more.
+
+`config/bob-seats.json` maps machines → email seats (SC / Club Madeira / ntsa). That seat map is **xAI / Grok Build**, **not** a list of Cursor quota pool names. Do not paint those seat labels as Cursor pool rows.
 
 ## LOCKED
 
-1. `cursor_pools` / Cursor section = real Cursor Spending group bars only (grok chat / high cost / low cost as documented; add more if Spending exposes them).
+1. `cursor_pools` / Cursor section = real Cursor Spending group bars only (Cursor Models, Other Models, Grok Weekly, on-demand as documented).
 2. Do **not** emit Smart Catalogue / Club Madeira / ntsa as Cursor quota entries.
 3. Do not gut digest / TipForm. Sister TipForm consumer is agentic_build.
 4. No UAT stamp.

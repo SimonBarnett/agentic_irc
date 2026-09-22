@@ -87,9 +87,15 @@ the live socket (login looks like it kicks the other). `Start-TalkSeat`
 refuses to kill a live `coordinator.pid` home that belongs to another nick.
 Skill `agentic-irc`.
 
-## 2026-09-22 â€” #88 seat PID = PowerShell `$PID` (NOT python)
+## 2026-09-22 — #88 seat PID = `irc_agent.py` (supersedes PowerShell seat)
 
-Simon correction: suffix must be **coordinator PowerShell process id**, not
+Issue #88: suffix is **python `irc_agent` PID** for the home (`coordinator.pid`
+`agent=` / `seat=`). Not `irc_listen`, not coordinator PowerShell `$PID`.
+`Start-TalkSeat` uses `--auto-nick` + `AGENTIC_IRC_SEAT_PID=self`.
+
+## 2026-09-22 â€” #88 seat PID = PowerShell `$PID` (NOT python) [superseded]
+
+Simon correction (later reversed by #88): suffix must be **coordinator PowerShell process id**, not
 python `irc_listen` (e.g. 17568) and not python `irc_agent`. FR #88, plan,
 runbook, skills updated. PR #89 must realign.
 

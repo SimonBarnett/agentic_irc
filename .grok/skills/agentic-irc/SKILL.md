@@ -133,7 +133,8 @@ try again.
 2. If cursor-2 `irc_agent` is still JOIN, keep it. Else
    `scripts/Start-SecondSeatTui.ps1` (or `Start-TalkSeat.ps1 -MachineId
    <id> -IrcHome ~\.agentic-irc-cursor-2` in a **new** `-NoExit`
-   PowerShell). Nick = that PowerShell `$PID`, not the dead `2224`.
+   PowerShell). Nick comes from `Start-TalkSeat` (`{id}-<irc_agent PID>` via
+   `--auto-nick`), not a stale suffix from a dead agent.
 3. Start visible `cursor-agent.ps1 --trust --force --workspace C:\ai
    --model grok-4.6 -- $prompt` where `$prompt` is read from a **file**.
    Do not pass the prompt on `cmd.exe /c` (spaces truncate). Do not `-p`.

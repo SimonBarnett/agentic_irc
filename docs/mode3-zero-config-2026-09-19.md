@@ -3,7 +3,7 @@
 **Surface:** `src/moot_thin/` (`airc-moot-thin.exe`)
 **Trigger:** Walrus human UAT worked, but first-run UX required flag soup, a hand-copied PSK, and chair OPEN before thin JOIN. This ticket is **operator UX**, not a TLS miracle.
 
-**Status:** implemented P0–P3 in-tree. **Not** ready for human UAT until Bob re-MRBs this path. **Windows 95/98/NT4/XP live Libera is still not claimed** (U1 / `docs/mode3-tls-spike.md`).
+**Status:** implemented P0–P3 in-tree. **Not** ready for human UAT until Bob re-MRBs this path. **Live IRC is Ergo `irc.ntsa.uk:6697`** (Libera legacy). **Windows 95/98/NT4/XP live TLS is still not claimed** (U1 / `docs/mode3-tls-spike.md`). **Do not pair on `#bobiverse`** — use a private channel (default `#airc-moot`).
 
 ## Charge
 
@@ -15,15 +15,15 @@ No mandatory `--nick --channel --moot --home --allow-path --operators --key` on 
 
 | ID | Rule | Notes |
 |---|---|---|
-| Z0 | Double-click / zero args is a supported path on Win8+ / Server 2012+. | Console PIN prompt, or `--pin`. Live Libera still needs Schannel TLS 1.2. |
-| Z1 | Self-heal defaults: `home` = directory of the exe; `allow_path` = `{home}\jail`; `nick` = sanitized hostname (IRC-safe, <=32); `hello` = `{nick}-online`; auto-load `{exeDir}\airc-moot-thin.ini` if present **without** wiping after load. | Also auto-load `{exeDir}\dumb\paired.ini` from a previous PIN pair (no PSK in that file). CLI still wins. |
+| Z0 | Double-click / zero args is a supported path on Win8+ / Server 2012+. | Console PIN prompt, or `--pin`. Live Ergo (`irc.ntsa.uk:6697`) needs Schannel TLS 1.2. |
+| Z1 | Self-heal defaults: `home` = directory of the exe; `allow_path` = `{home}\jail`; `nick` = `m3-<sanitized-hostname>` (IRC-safe, <=32); `hello` empty unless ini/CLI set; auto-load `{exeDir}\airc-moot-thin.ini` if present **without** wiping after load. | Also auto-load `{exeDir}\dumb\paired.ini` from a previous PIN pair (no PSK in that file). CLI still wins. |
 | Z2 | PIN pairing is the primary magic: 6-digit numeric PIN, human-readable, TTL 10 minutes, single use. | Chair prints PIN on **local stdout only**. |
 | Z3 | PIN ceremony does **not** put the long-term PSK in chat as cleartext. | Chair and thin derive a wrapping key from the PIN; GRANT is AES-256-GCM. See crypto sketch below. |
 | Z4 | After pair, thin accepts jobs from the pairing chair nick automatically (plus any extra ops already in ini). Empty `--operators` is still refused for unattended/agent installs. | Floor alone is still not enough for exec. |
 | Z5 | Chair OPEN creates/displays PIN+moot; thin JOIN that moot after pair. Zero-config thin waits in a channel lobby until PIN validates. | Default lobby channel `#airc-moot` if none in ini/CLI (override with a one-line sibling ini). |
-| Z6 | Ancient OS honesty unchanged. | Win95/98/NT4/XP live Libera still blocked. Zero-config is UX for capable Schannel boxes. |
+| Z6 | Ancient OS honesty unchanged. | Win95/98/NT4/XP live TLS IRC still blocked. Zero-config is UX for capable Schannel boxes. |
 | Z7 | No secrets in git or release assets. PIN is ephemeral. | Do not commit `connector.key`, PIN values from live runs, or SASL assignments. Test vector PIN `482917` is a fixture, not a live secret. |
-| Z8 | Offline `--selftest` still green; CI still no Libera. | `--selftest` / `--offline` never open a socket. |
+| Z8 | Offline `--selftest` still green; CI still no live IRC (Ergo or Libera). | `--selftest` / `--offline` never open a socket. |
 
 ## Operator story
 
@@ -139,7 +139,7 @@ IRC prefix nick must equal the HELLO nick or the chair drops the line (same rule
 | Threat | What happens | Mitigation |
 |---|---|---|
 | PIN brute force (online) | Attacker sends HELLO guessing the PIN | 6 digits; chair decrypt-fail counter (5) then expire; 10 minute TTL; single GRANT |
-| PIN brute force (offline) | Channel observer captures GRANT and tries 10^6 wrapping keys | **In scope.** A 6-digit PIN is ~20 bits. This is **not** a substitute for a private channel. Prefer a private Libera channel. Air-gap `--key` is the high-assurance path. |
+| PIN brute force (offline) | Channel observer captures GRANT and tries 10^6 wrapping keys | **In scope.** A 6-digit PIN is ~20 bits. This is **not** a substitute for a private channel. Prefer a **private** pairing channel (never `#bobiverse`). Air-gap `--key` is the high-assurance path. |
 | Channel MitM | Observer sees OFFER/HELLO/GRANT headers (moot, pair_id, nicks, sizes) | Headers are not secret. Bodies are GCM. MitM without the PIN cannot read the PSK. MitM **with** a captured GRANT can offline-brute the PIN (row above). |
 | PIN typed on the wrong channel | Thin never sees a matching OFFER, or GRANT AAD fails | Default `#airc-moot`; chair prints the channel; sibling ini can set `channel=` |
 | First HELLO wins | A same-channel party who also has the PIN can race | Same class as TOFU. Human is holding the PIN; ceremony is short. |

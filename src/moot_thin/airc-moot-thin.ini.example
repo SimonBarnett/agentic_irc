@@ -1,13 +1,14 @@
 ; Example config for airc-moot-thin.exe
 ; Copy to airc-moot-thin.ini beside the exe. CLI flags override these keys.
-; Zero-arg / double-click: nick, home, allow_path, hello self-heal if omitted.
+; Zero-arg / double-click: nick (m3-<hostname>), home, allow_path self-heal if omitted.
+; Do NOT use channel=#bobiverse — pairing is private (#airc-moot or your locked room).
 ; Happy path: chair writes airc-invite.json; thin double-click loads it.
 ; PIN prompt / --pin remain fallbacks.
 ; Do not put PSK material, PIN values, SASL passwords, or API key assignments in this file.
 ; Air-gap: generate connector.key off IRC and point key= at the 32-byte file (or AIRC1+DPAPI file).
 
 [client]
-; nick=  (default: sanitized hostname)
+; nick=  (default: m3-<sanitized hostname>)
 channel=#airc-moot
 ; moot=  (filled by PIN pair)
 ; home=  (default: directory of the exe)
@@ -16,5 +17,5 @@ channel=#airc-moot
 ; key=  (default: {home}\dumb\connector.key)
 host=irc.ntsa.uk
 port=6697
-; hello=  (default: {nick}-online)
+; hello=  (default: empty — no PRIVMSG hello on JOIN)
 realname=airc-moot-thin

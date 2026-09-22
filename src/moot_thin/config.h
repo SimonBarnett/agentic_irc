@@ -37,6 +37,7 @@ typedef struct ThinConfig {
 void config_defaults(ThinConfig *c);
 void config_exe_dir(char *out, int outlen);
 void sanitize_hostname(const char *host, char *out, int outlen);
+int pairing_channel_forbidden(const char *channel);
 void config_self_heal_ex(ThinConfig *c, const char *exe_dir, const char *hostname);
 void config_self_heal(ThinConfig *c);
 int config_try_load_ini(ThinConfig *c, const char *path);

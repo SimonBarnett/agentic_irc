@@ -196,11 +196,11 @@ static int selftest(void)
             ThinConfig c;
             config_defaults(&c);
             config_self_heal_ex(&c, jailp, "WALRUS");
-            if (strcmp(c.nick, "walrus") != 0 || strcmp(c.hello, "walrus-online") != 0) {
-                info("FAIL self-heal hostname nick");
+            if (strcmp(c.nick, "m3-walrus") != 0 || c.hello[0] != 0) {
+                info("FAIL self-heal hostname nick=%s hello=%s", c.nick, c.hello);
                 fails++;
             } else
-                info("INFO self-heal nick=walrus home=%s jail=%s", c.home, c.allow_path);
+                info("INFO self-heal nick=m3-walrus home=%s jail=%s", c.home, c.allow_path);
         }
     }
 
@@ -292,15 +292,16 @@ static int selftest(void)
             const char *fix_pin = "482917";
             const char *fix_ch = "#ops";
             const char *fix_moot = "0123456789abcdef";
-            chair_invite_line(fix_pin, fix_ch, fix_moot, invite, sizeof(invite));
+            chair_invite_line(fix_pin, fix_ch, fix_moot, "irc.ntsa.uk", 6697, invite, sizeof(invite));
             if (!strstr(invite, "--pin") || !strstr(invite, "--channel") ||
-                !strstr(invite, "--moot") || !strstr(invite, fix_pin) ||
+                !strstr(invite, "--moot") || !strstr(invite, "--host") ||
+                !strstr(invite, "irc.ntsa.uk") || !strstr(invite, fix_pin) ||
                 !strstr(invite, fix_moot) || !strstr(invite, fix_ch) ||
                 strstr(invite, "psk") || strstr(invite, "connector.key")) {
                 info("FAIL chair invite banner %s", invite);
                 fails++;
             } else {
-                chair_print_banner(fix_pin, fix_ch, fix_moot);
+                chair_print_banner(fix_pin, fix_ch, fix_moot, "irc.ntsa.uk", 6697);
                 info("INFO chair invite banner ok");
             }
         }
@@ -916,7 +917,11 @@ static int prepare_chair(ThinConfig *cfg, PairSess *ps, uint8_t *key, int *have_
     if (pair_wrap_key(ps->pin, ps->pair_id, cfg->channel, cfg->moot_id, ps->wrap) != 0)
         return -1;
     ps->have_wrap = 1;
-    chair_print_banner(ps->pin, cfg->channel, cfg->moot_id);
+    if (pairing_channel_forbidden(cfg->channel)) {
+        info("INFO pairing on #bobiverse is forbidden");
+        return -1;
+    }
+    chair_print_banner(ps->pin, cfg->channel, cfg->moot_id, cfg->host, cfg->port);
     {
         InviteDoc inv;
         memset(&inv, 0, sizeof(inv));

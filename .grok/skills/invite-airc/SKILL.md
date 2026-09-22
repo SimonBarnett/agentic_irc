@@ -47,10 +47,12 @@ That writes `beacon.url` (secret gist, `https://` only). Needs `gh`.
 
 ## Hard rules
 
-- Mode 3 thin / DUMB is **not a git-task worker** — field join and connector smoke only; no Form Prep or build-loop UAT from the elder exe.
+- **Two chairs:** digest chair **Jeeves** (`irc_agent.py --chair`, `#bobiverse` only, `!bobiverse` whisper). Mode 3 PIN chair is **`airc-moot-thin.exe --chair`** on the **pairing channel only** — Jeeves does not GRANT PINs.
+- **Never** `--channel "#bobiverse"` for Mode 3 pairing. The tool refuses `#bobiverse`; use a locked private room (default `#airc-moot`). Chair copy-paste **must** include `--host irc.ntsa.uk`.
+- Mode 3 thin / DUMB is **not a git-task worker** — no Form Prep, no digest POST `/bob/v1/report`, no `!bobiverse` answer, no fleet moot `b0b1be15e0000001`, no `bob-*` / `{machine}-{pid}` nick by default.
 - The invite file / gist URL **is** the 10-minute secret. Private channel still required.
 - Win95/98/NT4/XP live IRC still not claimed.
 - Empty operators refused for unattended `--key` installs; after pair, chair becomes operator.
 - Already-paired boxes (`dumb\connector.key` + `dumb\paired.ini`) reconnect and ignore a new beacon.
-- Fallback: `airc-moot-thin.exe --pin NNNNNN --channel "#chan" --moot 16hex`
+- Fallback: `airc-moot-thin.exe --pin NNNNNN --channel "#chan" --moot 16hex --host irc.ntsa.uk` (not `#bobiverse`)
 - Do not commit `connector.key` or live PINs.

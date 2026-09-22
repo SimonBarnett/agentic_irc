@@ -341,8 +341,11 @@ def test_sanitize_hostname_and_self_heal():
     assert cfg.home == r"C:\airc"
     assert cfg.allow_path.lower().endswith("jail")
     cfg2 = thin.merge_self_heal(None, None, exe_dir=r"C:\airc", hostname="WALRUS")
-    assert cfg2.nick == "walrus"
-    assert cfg2.hello == "walrus-online"
+    assert cfg2.nick == "m3-walrus"
+    assert cfg2.hello == ""
+    assert thin.default_nick_from_hostname("flamingo") == "m3-flamingo"
+    assert thin.default_nick_from_hostname("flamingo-17568") != "flamingo-17568"
+    assert not thin.default_nick_from_hostname("flamingo").startswith("bob-")
 
 
 def test_chair_invite_line_shape():
@@ -350,6 +353,8 @@ def test_chair_invite_line_shape():
     assert "--pin" in line
     assert "--channel" in line
     assert "--moot" in line
+    assert "--host" in line
+    assert "irc.ntsa.uk" in line
     assert "482917" in line
     assert JID in line
     assert '"#ops"' in line

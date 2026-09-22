@@ -5,6 +5,8 @@ import os
 import time
 from pathlib import Path
 
+import protect
+
 QUIT_REQUEST = "agent.quit.request"
 
 
@@ -17,6 +19,10 @@ def request_agent_quit(home: Path | str, reason: str = "stop") -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     text = (reason or "stop").strip().replace("\n", " ")[:200]
     path.write_text(f"{int(time.time())} {text}\n", encoding="utf-8")
+    try:
+        protect.protect_path(path)
+    except protect.ProtectError:
+        pass
 
 
 def peek_quit_request(home: Path | str) -> str | None:

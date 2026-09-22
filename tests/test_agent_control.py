@@ -21,3 +21,13 @@ def test_graceful_stop_no_agent(tmp_path: Path):
     home = tmp_path / "seat"
     home.mkdir()
     assert ac.graceful_stop_agent(home, wait_s=0.5)
+
+
+def test_quit_request_readable_on_protected_home(tmp_path: Path):
+    import protect
+
+    home = tmp_path / "seat"
+    home.mkdir()
+    protect.protect_path(home)
+    ac.request_agent_quit(home, "stop")
+    assert ac.peek_quit_request(home) == "stop"

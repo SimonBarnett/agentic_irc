@@ -94,7 +94,6 @@ def test_control_quit_request_triggers_shutdown(tmp_path: Path, monkeypatch):
     monkeypatch.setenv("AGENTIC_IRC_HOME", str(tmp_path))
     import agent_control
 
-    agent_control.request_agent_quit(tmp_path, "recycle")
     sent: list[str] = []
 
     def _send(self, line: str) -> None:
@@ -104,6 +103,7 @@ def test_control_quit_request_triggers_shutdown(tmp_path: Path, monkeypatch):
     c = irc_agent.Client(_args(tmp_path, "flamingo-100"))
     c.joined.set()
     c.sock = object()  # type: ignore[assignment]
+    agent_control.request_agent_quit(tmp_path, "recycle")
     assert c._consume_control_quit()
     assert any(x.startswith("QUIT ") for x in sent)
 

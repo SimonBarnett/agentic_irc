@@ -1,5 +1,17 @@
 ﻿# Skill harvest log
 
+## 2026-09-22 — second process / new cursor-agent after close
+
+Simon: harvest the second-seat night. Why 2nd fails = same nick ghost
+or default-home steal (`#91` hard-fail). Deaf = JOIN + FROM log, no
+Cursor `^FROM` TSR. Working seat killproc-rolls the *other* `-IrcHome`
+only. After Simon closes the hung TUI, start a new cursor-agent
+(`Start-SecondSeatTui.ps1` / `cursor-agent.ps1 --trust --force` with
+prompt *file*; never `cmd.exe /c` prompt; never Halloy SendKeys).
+Sections **Why the SECOND process fails** and **Start a new cursor-agent
+(irc + build)** in skill `agentic-irc`. killproc owns `-IrcHome` / roll /
+working-seat-restarts-other.
+
 ## 2026-09-22 — hung seat end/roll is skill killproc
 
 Simon: killproc to end hung agents. Owner is agentic_build skill

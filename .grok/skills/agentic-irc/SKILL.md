@@ -7,8 +7,9 @@ description: >
   /agentic-irc, talk to another Grok on IRC, encrypt secrets for IRC, need
   an IRC listener so you get responses, or must run a TSR to be triggered.
   Also Start-TalkSeat, talk-seat nick, #88, PowerShell seat PID, two Cursor
-  TUIs, or harvest that talk-seat playbook. Fleet Ergo start/firewall/
-  Watch-Bobiverse is skill bob-irc.
+  TUIs, why the second process fails, cursor-2, start a new cursor agent
+  after a hung TUI close, or harvest that talk-seat playbook. Fleet Ergo
+  start/firewall/Watch-Bobiverse is skill bob-irc. Hung end/roll is killproc.
 ---
 
 # agentic-irc
@@ -65,7 +66,48 @@ Diagnose on flamingo:
 
 Fix for the second window: `Start-TalkSeat.ps1 -MachineId flamingo -IrcHome ~\.agentic-irc-cursor-2` in **that** TUI, notify `^FROM ` on **that** home only. Do not write the first seat's `outbox.txt`.
 
-Hung / deaf seat Simon wants ended: skill `killproc` (`Stop-HungAgent.ps1 -Home … -Roll`). Do not kill this TUI's home.
+Hung / deaf seat Simon wants ended: skill `killproc` (`Stop-HungAgent.ps1 -IrcHome … -Roll`). Never `-Home` (PowerShell `$Home` is read-only). Do not kill this TUI's home.
+
+## Why the SECOND process fails
+
+Simon started two Cursor processes per box (except dev). The second failed
+on each. Two failure modes, not Ergo kicking at random:
+
+1. **Same nick.** Two TUIs both `flamingo-17568` (or both default home).
+   Ergo one socket per nick: second PASS ghosts the first (`QUIT` /
+   Halloy "login kicks the other").
+2. **Same default home steal.** `Start-TalkSeat` with a new `$PID` on
+   `~\.agentic-irc-cursor` used to `Stop-Process` the live agent+listen
+   then start its nick. `#91` / `#90` hard-fails that steal
+   (`talk_seat_pid.py --bind-home` exit 3). Second TUI must use
+   `-IrcHome ~\.agentic-irc-cursor-2` in **that** window.
+
+Deaf is the third lookalike: `001`+JOIN, `listen.stdout.log` has FROM,
+but no Cursor TSR notify `^FROM` on that home — never `pong`. killproc
+`-Roll` replaces python only; it does not attach the other TUI.
+
+Working seat on a box restarts the hung *other* home (skill `killproc`).
+If `~\.agentic-irc-cursor-2` is missing, there is no hung second seat
+(marchhare seat-1 only). Do not WinRM.
+
+## Start a new cursor-agent (irc + build)
+
+Simon: hung window gone / start another process with irc and build /
+try again.
+
+1. Do not steal `~\.agentic-irc-cursor` or this TUI's `agent.cmd` node.
+2. If cursor-2 `irc_agent` is still JOIN, keep it. Else
+   `scripts/Start-SecondSeatTui.ps1` (or `Start-TalkSeat.ps1 -MachineId
+   <id> -IrcHome ~\.agentic-irc-cursor-2` in a **new** `-NoExit`
+   PowerShell). Nick = that PowerShell `$PID`, not the dead `2224`.
+3. Start visible `cursor-agent.ps1 --trust --force --workspace C:\ai
+   --model grok-4.6 -- $prompt` where `$prompt` is read from a **file**.
+   Do not pass the prompt on `cmd.exe /c` (spaces truncate). Do not `-p`.
+4. Prompt: second seat; home cursor-2 only; arm `^FROM`; pong; skills
+   agentic_irc + agentic_build; no UAT; no `!bobiverse`.
+5. SendKeys only if foreground title is exactly `Agentic Build IRC` or
+   `Flamingo Talk Seat`. Never Halloy (`#bobiverse – Halloy`).
+6. Ping the new nick until `pong`.
 
 ## Start-TalkSeat recycle (#88)
 

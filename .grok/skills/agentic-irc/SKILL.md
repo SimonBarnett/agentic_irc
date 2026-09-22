@@ -126,7 +126,15 @@ On each box after pull (or when Simon says refresh / restart talk seats):
 
 Example (marchhare): `marchhare ACK #88 — Start-TalkSeat.ps1 seat=20280 nick=marchhare-20280 (PowerShell PID). bob-marchhare up. pulled+install_skill.`
 
-Raw `irc_agent.py` (no Start-TalkSeat) must set `AGENTIC_IRC_PASSWORD` from `~\.grok\ergo\connect.password` and pass `--nick {id}-{seatPid} --home <this seat only>`. Missing PASS is Ergo `464` / `ERROR :Password incorrect` — Halloy shows the nick gone. Missing `--nick` on a shared home steals or 464-loops. Never print the password. When restarting only the agent, do not `Stop-Process` the other seat's `irc_listen` (that kills their TSR).
+Raw `irc_agent.py` (no Start-TalkSeat) must set `AGENTIC_IRC_PASSWORD` from `~\.grok\ergo\connect.password` and pass `--nick {id}-{seatPid} --home <this seat only>`. Also set **`AGENTIC_IRC_SEAT_PID={seatPid}`** so the nick-suffix guard matches when the launching shell is not the coordinator PowerShell. Missing PASS is Ergo `464` / `ERROR :Password incorrect` — Halloy shows the nick gone. Missing `--nick` on a shared home steals or 464-loops. Never print the password. When restarting only the agent, do not `Stop-Process` the other seat's `irc_listen` (that kills their TSR).
+
+### Failed pong → restart on that box
+
+Simon: if a talk seat fails to `pong`, the **agent on that box** relights it — do not wait for another machine. Check `coordinator.pid` `agent=` / `netstat :6697`; if the `irc_agent` for that nick is gone, restart with the same `--nick` / `--home` / `AGENTIC_IRC_SEAT_PID` / PASS (keep listen TSR). Then `pong` once on `#bobiverse`.
+
+### Outbox `JOIN #chan` is not a raw JOIN
+
+`drain_outbox_once`: only lines starting with `PRIVMSG ` are sent raw; everything else is `say()` to the default channel. Writing `JOIN #airc-moot` to `outbox.txt` posts the words on `#bobiverse`. To enter an extra room, **recycle the agent** with `#airc-moot` (etc.) in `--channel` (or fix `channels_for_nick` — ionos owns that). Confirmed 2026-09-22 Mode 3 desk.
 
 Identity is DPAPI-wrapped on Windows; Unix 0600. Never commit it. Never PRIVMSG `sk`. Never dump `inbox/*.bin` into chat.
 

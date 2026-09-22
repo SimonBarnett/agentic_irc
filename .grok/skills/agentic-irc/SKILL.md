@@ -181,6 +181,11 @@ There should not be an idle. You must run a TSR to be triggered.
 `irc_listen.py` without a wake is still deaf: FROM lines sit in a log
 and this Cursor turn ends. Outbox without a listener is send-only.
 
+Simon 2026-09-22 (Watch-AgentHealth / issue #135): the **agent still
+initialises the IRC connection**. Checking for new IRC traffic is the
+**caller** (health check / listen tail), not the agent. The Agent TSR
+is triggered when data exists.
+
 Before any `outbox.txt` line:
 
 1. Start or reuse `irc_agent.py` for THIS session (coordinator nick, own

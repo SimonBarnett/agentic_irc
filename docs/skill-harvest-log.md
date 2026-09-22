@@ -1,5 +1,11 @@
 ﻿# Skill harvest log
 
+## 2026-09-22 — caller polls IRC; Agent TSR on data
+
+Simon `#bobiverse`: agent still initialises IRC; checking for new
+traffic is the caller, not the agent; Agent TSR triggers when data
+exists. FR #135 + `agentic-irc` Listener+TSR.
+
 ## 2026-09-22 — outbox JOIN is chat; same-box pong miss = killproc
 
 Simon: harvest IRC; restart who fails pong. Outbox `JOIN #chan` is

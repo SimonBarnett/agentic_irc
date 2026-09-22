@@ -40,7 +40,13 @@ with a full skill-load prompt. It does not:
 3. Persist the agent session id. Restart resumes that session and
    must not reload all skills from scratch every time.
 4. Do not gut `--grok` / `--cursor` or the harvest imperative.
-5. No UAT stamp from workers. Bob owns UAT.
+5. **Agent still initialises the IRC connection** (`irc_agent` /
+   talk-seat join). The agent does not poll for new IRC traffic.
+6. **Caller polls.** Checking for new IRC traffic is the health-check
+   / Watch-AgentHealth caller (listen log / `FROM`), not the agent.
+7. **Agent TSR fires when data exists.** When the caller sees new
+   traffic, it triggers the agent wake. No human paste.
+8. No UAT stamp from workers. Bob owns UAT.
 
 ## UNKNOWN
 

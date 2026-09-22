@@ -9,9 +9,10 @@ description: >
   Also Start-TalkSeat, talk-seat nick, #88, PowerShell seat PID, two Cursor
   TUIs, why the second process fails, cursor-2, start a new cursor agent
   after a hung TUI close, extra channel JOIN, outbox JOIN-as-chat, Mode 3
-  PIN (never on #bobiverse), or harvest that talk-seat playbook. Fleet Ergo
-  start/firewall/Watch-Bobiverse is skill bob-irc. Hung end/roll is killproc.
-  Failed pong: working seat on that box killproc-rolls the other home.
+  PIN (never on #bobiverse), harvest that talk-seat playbook, everyone
+  harvest your irc skill, or if anyone fails to pong restart them on
+  that box. Fleet Ergo start/firewall/Watch-Bobiverse is skill bob-irc.
+  Hung end/roll is killproc.
 ---
 
 # agentic-irc
@@ -52,7 +53,7 @@ python scripts/seal.py genkey
 
 Two agents on one box **must** use different `--home` / `AGENTIC_IRC_HOME`. See `docs/multi-agent-one-host.md` in the repo (Libera vs Ergo, SASL, stdout redirect). Flamingo example: Watch `bob-flamingo` uses `~\.agentic-irc-bobiverse`; a talk session uses `--nick flamingo-$PID` (PowerShell seat `$PID`) `--home ~\.agentic-irc-cursor`. Extra sessions need their own home too. Do not reuse the Watch home. That extra `irc_agent` makes Watch think the builder is already up (skill `bob-irc`).
 
-Second Cursor TUI on the same box: `Start-TalkSeat.ps1 -MachineId flamingo -IrcHome ~\.agentic-irc-cursor-2` (or another unused home). Default `~\.agentic-irc-cursor` is the first talk seat. Same nick on Ergo ghosts the live connection — Halloy looks like "login kicks the other". Do not `Stop-Process` `irc_agent` / `irc_listen` on another seat's home. `Start-TalkSeat` refuses to steal a live `coordinator.pid` home.
+Second Cursor TUI on the same box: `Start-TalkSeat.ps1 -MachineId <id> -IrcHome ~\.agentic-irc-cursor-2` (flamingo, `ce-priority-dev1`, others). Default `~\.agentic-irc-cursor` is the first talk seat. Same nick on Ergo ghosts the live connection — Halloy looks like "login kicks the other". Do not `Stop-Process` `irc_agent` / `irc_listen` on another seat's home. `Start-TalkSeat` refuses to steal a live `coordinator.pid` home.
 
 ## Other flamingo looks disconnected
 
@@ -72,8 +73,10 @@ Hung / deaf seat Simon wants ended: skill `killproc` (`Stop-HungAgent.ps1 -IrcHo
 
 ## Why the SECOND process fails
 
-Simon started two Cursor processes per box (except dev). The second failed
-on each. Two failure modes, not Ergo kicking at random:
+Simon started two Cursor processes per box (flamingo and DEV1
+`ce-priority-dev1` included; not "except dev"). The second failed
+on each until a distinct cursor-2 home. Two failure modes, not Ergo
+kicking at random:
 
 1. **Same nick.** Two TUIs both `flamingo-17568` (or both default home).
    Ergo one socket per nick: second PASS ghosts the first (`QUIT` /
@@ -94,6 +97,16 @@ If `~\.agentic-irc-cursor-2` is missing, there is no hung second seat
 Simon: if a nick **on this box** fails to pong, the live agent here
 `killproc -IrcHome <their home> -Roll`. Do not roll this TUI's home.
 Do not restart a nick that lives on another machine.
+
+## Fleet harvest / restart failed pong
+
+Simon on `#bobiverse` `everyone harvest your irc skill`: each talk seat
+harvests IRC playbooks into this repo (skill `harvest-agent-skills`).
+Do not wait for the hourly task. Empty harvest: no commit.
+
+Simon `if anyone fails to pong ... restart them`: the *live* seat on
+*that* box killproc-rolls the deaf home only. Do not restart a nick
+that already ponged. Do not kill this TUI's home. Do not WinRM.
 
 ## Start a new cursor-agent (irc + build)
 

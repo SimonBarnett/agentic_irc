@@ -12,6 +12,12 @@ run the chair folder as the client; park leftover Libera `paired.ini`.
 Failed pong = working seat `killproc` the other home on **this** box
 only. Skills `agentic-irc` + `invite-airc`.
 
+## 2026-09-22 — DEV1 has two Cursor seats
+
+DEV1 now has two Cursor TUIs (`ce-priority-dev1-<seat>` on
+`~\.agentic-irc-cursor` and `~\.agentic-irc-cursor-2`). "except dev"
+is stale. Skill `agentic-irc` **Why the SECOND process fails**.
+
 ## 2026-09-22 — second process / new cursor-agent after close
 
 Simon: harvest the second-seat night. Why 2nd fails = same nick ghost

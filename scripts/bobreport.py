@@ -241,10 +241,11 @@ def parse_channel_list(raw: str) -> list[str]:
 
 
 def channels_for_nick(nick: str, requested: str) -> list[str]:
-    """bob-* → fleet + shop; talk seats + w-* → shop (+ extras); only bobs in #bobiverse.
+    """bob-* → fleet + shop; talk seats → fleet + shop (+ extras); w-* → shop only.
 
     First JOIN creates #{machine} on Ergo. Talk seats ({machine}-{pid}) share the
-    shop with bob-{machine}; they must not linger in the bobosphere.
+    shop with bob-{machine} and always JOIN #bobiverse (issue #108); callers cannot
+    omit fleet via requested channels.
     """
     req = parse_channel_list(requested)
     worker = parse_worker_nick(nick)
@@ -259,7 +260,7 @@ def channels_for_nick(nick: str, requested: str) -> list[str]:
         shop = shop_channel(talk_mid)
         fleet = FLEET_CHANNEL.lower()
         extras = [c for c in req if c.lower() not in (fleet, shop.lower())]
-        return [shop] + extras
+        return [FLEET_CHANNEL, shop] + extras
     return req
 
 

@@ -6,16 +6,18 @@
 **Raised by:** Simon on #agentic_irc
 **UAT owner:** human
 
+**Superseded (talk-seat fleet membership):** [issue #108](https://github.com/SimonBarnett/agentic_irc/issues/108) / [MRB #109](https://github.com/SimonBarnett/agentic_irc/issues/109) / `docs/feature-request-talk-seats-back-bobiverse-2026-09-22.md`. LOCKED items **3** (talk seats not in `#bobiverse`) and **5** (only bobs in `#bobiverse` — as applied to talk seats) no longer apply. LOCKED **4** (`w-*` shop only) and **6** (Jeeves in every shop) remain in force.
+
 ## Problem
 
-Talk seats were in #bobiverse with builders. Bobosphere is for ob-* only.
+Talk seats were in #bobiverse with builders. Bobosphere is for `bob-*` only (talk seats rejoin fleet per #108; see superseded note above).
 Shop #{machine} holds bob + {machine}-* (+ workers). Jeeves is in every room.
 
 ## LOCKED
 
 1. Create = first JOIN of #{machine-id}.
-2. ob-{machine} → #bobiverse + #{machine}.
-3. {machine}-{pid} talk seats → #{machine} (+ extras e.g. #agentic_irc); not #bobiverse.
+2. `bob-{machine}` → #bobiverse + #{machine}.
+3. ~~{machine}-{pid} talk seats → #{machine} (+ extras); not #bobiverse.~~ **Superseded** by #108 / #109 (talk seats rejoin `#bobiverse` + shop + extras).
 4. w-* → shop only.
 5. Only bobs in #bobiverse.
 6. Jeeves (irc_agent.py --chair) → #bobiverse + every #{machine}.

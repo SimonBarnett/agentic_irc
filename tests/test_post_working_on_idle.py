@@ -79,13 +79,13 @@ def test_main_idle_posts_idle_without_working_on_key(tmp_path, monkeypatch):
         return 200
 
     monkeypatch.setattr(pwo, "post", fake_post)
-    monkeypatch.setattr(
-        pwo,
-        "enqueue_shop_working_on",
-        lambda machine, nick_arg, working_on, home=None: pwo.enqueue_shop_working_on(
-            machine, nick_arg, working_on, home=str(tmp_path / "outbox_root")
-        ),
-    )
+    real_enqueue = pwo.enqueue_shop_working_on
+    outbox_root = str(tmp_path / "outbox_root")
+
+    def enqueue_to_tmp(machine, nick_arg, working_on, home=None):
+        return real_enqueue(machine, nick_arg, working_on, home=outbox_root)
+
+    monkeypatch.setattr(pwo, "enqueue_shop_working_on", enqueue_to_tmp)
     monkeypatch.setattr(
         sys,
         "argv",

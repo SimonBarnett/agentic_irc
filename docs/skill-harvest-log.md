@@ -6,6 +6,18 @@ Simon `#bobiverse`: agent still initialises IRC; checking for new
 traffic is the caller, not the agent; Agent TSR triggers when data
 exists. FR #135 + `agentic-irc` Listener+TSR.
 
+## 2026-09-22 — reattach dead seat PS; talk_seat_pid in install_skill
+
+Marchhare: new Cursor session found `seat=` PowerShell dead while
+`irc_agent`+`irc_listen` still JOIN. Attach with `Start-IrcTsr` keeping
+existing nick/`seat=`; do not `Start-TalkSeat` (new `$PID` fails bind or
+changes nick). `post_working_on.py` from repo `scripts/` — vendored
+skill copy ImportErrors `talk_seat_pid` until `install_skill.py` copies
+it. Outbox append UTF-8 no BOM (`Add-Content -Encoding utf8` BOM-breaks
+`PRIVMSG `). `Start-TalkSeat`/`Start-IrcTsr`/`Assert-TalkSeatNick`
+default `-Scripts` is `$PSScriptRoot` (ionos `C:\ai`, marchhare `D:\ai`).
+Skill `agentic-irc`.
+
 ## 2026-09-22 — outbox JOIN is chat; same-box pong miss = killproc
 
 Simon: harvest IRC; restart who fails pong. Outbox `JOIN #chan` is

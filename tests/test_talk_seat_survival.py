@@ -79,3 +79,7 @@ def test_start_scripts_detach_listen_and_bind_guard():
     assert "talk_seat_pid.py" in talk
     assert "--bind-home" in talk
     assert "Stop-CursorHomeAgents" in talk
+    assert "$PSScriptRoot" in talk
+    assert "$PSScriptRoot" in tsr
+    assert "C:\\ai\\agentic_irc\\scripts" not in talk
+    assert "C:\\ai\\agentic_irc\\scripts" not in tsr

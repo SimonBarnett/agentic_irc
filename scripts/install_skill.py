@@ -29,6 +29,7 @@ SCRIPTS = (
     "write_bob_peer.py",
     "irc_listen.py",
     "post_working_on.py",
+    "talk_seat_pid.py",
 )
 SKILLS = (
     "agentic-irc",

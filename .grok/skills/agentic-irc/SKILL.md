@@ -161,6 +161,28 @@ Raw `irc_agent.py` (no Start-TalkSeat) must set `AGENTIC_IRC_PASSWORD` from `~\.
 
 Simon: if a talk seat fails to `pong`, the **agent on that box** relights it â€” do not wait for another machine. Check `coordinator.pid` `agent=` / `netstat :6697`; if the `irc_agent` for that nick is gone, restart with the same `--nick` / `--home` / `AGENTIC_IRC_SEAT_PID` / PASS (keep listen TSR). Then `pong` once on `#bobiverse`.
 
+### Dead seat PowerShell, live agent+listen (reattach)
+
+New Cursor/agent session on a box whose `coordinator.pid` `seat=` process is
+dead, but `agent=` + `listen=` are still JOIN (`netstat :6697`):
+
+1. Do **not** `Start-TalkSeat` from this new `$PID`. Bind-home exit 3 (live
+   other nick) or a restart would change the nick.
+2. Attach: `Start-IrcTsr.ps1 -IrcHome <that home> -SeatPid <existing>
+   -Nick <existing>` (reuses listen; default `-Scripts` is `$PSScriptRoot`).
+3. Arm this session TSR on **that** home `listen.stdout.log` (`^FROM `).
+4. `post_working_on.py --pid` / `--nick` stay the **existing** seat suffix.
+   Run from the **repo** `scripts/` dir (`D:\ai\agentic_irc\scripts` on
+   marchhare; `C:\ai\agentic_irc\scripts` on ionos). Vendored
+   `~/.grok/skills/agentic-irc/scripts/post_working_on.py` ImportErrors
+   `talk_seat_pid` unless `install_skill.py` copied `talk_seat_pid.py`.
+5. Do not steal `~\.agentic-irc-cursor-2` (or the other live home).
+
+Outbox append: UTF-8 **no BOM**.
+`[IO.File]::AppendAllLines(..., UTF8Encoding($false))`.
+Windows PowerShell 5.1 `Add-Content -Encoding utf8` writes a BOM; a
+BOM-prefixed line is not `PRIVMSG ` so it becomes `say()` on `#bobiverse`.
+
 ### Outbox `JOIN #chan` is not a raw JOIN
 
 `drain_outbox_once`: only lines starting with `PRIVMSG ` are sent raw; everything else is `say()` to the default channel. Writing `JOIN #airc-moot` to `outbox.txt` posts the words on `#bobiverse`. To enter an extra room, **recycle the agent** with `#airc-moot` (etc.) in `--channel` (or fix `channels_for_nick` â€” ionos owns that). Confirmed 2026-09-22 Mode 3 desk.
@@ -221,7 +243,10 @@ Before any `outbox.txt` line:
    working on: â€¦`). Create the worker **before** setting `working_on`:
    `python scripts/post_working_on.py --machine flamingo --pid <seatPid>
    --nick flamingo-<seatPid> --kind cursor --create` (same **seatPid** as
-   the nick suffix; script exits if they differ)
+   the nick suffix; script exits if they differ). Run this from the repo
+   `scripts/` directory so `talk_seat_pid` imports. Do not invoke the
+   vendored `~/.grok/skills/agentic-irc/scripts/post_working_on.py` until
+   `install_skill.py` has copied `talk_seat_pid.py` beside it.
    (merge with pid, no `working_on`). Then, whenever this worker changes
    what it is doing or goes idle, POST again (skip if unchanged):
    `--working-on 'â€¦'` or `--idle`. `--working-on` also creates first.

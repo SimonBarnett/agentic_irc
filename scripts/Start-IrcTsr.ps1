@@ -5,7 +5,7 @@
 # Listen is always Start-Process detached (survives Cursor agent shell exit).
 param(
     [string]$IrcHome = $(Join-Path $env:USERPROFILE '.agentic-irc-cursor'),
-    [string]$Scripts = 'C:\ai\agentic_irc\scripts',
+    [string]$Scripts = $PSScriptRoot,
     [string]$SeatPid = '',
     [string]$Nick = ''
 )

@@ -6,7 +6,7 @@ param(
     [Parameter(Mandatory = $true)]
     [string]$MachineId,
     [string]$IrcHome = $(Join-Path $env:USERPROFILE '.agentic-irc-cursor'),
-    [string]$Scripts = 'C:\ai\agentic_irc\scripts',
+    [string]$Scripts = $PSScriptRoot,
     [string]$IrcHost = 'irc.ntsa.uk',
     [int]$Port = 6697,
     [string]$Channel = ''

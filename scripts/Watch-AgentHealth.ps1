@@ -1,6 +1,6 @@
-# Watch-AgentHealth.ps1 — issue #135
-# Caller polls listen.stdout.log; agent still initialises IRC (irc_agent).
-# Persist session id under ~/.grok/bob-bridge; resume on wake without full skill reload.
+# Watch-AgentHealth.ps1 — issue #135 / #144
+# Caller polls listen sinks (stdout/tsr/irc.log); agent still initialises IRC (irc_agent).
+# Persist Cursor session_id from CLI JSON; resume on wake without full skill reload.
 [CmdletBinding()]
 param(
     [Alias('grok')]
@@ -28,6 +28,9 @@ if (-not $Cwd) {
     else { $Cwd = 'C:\ai\agentic_build' }
 }
 
+$AgentHealthPy = Join-Path $Scripts 'agent_health.py'
+$Py = (Get-Command python -ErrorAction Stop).Source
+
 function Write-AgentLog {
     param([string]$Message)
     $line = '{0:yyyy-MM-ddTHH:mm:ssZ} {1}' -f (Get-Date).ToUniversalTime(), $Message
@@ -35,6 +38,15 @@ function Write-AgentLog {
     if ($script:LogPath) {
         [IO.File]::AppendAllText($script:LogPath, $line + [Environment]::NewLine, [Text.UTF8Encoding]::new($false))
     }
+}
+
+function Invoke-AgentHealthPy {
+    param([string[]]$Args)
+    $out = & $Py $AgentHealthPy @Args 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        throw "agent_health.py failed ($LASTEXITCODE): $out"
+    }
+    return ($out | Out-String).Trim()
 }
 
 function Resolve-AgentExe {
@@ -98,24 +110,32 @@ function Test-PidAlive {
     return [bool](Get-Process -Id $ProcId -ErrorAction SilentlyContinue)
 }
 
+function Get-ListenPollSink {
+    param([string]$Home)
+    $json = Invoke-AgentHealthPy -Args @('select-sink', '--home', $Home)
+    $doc = $json | ConvertFrom-Json
+    return [pscustomobject]@{ Path = $doc.path; Kind = $doc.kind }
+}
+
 function Test-IrcTsrHealth {
     param([string]$Home)
     $c = Read-IrcCoordinator -Home $Home
     $agentOk = Test-PidAlive -ProcId $c.agentPid
     $listenOk = Test-PidAlive -ProcId $c.listenPid
-    $listenLog = Join-Path $Home 'listen.stdout.log'
-    $logOk = Test-Path -LiteralPath $listenLog
-    $stale = $false
-    if ($logOk) {
-        $age = ([DateTime]::UtcNow - (Get-Item -LiteralPath $listenLog).LastWriteTimeUtc).TotalSeconds
-        if ($age -gt $IrcStaleSeconds) { $stale = $true }
-    }
+    $healthJson = Invoke-AgentHealthPy -Args @(
+        'listen-health', '--home', $Home, '--stale-seconds', "$IrcStaleSeconds"
+    )
+    $h = $healthJson | ConvertFrom-Json
+    $logOk = [bool]$h.log_exists
+    $stale = [bool]$h.log_stale
+    $listenLog = if ($h.listen_log_path) { $h.listen_log_path } else { (Join-Path $Home 'listen.stdout.log') }
     return [pscustomobject]@{
         Coordinator = $c
         AgentOk     = $agentOk
         ListenOk    = $listenOk
         LogOk       = $logOk
         Stale       = $stale
+        ListenLog   = $listenLog
         Healthy     = ($agentOk -and $listenOk -and $logOk -and -not $stale)
     }
 }
@@ -136,7 +156,7 @@ function Ensure-IrcTsr {
     param([string]$Home)
     $irc = Test-IrcTsrHealth -Home $Home
     if ($irc.Healthy) {
-        Write-AgentLog ("IRC TSR ok nick={0} agent={1} listen={2}" -f $irc.Coordinator.nick, $irc.Coordinator.agentPid, $irc.Coordinator.listenPid)
+        Write-AgentLog ("IRC TSR ok nick={0} agent={1} listen={2} log={3}" -f $irc.Coordinator.nick, $irc.Coordinator.agentPid, $irc.Coordinator.listenPid, $irc.ListenLog)
         return $irc
     }
     Write-AgentLog ("IRC TSR unhealthy agentOk={0} listenOk={1} logOk={2} stale={3} - repairing" -f $irc.AgentOk, $irc.ListenOk, $irc.LogOk, $irc.Stale)
@@ -163,29 +183,51 @@ function Ensure-IrcTsr {
 }
 
 function Read-NewIrcFromLines {
-    param([string]$Home, [ref]$Offset)
-    $log = Join-Path $Home 'listen.stdout.log'
-    if (-not (Test-Path -LiteralPath $log)) { return @() }
-    $fs = [IO.File]::Open($log, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::ReadWrite)
-    try {
-        if ($Offset.Value -gt $fs.Length) { $Offset.Value = 0 }
-        $fs.Seek($Offset.Value, [IO.SeekOrigin]::Begin) | Out-Null
-        $sr = New-Object IO.StreamReader($fs)
-        $chunk = $sr.ReadToEnd()
-        $Offset.Value = $fs.Position
+    param([string]$Home, [long]$Offset)
+    $sink = Get-ListenPollSink -Home $Home
+    $json = Invoke-AgentHealthPy -Args @(
+        'read-from', '--home', $Home, '--offset', "$Offset", '--sink-path', $sink.Path, '--sink-kind', $sink.Kind
+    )
+    $doc = $json | ConvertFrom-Json
+    return [pscustomobject]@{
+        Lines      = @($doc.lines)
+        NextOffset = [long]$doc.next_offset
+        SinkPath   = $sink.Path
+        SinkKind   = $sink.Kind
     }
-    finally { $fs.Dispose() }
-    if (-not $chunk) { return @() }
-    return @($chunk -split '\r?\n' | Where-Object { $_ -match '^FROM\s' })
+}
+
+function Resolve-CursorAgentExe {
+    param($AgentInfo)
+    $ps1 = Join-Path (Split-Path $AgentInfo.Path) 'cursor-agent.ps1'
+    if (-not (Test-Path $ps1)) { $ps1 = Join-Path (Split-Path $AgentInfo.Path) 'agent.ps1' }
+    if (Test-Path $ps1) { return $ps1 }
+    return $AgentInfo.Path
+}
+
+function Parse-CursorSessionFromFile {
+    param([string]$Path)
+    if (-not (Test-Path -LiteralPath $Path)) { return $null }
+    $sid = Invoke-AgentHealthPy -Args @('parse-cursor-session', '--file', $Path)
+    if ($sid -eq 'null' -or -not $sid) { return $null }
+    return $sid.Trim()
 }
 
 function Ensure-AgentSession {
     param($AgentInfo, [string]$SessionPath, [string]$WorkDir)
     $id = Read-SavedSessionId -Path $SessionPath
-    if ($id) {
+    if ($AgentInfo.Engine -eq 'cursor') {
+        $bound = Invoke-AgentHealthPy -Args @('cursor-bound', '--session-path', $SessionPath)
+        if ($bound -eq 'true') {
+            Write-AgentLog ("session exists id={0}" -f $id)
+            return $id
+        }
+    }
+    elseif ($id) {
         Write-AgentLog ("session exists id={0}" -f $id)
         return $id
     }
+
     $boot = @"
 You are a fleet talk/build seat. Load irc + build skills; CAST IRON harvest.
 IRC connection is initialised by the IRC TSR (irc_agent); this caller will trigger you when new IRC FROM lines arrive - do not busy-poll IRC yourself.
@@ -199,66 +241,69 @@ Do not stamp UAT. Do not push main.
             '--cwd', $WorkDir, '--always-approve', '--session-id', $id, '-p', $boot
         ) -WorkingDirectory $WorkDir -PassThru -WindowStyle Hidden
         Wait-Process -Id $p.Id -Timeout 180 -ErrorAction SilentlyContinue
+        return (Read-SavedSessionId -Path $SessionPath)
     }
-    else {
-        $id = [guid]::NewGuid().ToString()
-        Save-SessionId -Path $SessionPath -Id $id
-        $promptFile = Join-Path $env:TEMP ('watch-agent-boot-{0}.txt' -f $PID)
-        [IO.File]::WriteAllText($promptFile, $boot, [Text.UTF8Encoding]::new($false))
-        $ps1 = Join-Path (Split-Path $AgentInfo.Path) 'cursor-agent.ps1'
-        if (-not (Test-Path $ps1)) { $ps1 = Join-Path (Split-Path $AgentInfo.Path) 'agent.ps1' }
-        $exe = if (Test-Path $ps1) { $ps1 } else { $AgentInfo.Path }
-        $launch = Join-Path $env:TEMP ('watch-agent-boot-{0}.ps1' -f $PID)
-        $body = "`$p = Get-Content -LiteralPath '$promptFile' -Raw`n& '$exe' --cwd '$WorkDir' --force --print `$p"
-        [IO.File]::WriteAllText($launch, $body, [Text.UTF8Encoding]::new($false))
-        Write-AgentLog ("boot cursor session token={0}" -f $id)
-        $p = Start-Process -FilePath 'powershell.exe' -ArgumentList @(
-            '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $launch
-        ) -WorkingDirectory $WorkDir -PassThru -WindowStyle Hidden
-        Wait-Process -Id $p.Id -Timeout 180 -ErrorAction SilentlyContinue
+
+    $exe = Resolve-CursorAgentExe -AgentInfo $AgentInfo
+    $outFile = Join-Path $env:TEMP ("watch-agent-boot-{0}.jsonl" -f $PID)
+    Write-AgentLog 'boot cursor session (await CLI session_id)'
+    $p = Start-Process -FilePath $exe -ArgumentList @(
+        '--cwd', $WorkDir, '--force', '--trust', '--print', '--output-format', 'json', $boot
+    ) -WorkingDirectory $WorkDir -PassThru -WindowStyle Hidden -RedirectStandardOutput $outFile -RedirectStandardError (Join-Path $env:TEMP ("watch-agent-boot-{0}.err" -f $PID))
+    Wait-Process -Id $p.Id -Timeout 600 -ErrorAction SilentlyContinue
+    $sid = Parse-CursorSessionFromFile -Path $outFile
+    if (-not $sid) {
+        Write-AgentLog 'boot cursor failed: no session_id in CLI output'
+        return $null
     }
-    return (Read-SavedSessionId -Path $SessionPath)
+    Invoke-AgentHealthPy -Args @('mark-cursor-bound', '--session-path', $SessionPath, '--session-id', $sid) | Out-Null
+    Write-AgentLog ("boot cursor bound session_id={0}" -f $sid)
+    return $sid
 }
 
 function Invoke-AgentOnIrcTraffic {
-    param($AgentInfo, [string]$SessionId, [string]$WorkDir, [string[]]$FromLines)
-    if (-not $FromLines -or $FromLines.Count -eq 0) { return }
-    $payload = @"
-IRC wake (caller polled listen.stdout.log; you were triggered because data exists):
-
-$($FromLines -join [Environment]::NewLine)
-
-Act on #bobiverse traffic. Harvest skills if you learn a playbook. No UAT.
-"@
+    param($AgentInfo, [string]$SessionId, [string]$WorkDir, [string[]]$FromLines, [string]$SinkPath)
+    if (-not $FromLines -or $FromLines.Count -eq 0) { return $false }
+    $sinkName = Split-Path -Leaf $SinkPath
+    $payload = Invoke-AgentHealthPy -Args @(
+        'format-wake', '--sink-name', $sinkName, '--lines', ($FromLines -join "`n")
+    )
     Write-AgentLog ("trigger Agent TSR lines={0} session={1}" -f $FromLines.Count, $SessionId)
+    $started = $false
+    $code = $null
     if ($AgentInfo.Engine -eq 'grok') {
         $args = @('--cwd', $WorkDir, '--always-approve', '-p', $payload)
         if ($SessionId) { $args = @('--cwd', $WorkDir, '--always-approve', '--resume', $SessionId, '-p', $payload) }
         $proc = Start-Process -FilePath $AgentInfo.Path -ArgumentList $args -WorkingDirectory $WorkDir -PassThru -WindowStyle Normal
+        $started = $true
     }
     else {
+        $exe = Resolve-CursorAgentExe -AgentInfo $AgentInfo
         $promptFile = Join-Path $env:TEMP ('watch-agent-wake-{0}-{1}.txt' -f $PID, [DateTime]::UtcNow.Ticks)
         [IO.File]::WriteAllText($promptFile, $payload, [Text.UTF8Encoding]::new($false))
-        $ps1 = Join-Path (Split-Path $AgentInfo.Path) 'cursor-agent.ps1'
-        if (-not (Test-Path $ps1)) { $ps1 = Join-Path (Split-Path $AgentInfo.Path) 'agent.ps1' }
-        $exe = if (Test-Path $ps1) { $ps1 } else { $AgentInfo.Path }
-        $launch = Join-Path $env:TEMP ('watch-agent-wake-{0}.ps1' -f $PID)
+        $outFile = Join-Path $env:TEMP ('watch-agent-wake-{0}-{1}.jsonl' -f $PID, [DateTime]::UtcNow.Ticks)
         if ($SessionId) {
-            $body = "`$p = Get-Content -LiteralPath '$promptFile' -Raw`n& '$exe' --cwd '$WorkDir' --force --resume '$SessionId' --print `$p"
+            $proc = Start-Process -FilePath $exe -ArgumentList @(
+                '--cwd', $WorkDir, '--force', '--trust', '--resume', $SessionId,
+                '--print', '--output-format', 'json', $payload
+            ) -WorkingDirectory $WorkDir -PassThru -WindowStyle Normal -RedirectStandardOutput $outFile
         }
         else {
-            $body = "`$p = Get-Content -LiteralPath '$promptFile' -Raw`n& '$exe' --cwd '$WorkDir' --force --print `$p"
+            $proc = Start-Process -FilePath $exe -ArgumentList @(
+                '--cwd', $WorkDir, '--force', '--trust', '--print', '--output-format', 'json', $payload
+            ) -WorkingDirectory $WorkDir -PassThru -WindowStyle Normal -RedirectStandardOutput $outFile
         }
-        [IO.File]::WriteAllText($launch, $body, [Text.UTF8Encoding]::new($false))
-        $proc = Start-Process -FilePath 'powershell.exe' -ArgumentList @(
-            '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $launch
-        ) -WorkingDirectory $WorkDir -PassThru -WindowStyle Normal
+        $started = $true
     }
-    Write-AgentLog ("Agent TSR started pid={0}" -f $proc.Id)
-    Wait-Process -Id $proc.Id -ErrorAction SilentlyContinue
-    $code = $null
-    try { $code = $proc.ExitCode } catch { }
-    Write-AgentLog ("Agent TSR exited pid={0} code={1}" -f $proc.Id, $code)
+    if ($started) {
+        Write-AgentLog ("Agent TSR started pid={0}" -f $proc.Id)
+        Wait-Process -Id $proc.Id -ErrorAction SilentlyContinue
+        try { $code = $proc.ExitCode } catch { }
+        Write-AgentLog ("Agent TSR exited pid={0} code={1}" -f $proc.Id, $code)
+    }
+    if (-not $started) { return $false }
+    if ($null -ne $code -and $code -ne 0) { return $false }
+    return $true
 }
 
 # --- main ---
@@ -280,8 +325,8 @@ Write-AgentLog ("engine={0} path={1} cwd={2} ircHome={3} scripts={4}" -f $agent.
 $sessionId = Ensure-AgentSession -AgentInfo $agent -SessionPath $sessionPath -WorkDir $Cwd
 
 $listenOffset = 0L
-$listenLog = Join-Path $IrcHome 'listen.stdout.log'
-if (Test-Path -LiteralPath $listenLog) { $listenOffset = (Get-Item $listenLog).Length }
+$initialSink = Get-ListenPollSink -Home $IrcHome
+if (Test-Path -LiteralPath $initialSink.Path) { $listenOffset = (Get-Item $initialSink.Path).Length }
 
 Write-AgentLog 'caller loop: poll IRC; trigger agent on new FROM lines'
 while ($true) {
@@ -291,9 +336,15 @@ while ($true) {
         [void](Ensure-IrcTsr -Home $IrcHome)
     }
 
-    $lines = @(Read-NewIrcFromLines -Home $IrcHome -Offset ([ref]$listenOffset))
-    if ($lines.Count -gt 0) {
-        Invoke-AgentOnIrcTraffic -AgentInfo $agent -SessionId $sessionId -WorkDir $Cwd -FromLines $lines
+    $read = Read-NewIrcFromLines -Home $IrcHome -Offset $listenOffset
+    if ($read.Lines.Count -gt 0) {
+        $delivered = Invoke-AgentOnIrcTraffic -AgentInfo $agent -SessionId $sessionId -WorkDir $Cwd -FromLines $read.Lines -SinkPath $read.SinkPath
+        if ($delivered) {
+            $listenOffset = $read.NextOffset
+        }
+        else {
+            Write-AgentLog 'Agent TSR delivery failed; keeping listen offset for replay'
+        }
         $sessionId = Read-SavedSessionId -Path $sessionPath
     }
 

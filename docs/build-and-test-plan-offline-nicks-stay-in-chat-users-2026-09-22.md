@@ -4,6 +4,7 @@
 **Repo:** SimonBarnett/agentic_irc  
 **FR:** `docs/feature-request-offline-nicks-stay-in-chat-users-2026-09-22.md`  
 **Issue:** https://github.com/SimonBarnett/agentic_irc/issues/128  
+**MRB:** https://github.com/SimonBarnett/agentic_irc/issues/140  
 
 ## Goals
 

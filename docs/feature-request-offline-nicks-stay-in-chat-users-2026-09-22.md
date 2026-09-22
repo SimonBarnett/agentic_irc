@@ -3,6 +3,7 @@
 **Date:** 2026-09-22  
 **Repo:** https://github.com/SimonBarnett/agentic_irc  
 **GitHub issue:** https://github.com/SimonBarnett/agentic_irc/issues/128  
+**MRB:** https://github.com/SimonBarnett/agentic_irc/issues/140  
 **Raised by:** Simon on `#bobiverse`  
 **UAT + hostile MRB owner:** Bob  
 
@@ -37,8 +38,9 @@ socket is half-open. Systray `lastSeen stale` is a different surface
 
 ## UNKNOWN
 
-1. Whether flamingo sockets are half-open (no QUIT), Watch keep-alive
-   only, or Ergo ghost after a silent drop.
+1. Root cause for the 2026-09-22 flamingo incident (half-open vs Watch
+   keep-alive vs silent Ergo drop). **UNKNOWN 2 (Ergo NAMES drop bound)
+   is LOCKED at 240 s** — see evidence; abrupt RST ≤10 s on live Ergo.
 
 ## Acceptance
 

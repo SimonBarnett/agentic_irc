@@ -14,13 +14,14 @@ offline flamingos looked present.
 | Case | NAMES drop time (live measure) | Acceptance bound |
 |------|-------------------------------|------------------|
 | Abrupt TCP close (no QUIT, client RST) | **≤10 s** (`deadtcp-*` probe 2026-09-22) | — |
-| Half-open / box-off (no client RST; server idle-timeouts) | Ergo `idle-timeouts`: ping **90s**, disconnect **150s** after last client send | **240 s** worst-case |
+| Half-open / box-off (no client RST; stop PONG) | Live `halfopen-*` stall **15 s** on 2026-09-22; Ergo `idle-timeouts` worst-case **240 s** | **240 s** acceptance cap |
 
 **LOCKED 1 / Acceptance 1:** offline talk-seat nicks must leave `#bobiverse`,
 shop, and `#agentic_irc` NAMES within **240 seconds** (Ergo worst-case). Client
 paths below aim to clear sooner.
 
-Live probe log (redacted): `docs/evidence/ergo-dead-tcp-measure.log`
+Live probe logs (redacted): `docs/evidence/ergo-dead-tcp-measure.log`,
+`docs/evidence/ergo-half-open-measure.log`, `docs/evidence/issue-140-bobiverse-names-redacted.log`
 
 ## Mechanisms (P1)
 

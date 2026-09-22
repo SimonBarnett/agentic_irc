@@ -4,6 +4,7 @@
 **Repo:** SimonBarnett/agentic_irc  
 **FR:** `docs/feature-request-offline-nicks-stay-in-chat-users-2026-09-22.md`  
 **Issue:** https://github.com/SimonBarnett/agentic_irc/issues/128  
+**MRB:** https://github.com/SimonBarnett/agentic_irc/issues/140  
 
 ## Goals
 
@@ -22,9 +23,9 @@
 
 ### P0 — Measure drop
 
-Document how a deaf / hung / powered-off talk seat stays in Ergo NAMES
-(no QUIT vs half-open TCP vs Watch keep-alive). Pick a timeout once
-measured (FR UNKNOWN 2).
+Document how a deaf / hung / powered-off talk seat stays in Ergo NAMES.
+**Done:** LOCKED **240s** Ergo worst-case + live RST probe ≤10s in
+`docs/evidence/issue-128-offline-nick-drop-notes.md`.
 
 ### P1 — Leave when down
 

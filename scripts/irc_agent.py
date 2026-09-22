@@ -26,6 +26,8 @@ import filexfer  # noqa: E402
 import moot  # noqa: E402
 import protect  # noqa: E402
 import seal  # noqa: E402
+import agent_control  # noqa: E402
+import talk_seat_ghost  # noqa: E402
 import talk_seat_pid  # noqa: E402
 import wire  # noqa: E402
 
@@ -189,6 +191,10 @@ class Client:
         self._action_last: dict[tuple[str, str], float] = {}
         self._mention_last: dict[str, float] = {}
         self._grok_talk_dedup: dict[tuple[str, str], float] = {}
+        self._no_reconnect = False
+        self._last_server_rx = 0.0
+        self._pong_due_at = 0.0
+        self._ghost_prune_last = 0.0
 
     def send(self, line: str) -> None:
         assert self.sock is not None
@@ -357,12 +363,7 @@ class Client:
                 self.whisper(nick, "shop closed")
             except Exception:
                 pass
-        try:
-            self.send("PART " + shop + " :shop closed")
-            self.send("QUIT :shop closed")
-        except Exception:
-            pass
-        self.stop.set()
+        self.request_shutdown(":shop closed")
 
     def _digest_home(self) -> Path:
         return bobreport.fleet_digest_home(self.home)
@@ -470,6 +471,28 @@ class Client:
             self.original_nick, chair=bool(getattr(self.args, "chair", False))
         )
 
+    def _maybe_prune_talk_seat_ghosts(self) -> None:
+        if not self.original_nick.lower().startswith("bob-"):
+            return
+        if not self.joined.is_set():
+            return
+        now = time.time()
+        if now - self._ghost_prune_last < 45.0:
+            return
+        pw = (self.args.password or os.environ.get("AGENTIC_IRC_PASSWORD") or "").strip()
+        if not pw:
+            return
+        mid = self.original_nick[4:]
+        pruned = talk_seat_ghost.maybe_prune_local_ghosts(
+            self.original_nick,
+            self.args.host,
+            int(self.args.port),
+            pw,
+        )
+        self._ghost_prune_last = now
+        if pruned:
+            info(f"INFO ghost-prune nicks={','.join(pruned)}")
+
     def _maybe_bobiverse_pull(self) -> None:
         if not self._should_bobiverse_pull():
             return
@@ -560,6 +583,70 @@ class Client:
             dedupe_last=self._grok_talk_dedup,
         )
         return True
+
+    def request_shutdown(self, reason: str = ":bye", *, reconnect: bool = False) -> None:
+        """Send QUIT when joined; stop reader/outbox. Default: do not reconnect."""
+        if not reconnect:
+            self._no_reconnect = True
+        try:
+            if self.sock is not None and self.joined.is_set():
+                msg = reason if reason.startswith(":") else ":" + reason
+                self.send("QUIT " + msg)
+        except OSError:
+            pass
+        self.stop.set()
+
+    def _seat_liveness_enabled(self) -> bool:
+        if talk_seat_pid.parse_talk_seat_nick(self.original_nick) is None:
+            return False
+        if talk_seat_pid.seat_liveness_disabled():
+            return False
+        return True
+
+    def _consume_control_quit(self) -> bool:
+        reason = agent_control.consume_quit_request(self.home)
+        if reason is None:
+            return False
+        info(f"INFO agent quit request ({reason})")
+        self.request_shutdown(":control")
+        return True
+
+    def _seat_recv_stale(self) -> bool:
+        if not self.joined.is_set():
+            return False
+        last = self._last_server_rx
+        if last <= 0:
+            return False
+        idle_s = talk_seat_ghost.seat_recv_idle_s()
+        return (time.time() - last) > idle_s
+
+    def _seat_pong_overdue(self) -> bool:
+        due = self._pong_due_at
+        if due <= 0:
+            return False
+        return time.time() > due
+
+    def seat_liveness_loop(self) -> None:
+        interval = talk_seat_pid.seat_liveness_poll_s()
+        while not self.stop.is_set():
+            if self.stop.wait(timeout=interval):
+                return
+            if self._consume_control_quit():
+                return
+            if not self._seat_liveness_enabled():
+                continue
+            if self._seat_pong_overdue():
+                info("INFO seat PONG overdue; QUIT")
+                self.request_shutdown(":pong timeout")
+                return
+            if self._seat_recv_stale():
+                info("INFO seat server idle; QUIT")
+                self.request_shutdown(":recv idle")
+                return
+            if talk_seat_pid.talk_seat_coordinator_gone(self.original_nick, self.home):
+                info("INFO seat coordinator gone; QUIT")
+                self.request_shutdown(":seat ended")
+                return
 
     def connect(self) -> ssl.SSLSocket:
         ctx = ssl.create_default_context()
@@ -858,9 +945,15 @@ class Client:
                 while b"\n" in buf:
                     line, buf = buf.split(b"\n", 1)
                     t = line.decode("utf-8", "replace").rstrip("\r")
+                    self._last_server_rx = time.time()
                     debug_log(self.debug, t)
                     if t.startswith("PING "):
-                        self.send("PONG " + t[5:])
+                        self._pong_due_at = time.time() + talk_seat_ghost.pong_grace_s()
+                        try:
+                            self.send("PONG " + t[5:])
+                            self._pong_due_at = 0.0
+                        except OSError:
+                            pass
                         continue
                     prefix = ""
                     rest = t
@@ -949,6 +1042,7 @@ class Client:
             try:
                 self.drain_outbox_once()
                 self._maybe_bobiverse_pull()
+                self._maybe_prune_talk_seat_ghosts()
             except OSError:
                 return
             time.sleep(1)
@@ -972,6 +1066,8 @@ class Client:
         self.sock = self.connect()
         threading.Thread(target=self.reader, daemon=True).start()
         threading.Thread(target=self.outbox_loop, args=(gen,), daemon=True).start()
+        if self._seat_liveness_enabled():
+            threading.Thread(target=self.seat_liveness_loop, daemon=True).start()
         pw = (self.args.password or os.environ.get("AGENTIC_IRC_PASSWORD") or "").strip()
         if pw:
             self.send("PASS " + pw)
@@ -1001,8 +1097,10 @@ class Client:
             else:
                 self.say("AGPK v1 " + self.ident["pk"])
         info(f"INFO joined {','.join(self.channels)} as {self.live_nick}")
+        self._last_server_rx = time.time()
         while not self.stop.is_set() and not self.dead.wait(timeout=1):
-            pass
+            if self._consume_control_quit():
+                break
 
     def run_forever(self) -> None:
         backoff = 1.0
@@ -1023,6 +1121,9 @@ class Client:
             except OSError:
                 pass
             self.sock = None
+            if self._no_reconnect:
+                info("INFO reconnect skipped (graceful quit)")
+                return
             attempt += 1
             if cap is not None and attempt >= cap:
                 info(f"INFO reconnect stopped (AGENTIC_IRC_RECONNECT_MAX={cap})")
@@ -1080,7 +1181,7 @@ def main() -> None:
     c = Client(args)
 
     def _stop(*_a: object) -> None:
-        c.stop.set()
+        c.request_shutdown(":signal")
 
     signal.signal(signal.SIGINT, _stop)
     if hasattr(signal, "SIGTERM"):

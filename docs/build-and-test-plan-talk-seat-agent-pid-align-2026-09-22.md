@@ -4,3 +4,5 @@
 2. Enforce nick vs agent PID in Start-IrcTsr / helper.
 3. Tests for nick/digest sync; no invented secrets.
 4. PR linking #88.
+
+OpenProcess command-line validation remains out of scope (see FR A5).

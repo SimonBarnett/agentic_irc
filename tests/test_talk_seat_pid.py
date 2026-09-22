@@ -103,3 +103,12 @@ def test_cli_guard_home(tmp_path: Path):
 def test_post_working_on_nick_digest_sync():
     assert tsp.main(["--nick", "flamingo-50", "--pid", "50"]) == 0
     assert tsp.main(["--nick", "flamingo-50", "--pid", "51"]) == 2
+
+
+def test_start_talk_seat_dry_run_includes_auto_nick(capsys):
+    import start_talk_seat as sts
+
+    assert sts.main(["--machine", "flamingo", "--dry-run"]) == 0
+    out = capsys.readouterr().out
+    assert "--auto-nick" in out
+    assert "flamingo-0" in out

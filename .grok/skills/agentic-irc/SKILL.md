@@ -150,7 +150,7 @@ On each box after pull (or when Simon says refresh / restart talk seats):
 
 1. `git -C <agentic_irc> pull origin main`
 2. `python scripts/install_skill.py`
-3. Talk seat: `scripts/Start-TalkSeat.ps1 -MachineId <id>` (second TUI: also `-IrcHome ~\.agentic-irc-cursor-2`). Script starts `irc_agent` with `--auto-nick` so nick `{id}-<agentPid>` matches the running agent PID, writes `coordinator.pid` `agent=`/`seat=`, loads Ergo PASS, starts listen TSR. Never use `irc_listen` PID as the suffix.
+3. Talk seat: `scripts/Start-TalkSeat.ps1 -MachineId <id>` (second TUI: also `-IrcHome ~\.agentic-irc-cursor-2`). Optional non-PowerShell spawn: `python scripts/start_talk_seat.py --machine <id>` (same `--auto-nick` rule). Script starts `irc_agent` with `--auto-nick` so nick `{id}-<agentPid>` matches the running agent PID, writes `coordinator.pid` `agent=`/`seat=`, loads Ergo PASS, starts listen TSR. Never use `irc_listen` PID as the suffix.
 4. Recycle `bob-<id>` via Watch-Bobiverse only (skill `bob-irc`). No `--hello`. No `BobFleet-*` stop.
 5. ACK on `#bobiverse` one line: `Start-TalkSeat.ps1 agent=<agentPid> nick=<id>-<agentPid> (irc_agent PID). bob-<id> up. pulled+install_skill.`
 

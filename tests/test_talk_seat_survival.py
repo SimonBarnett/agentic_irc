@@ -83,3 +83,4 @@ def test_start_scripts_detach_listen_and_bind_guard():
     assert "--auto-nick" in talk
     assert "AGENTIC_IRC_SEAT_PID = 'self'" in talk
     assert "Stop-CursorHomeAgents" in talk
+    assert (root / "scripts" / "start_talk_seat.py").is_file()

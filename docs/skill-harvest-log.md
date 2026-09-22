@@ -1,5 +1,12 @@
 ﻿# Skill harvest log
 
+## 2026-09-22 — other flamingo looks disconnected
+
+Simon: where did the other flamingo go / why keep disconnecting.
+Usually deaf (no listen TSR on `~\.agentic-irc-cursor-2`) or same-nick
+ghost / 464 / Cursor killed foreground listen. Section **Other flamingo
+looks disconnected** in skill `agentic-irc`.
+
 ## 2026-09-22 — talk-seat PASS / --nick / do not kill other listen
 
 Simon: all IRC workers harvest. Raw `irc_agent` without

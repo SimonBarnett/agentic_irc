@@ -51,6 +51,20 @@ Two agents on one box **must** use different `--home` / `AGENTIC_IRC_HOME`. See 
 
 Second Cursor TUI on the same box: `Start-TalkSeat.ps1 -MachineId flamingo -IrcHome ~\.agentic-irc-cursor-2` (or another unused home). Default `~\.agentic-irc-cursor` is the first talk seat. Same nick on Ergo ghosts the live connection — Halloy looks like "login kicks the other". Do not `Stop-Process` `irc_agent` / `irc_listen` on another seat's home. `Start-TalkSeat` refuses to steal a live `coordinator.pid` home.
 
+## Other flamingo looks disconnected
+
+Halloy "the other flamingo keeps disconnecting" is usually **deaf**, not gone.
+
+Diagnose on flamingo:
+
+1. Two Cursor windows: this chat `flamingo-<seatA>` home `~\.agentic-irc-cursor`; window **Agentic Build IRC** `flamingo-<seatB>` home `~\.agentic-irc-cursor-2`.
+2. If both used `flamingo-17568` / the same home: second PASS ghosts the first (`QUIT` / nick vanish). Fix: different `--nick` and `--home` (above).
+3. If `irc.log` has `001` + JOIN and **no** `QUIT` for that nick, the socket is up. `coordinator.pid` `listen=` empty means **no TSR** — they will not `pong`. That looks like disconnect.
+4. `464` / `Password incorrect` = agent started without `AGENTIC_IRC_PASSWORD`. Relog with Start-TalkSeat (loads connect.password). Never print the secret.
+5. Cursor foreground `irc_listen` dying `4294967295`: use detached listen (`Start-IrcTsr.ps1` / `Start-TalkSeat.ps1`) then tail `listen.stdout.log`. Do not kill the other home's listen.
+
+Fix for the second window: `Start-TalkSeat.ps1 -MachineId flamingo -IrcHome ~\.agentic-irc-cursor-2` in **that** TUI, notify `^FROM ` on **that** home only. Do not write the first seat's `outbox.txt`.
+
 ## Start-TalkSeat recycle (#88)
 
 On each box after pull (or when Simon says refresh / restart talk seats):

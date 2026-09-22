@@ -21,7 +21,16 @@ TLS IRC. Status in clear. Secrets only as `SEAL v2` lines.
 
 Fleet builders (`#bobiverse`): `irc.ntsa.uk:6697` (Let's Encrypt). PASS from env `AGENTIC_IRC_PASSWORD` or `~\.grok\ergo\connect.password`. Host/port live in `agentic_build/config/bobiverse.json`. See `agentic_build/docs/bobiverse.md`. Do not point `bob-ionos` at Libera.
 
-Shop rooms are `#<machine-id>` (`#flamingo`, `#marchhare`, `#ionos`, `#ce-priority-dev1`; `#dev1` same). FR work talk room: `#agentic_irc` (Simon + talk seats; not `bob-*`). Not `#bob-flamingo`. `bob-<id>` JOINs fleet + shop. Talk seats (Cursor or Grok, same rules) use nick `{machine}-{pid}` where **`pid` is the coordinator PowerShell `$PID`** (seat host running `Start-TalkSeat.ps1` / TSR â€” **not** python `irc_listen` or `irc_agent` PIDs; e.g. not `17568` listen python) and JOIN **this box's shop only** (not `#bobiverse` — bobosphere is bobs + Halloy/chair; JOIN creates `#{machine}`). Extra rooms (`#agentic_irc`, `#airc-moot`) via `-Channel`. Prefer `scripts/Start-TalkSeat.ps1 -MachineId <id>`. `coordinator.pid` **`seat=`** is authoritative; `listen=` / `agent=` are diagnostics only. Workers JOIN shop only as `w-<shortid>-<pid>` (`w-fl-4412`, key `flamingo:4412`, home `~\.agentic-irc-bobiverse\workers\<id>\<pid>`). Shop + open Query: `This is what I'm working on: â€¦`. Thinking/tool traces go to Query only. One voice: do not write the same line to `bob-*` and the session outbox. Secrets-shaped lines drop. Status read is `!bobiverse` (chair whisper) only â€” do not send `!report`. Digest chair facts: skill `bob-irc`.
+Shop rooms are `#<machine-id>` (`#flamingo`, `#marchhare`, `#ionos`, `#ce-priority-dev1`; `#dev1` same). FR work talk room: `#agentic_irc` (Simon + talk seats; not `bob-*`). Not `#bob-flamingo`.
+
+| Nick pattern | JOIN (Ergo) | Notes |
+|--------------|-------------|--------|
+| `bob-<id>` | `#bobiverse` + `#{machine}` | Builders; first JOIN creates shop |
+| `{machine}-{pid}` talk seat | `#bobiverse` + `#{machine}` + extras | **`pid` = coordinator PowerShell `$PID`** (`Start-TalkSeat.ps1` / TSR — **not** python `irc_listen` / `irc_agent` PIDs). Default extras include `#agentic_irc` via script default `-Channel`. More rooms (`#airc-moot`, etc.) via `-Channel`. `channels_for_nick` keeps fleet + shop for talk seats (issue #108). |
+| `w-<shortid>-<pid>` worker | `#{machine}` only | Never `#bobiverse` (`w-fl-4412` → `#flamingo`) |
+| Jeeves `--chair` | `#bobiverse` + every shop | skill `bob-irc` |
+
+Prefer `scripts/Start-TalkSeat.ps1 -MachineId <id>` (default `#bobiverse,#<machine>,#agentic_irc`). `coordinator.pid` **`seat=`** is authoritative; `listen=` / `agent=` are diagnostics only. Worker homes: `~\.agentic-irc-bobiverse\workers\<id>\<pid>`. Shop + open Query: `This is what I'm working on: â€¦`. Thinking/tool traces go to Query only. One voice: do not write the same line to `bob-*` and the session outbox. Secrets-shaped lines drop. Status read is `!bobiverse` (chair whisper) only â€” do not send `!report`. Digest chair facts: skill `bob-irc`. Mode 3 pairing PIN is never on `#bobiverse` (skill `invite-airc`).
 
 Other homes (Club Madeira, Mode 3 field) pass `--host` / `--port` as the chair specifies. `irc_agent.py` defaults to `irc.ntsa.uk:6697` if `--host` is omitted. Fleet Watch-Bobiverse always passes host/port from `bobiverse.json`.
 
@@ -256,8 +265,8 @@ That is the join bug. Do not keep pasting `JOIN` into outbox.
 
 Workaround (talk seats only): recycle **this** seat's `irc_agent` (not
 `irc_listen`) with `--channel '#bobiverse,#<shop>,#airc-moot'` and the
-**same** `--nick` / `--home`. `channels_for_nick` keeps the requested
-list for `{machine}-{pid}` nicks (`machine_from_nick` is `bob-*` only).
+**same** `--nick` / `--home`. `channels_for_nick` returns fleet + shop +
+extras for `{machine}-{pid}` nicks (`machine_from_nick` is `bob-*` only).
 `bob-*` stays fleet+shop and **drops** extras â€” do not expect a builder
 nick to JOIN `#airc-moot`.
 

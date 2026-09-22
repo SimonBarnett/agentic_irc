@@ -182,6 +182,8 @@ class Client:
         self.sasl_fail = threading.Event()
         self._bobiverse_last_query: dict[str, float] = {}
         self._bobiverse_last_tray: dict[str, float] = {}
+        self._bobiverse_pull_last = 0.0
+        self._digest_asm = bobreport.DigestWhisperAssembler()
         self._report_gone_told: set[str] = set()
         self._pm_open: dict[str, float] = {}
         self._action_last: dict[tuple[str, str], float] = {}
@@ -463,6 +465,47 @@ class Client:
     def _local_machine_id(self) -> str | None:
         return bobreport.machine_from_nick(self.original_nick)
 
+    def _should_bobiverse_pull(self) -> bool:
+        return bobreport.should_periodic_bobiverse_pull(
+            self.original_nick, chair=bool(getattr(self.args, "chair", False))
+        )
+
+    def _maybe_bobiverse_pull(self) -> None:
+        if not self._should_bobiverse_pull():
+            return
+        if not self._joined_channel(bobreport.FLEET_CHANNEL):
+            return
+        now = time.time()
+        if now - self._bobiverse_pull_last < bobtalk.BOBIVERSE_AGENT_COOLDOWN_S:
+            return
+        self._bobiverse_pull_last = now
+        self.send("PRIVMSG " + bobreport.FLEET_CHANNEL + " :" + bobtalk.BOBIVERSE_CMD)
+        time.sleep(FLOOD_S)
+        info("INFO bobiverse pull sent")
+
+    def _on_digest_whisper(self, from_nick: str, doc: dict) -> None:
+        if not self._should_bobiverse_pull():
+            return
+        chair = (bobreport.digest_chair_nick(self.home) or "").strip().lower()
+        if chair and from_nick.strip().lower() != chair:
+            return
+        mid = self._local_machine_id()
+        machines = doc.get("machines") if isinstance(doc.get("machines"), dict) else {}
+        chair_ent = machines.get(mid) if mid else None
+        payload = None
+        if mid and isinstance(chair_ent, dict):
+            payload = bobreport.merge_payload_local_peer_ahead_of_chair(self.home, mid, chair_ent)
+        bobreport.ingest_fleet_digest_pull(self.home, doc)
+        if not payload:
+            return
+        try:
+            import post_working_on as _pwo
+
+            code = _pwo.post(payload)
+            info(f"INFO bobiverse webhook POST {code} machine={mid}")
+        except Exception as exc:  # noqa: BLE001
+            info(f"INFO bobiverse webhook skip: {exc}")
+
     def _maybe_refresh_cursor_fuel(self, peer_id: str) -> None:
         """Local seat only: merge Cursor usage when Watch/POINT lack remaining_* (#70 MUST 5)."""
         local = self._local_machine_id()
@@ -685,6 +728,11 @@ class Client:
             return
         if to_me:
             self._mark_pm_open(src)
+            if src.lower() not in self._mine_nicks():
+                pulled = self._digest_asm.feed(src, body)
+                if pulled is not None:
+                    self._on_digest_whisper(src, pulled)
+                    return
         if bobtalk.parse_bobiverse_command(body):
             self._answer_bobiverse(src, body)
             return
@@ -898,6 +946,7 @@ class Client:
                 return
             try:
                 self.drain_outbox_once()
+                self._maybe_bobiverse_pull()
             except OSError:
                 return
             time.sleep(1)

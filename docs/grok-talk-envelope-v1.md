@@ -61,16 +61,16 @@ Secrets-shaped text is dropped (`looks_like_secret`).
 ## Gates (IRC side)
 
 - `grok_talk_enabled` in `grok-talk.json` or env `AGENTIC_IRC_GROK_TALK=1` (default off).
-- Fuel: peer `weekly` integer **> 0**, **or** Cursor Models `remaining_pct` /
-  `account_remaining_pct` / `cursor_remaining_pct` **> 0** (#70 MUST 5 / folded #68).
-  `cursor_label` is display-only and is **not** fuel.
-  `bobstat.write_peer` persists those three aliases when any is set (or when BOB
-  POINT carries `remaining=`), and keeps prior numeric remaining across POINT
-  updates that omit it. Live Watch peer files often have only `cursor_label`
-  (display) and **no** `remaining_*` keys — that is not fuel until BOB POINT
-  carries `remaining=`, or `bobstat.refresh_peer_cursor_remaining` merges sister
-  `Get-CursorAgentUsage.py` JSON (never `cursor_label`), or operators run
-  `scripts/write_bob_peer.py --refresh-cursor`.
+- Fuel: peer weekly integer **> 0**, **or** Cursor Models 
+emaining_pct /
+  ccount_remaining_pct / cursor_remaining_pct **> 0** (#70 MUST 5 / folded #68).
+  cursor_label is display-only and is **not** fuel.
+  obstat.write_peer persists those three aliases when any is set (or when BOB
+  POINT carries 
+emaining=), and keeps prior numeric remaining across POINT
+  updates that omit it. Sister ConvertTo-BobIrcPoint emits 
+emaining= when
+  the peer has those keys; Write-BobIrcStatus writes them on the local peer.
 - Same mention eligibility as #54 (`addressed_to`, not protocol, not `bob-*` asker).
 - ACK always fires when eligible; grok-talk enqueue is optional and additional.
   When `weekly=0` but Cursor remaining > 0, ACK must **not** say `cannot grok-talk`.

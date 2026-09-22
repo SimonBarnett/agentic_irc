@@ -484,6 +484,8 @@ class Client:
         info("INFO bobiverse pull sent")
 
     def _on_digest_whisper(self, from_nick: str, doc: dict) -> None:
+        if not isinstance(doc.get("machines"), dict):
+            return
         if not self._should_bobiverse_pull():
             return
         chair = (bobreport.digest_chair_nick(self.home) or "").strip().lower()

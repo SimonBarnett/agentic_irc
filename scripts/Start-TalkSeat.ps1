@@ -50,6 +50,8 @@ function Stop-CursorHomeAgents {
             $_.CommandLine -match 'irc_(agent|listen)\.py' -and
             $_.CommandLine -match [regex]::Escape($HomePath)
         } | ForEach-Object {
+            Stop-Process -Id $_.ProcessId -ErrorAction SilentlyContinue
+            Start-Sleep -Milliseconds 600
             Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue
         }
     Start-Sleep -Milliseconds 400

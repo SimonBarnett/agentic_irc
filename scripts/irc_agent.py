@@ -189,6 +189,7 @@ class Client:
         self._action_last: dict[tuple[str, str], float] = {}
         self._mention_last: dict[str, float] = {}
         self._grok_talk_dedup: dict[tuple[str, str], float] = {}
+        self._no_reconnect = False
 
     def send(self, line: str) -> None:
         assert self.sock is not None
@@ -357,12 +358,7 @@ class Client:
                 self.whisper(nick, "shop closed")
             except Exception:
                 pass
-        try:
-            self.send("PART " + shop + " :shop closed")
-            self.send("QUIT :shop closed")
-        except Exception:
-            pass
-        self.stop.set()
+        self.request_shutdown(":shop closed")
 
     def _digest_home(self) -> Path:
         return bobreport.fleet_digest_home(self.home)
@@ -560,6 +556,42 @@ class Client:
             dedupe_last=self._grok_talk_dedup,
         )
         return True
+
+    def request_shutdown(self, reason: str = ":bye", *, reconnect: bool = False) -> None:
+        """Send QUIT when joined; stop reader/outbox. Default: do not reconnect."""
+        if not reconnect:
+            self._no_reconnect = True
+        try:
+            if self.sock is not None and self.joined.is_set():
+                msg = reason if reason.startswith(":") else ":" + reason
+                self.send("QUIT " + msg)
+        except OSError:
+            pass
+        self.stop.set()
+
+    def _seat_liveness_enabled(self) -> bool:
+        if talk_seat_pid.parse_talk_seat_nick(self.original_nick) is None:
+            return False
+        if (os.environ.get("AGENTIC_IRC_SEAT_LIVENESS") or "").strip().lower() in (
+            "0",
+            "off",
+            "false",
+            "no",
+        ):
+            return False
+        return True
+
+    def seat_liveness_loop(self) -> None:
+        interval = talk_seat_pid.seat_liveness_poll_s()
+        while not self.stop.is_set():
+            if self.stop.wait(timeout=interval):
+                return
+            if not self._seat_liveness_enabled():
+                continue
+            if talk_seat_pid.talk_seat_coordinator_gone(self.original_nick, self.home):
+                info("INFO seat coordinator gone; QUIT")
+                self.request_shutdown(":seat ended")
+                return
 
     def connect(self) -> ssl.SSLSocket:
         ctx = ssl.create_default_context()
@@ -972,6 +1004,8 @@ class Client:
         self.sock = self.connect()
         threading.Thread(target=self.reader, daemon=True).start()
         threading.Thread(target=self.outbox_loop, args=(gen,), daemon=True).start()
+        if self._seat_liveness_enabled():
+            threading.Thread(target=self.seat_liveness_loop, daemon=True).start()
         pw = (self.args.password or os.environ.get("AGENTIC_IRC_PASSWORD") or "").strip()
         if pw:
             self.send("PASS " + pw)
@@ -1023,6 +1057,9 @@ class Client:
             except OSError:
                 pass
             self.sock = None
+            if self._no_reconnect:
+                info("INFO reconnect skipped (graceful quit)")
+                return
             attempt += 1
             if cap is not None and attempt >= cap:
                 info(f"INFO reconnect stopped (AGENTIC_IRC_RECONNECT_MAX={cap})")
@@ -1080,7 +1117,7 @@ def main() -> None:
     c = Client(args)
 
     def _stop(*_a: object) -> None:
-        c.stop.set()
+        c.request_shutdown(":signal")
 
     signal.signal(signal.SIGINT, _stop)
     if hasattr(signal, "SIGTERM"):

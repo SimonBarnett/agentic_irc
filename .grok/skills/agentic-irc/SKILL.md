@@ -26,7 +26,7 @@ Shop rooms are `#<machine-id>` (`#flamingo`, `#marchhare`, `#ionos`, `#ce-priori
 | Nick pattern | JOIN (Ergo) | Notes |
 |--------------|-------------|--------|
 | `bob-<id>` | `#bobiverse` + `#{machine}` | Builders; first JOIN creates shop |
-| `{machine}-{pid}` talk seat | `#bobiverse` + `#{machine}` + extras | **`pid` = coordinator PowerShell `$PID`** (`Start-TalkSeat.ps1` / TSR — **not** python `irc_listen` / `irc_agent` PIDs). Default extras include `#agentic_irc` via script default `-Channel`. More rooms (`#airc-moot`, etc.) via `-Channel`. `channels_for_nick` keeps fleet + shop for talk seats (issue #108). |
+| `{machine}-{pid}` talk seat | `#bobiverse` + `#{machine}` + extras | **`pid` = coordinator PowerShell `$PID`** (`Start-TalkSeat.ps1` / TSR — **not** python `irc_listen` / `irc_agent` PIDs). Default extras include `#agentic_irc` via script default `-Channel`. More rooms (`#airc-moot`, etc.) via `-Channel`. `channels_for_nick` always adds `#bobiverse` + shop for talk seats (issue #108); omitting fleet in `-Channel` does not opt out. Bobosphere is not talk-seat-forbidden. |
 | `w-<shortid>-<pid>` worker | `#{machine}` only | Never `#bobiverse` (`w-fl-4412` → `#flamingo`) |
 | Jeeves `--chair` | `#bobiverse` + every shop | skill `bob-irc` |
 

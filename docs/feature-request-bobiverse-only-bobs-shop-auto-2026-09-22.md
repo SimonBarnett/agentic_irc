@@ -1,6 +1,6 @@
 # Feature request — bobiverse-only bobs; auto shop for talk seats (2026-09-22)
 
-**Superseded (talk-seat fleet membership):** [issue #108](https://github.com/SimonBarnett/agentic_irc/issues/108) / `docs/feature-request-talk-seats-back-bobiverse-2026-09-22.md`. The **Done when** talk-seat shop-only / leave `#bobiverse` gates are withdrawn. `w-*` shop-only and Jeeves-on-all-shops behaviour from this FR still applies.
+**Superseded (talk-seat fleet membership):** [issue #108](https://github.com/SimonBarnett/agentic_irc/issues/108) / [MRB #109](https://github.com/SimonBarnett/agentic_irc/issues/109) / `docs/feature-request-talk-seats-back-bobiverse-2026-09-22.md`. The **Done when** talk-seat shop-only / leave `#bobiverse` gates are withdrawn. `w-*` shop-only and Jeeves-on-all-shops behaviour from this FR still applies.
 
 ## Ask (Simon on #agentic_irc)
 

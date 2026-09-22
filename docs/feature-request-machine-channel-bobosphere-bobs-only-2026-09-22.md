@@ -6,7 +6,7 @@
 **Raised by:** Simon on #agentic_irc
 **UAT owner:** human
 
-**Superseded (talk-seat fleet membership):** [issue #108](https://github.com/SimonBarnett/agentic_irc/issues/108) / `docs/feature-request-talk-seats-back-bobiverse-2026-09-22.md`. LOCKED items **3** (talk seats not in `#bobiverse`) and **5** (only bobs in `#bobiverse` — as applied to talk seats) no longer apply. LOCKED **4** (`w-*` shop only) and **6** (Jeeves in every shop) remain in force.
+**Superseded (talk-seat fleet membership):** [issue #108](https://github.com/SimonBarnett/agentic_irc/issues/108) / [MRB #109](https://github.com/SimonBarnett/agentic_irc/issues/109) / `docs/feature-request-talk-seats-back-bobiverse-2026-09-22.md`. LOCKED items **3** (talk seats not in `#bobiverse`) and **5** (only bobs in `#bobiverse` — as applied to talk seats) no longer apply. LOCKED **4** (`w-*` shop only) and **6** (Jeeves in every shop) remain in force.
 
 ## Problem
 

@@ -244,7 +244,8 @@ def channels_for_nick(nick: str, requested: str) -> list[str]:
     """bob-* → fleet + shop; talk seats → fleet + shop (+ extras); w-* → shop only.
 
     First JOIN creates #{machine} on Ergo. Talk seats ({machine}-{pid}) share the
-    shop with bob-{machine}. Simon put talk seats back on #bobiverse (2026-09-22).
+    shop with bob-{machine} and always JOIN #bobiverse (issue #108); callers cannot
+    omit fleet via requested channels.
     """
     req = parse_channel_list(requested)
     worker = parse_worker_nick(nick)

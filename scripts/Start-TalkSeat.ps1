@@ -15,7 +15,7 @@ $ErrorActionPreference = 'Stop'
 $SeatPid = $PID
 $mid = $MachineId.Trim().ToLower()
 if (-not $Channel) {
-    # Fleet + shop + FR talk room (issue #108 / Simon 2026-09-22).
+    # Fleet + shop + FR talk room (issue #108).
     $Channel = "#bobiverse,#$mid,#agentic_irc"
 }
 $resolved = [Environment]::ExpandEnvironmentVariables($IrcHome)

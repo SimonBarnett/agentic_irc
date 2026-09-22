@@ -142,6 +142,31 @@ def machine_from_nick(nick: str) -> str | None:
     return None
 
 
+def parse_talk_seat_nick(nick: str) -> tuple[str, str] | None:
+    """Cursor/Grok talk seat: {machine}-{pid} (pid = coordinator PowerShell $PID).
+
+    Machine ids may contain hyphens (ce-priority-dev1-16948). Not bob-* / w-*.
+    """
+    n = (nick or "").strip().lower()
+    if not n or n.startswith("bob-") or parse_worker_nick(n):
+        return None
+    ids = sorted(
+        set(FLEET_MACHINE_IDS) | set(SHORT_ID) | set(ID_ALIASES.values()) | set(ID_ALIASES),
+        key=len,
+        reverse=True,
+    )
+    for raw in ids:
+        mid = normalize_machine_id(raw)
+        if not mid:
+            continue
+        prefix = mid + "-"
+        if n.startswith(prefix):
+            rest = n[len(prefix) :]
+            if rest.isdigit():
+                return mid, rest
+    return None
+
+
 def nick_for_machine(doc_machines: dict, machine_id: str) -> str:
     mid = normalize_machine_id(machine_id) or machine_id
     for nick, mid_map in NICK_TO_MACHINE.items():
@@ -221,11 +246,18 @@ def parse_channel_list(raw: str) -> list[str]:
 
 
 def channels_for_nick(nick: str, requested: str) -> list[str]:
-    """bob-* → fleet + shop; w-* → shop only; others keep --channel."""
+    """bob-* → fleet + shop; talk seats + w-* → shop only; others keep --channel.
+
+    Shop JOIN creates #{machine} on Ergo when missing. Talk seats and workers
+    stay out of #bobiverse (bobs + Halloy/chair only on the fleet channel).
+    """
     req = parse_channel_list(requested)
     worker = parse_worker_nick(nick)
     if worker:
         return [shop_channel(worker[0])]
+    talk = parse_talk_seat_nick(nick)
+    if talk:
+        return [shop_channel(talk[0])]
     mid = machine_from_nick(nick)
     if mid:
         shop = shop_channel(mid)

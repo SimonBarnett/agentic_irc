@@ -34,6 +34,15 @@ def test_channels_for_nick():
         "#flamingo",
     ]
     assert bobreport.channels_for_nick("w-fl-4412", "#bobiverse") == ["#flamingo"]
+    assert bobreport.channels_for_nick("flamingo-17568", "#bobiverse,#flamingo") == [
+        "#flamingo"
+    ]
+    assert bobreport.channels_for_nick("ce-priority-dev1-16948", "#bobiverse") == [
+        "#ce-priority-dev1"
+    ]
+    assert bobreport.parse_talk_seat_nick("marchhare-20280") == ("marchhare", "20280")
+    assert bobreport.parse_talk_seat_nick("bob-flamingo") is None
+    assert bobreport.parse_talk_seat_nick("w-fl-4412") is None
     assert bobreport.channels_for_nick("alice", "#ops") == ["#ops"]
     assert bobreport.normalize_channel("#dev1") == "#ce-priority-dev1"
 

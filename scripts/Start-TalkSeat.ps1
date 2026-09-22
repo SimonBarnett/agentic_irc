@@ -15,7 +15,8 @@ $ErrorActionPreference = 'Stop'
 $SeatPid = $PID
 $mid = $MachineId.Trim().ToLower()
 if (-not $Channel) {
-    $Channel = "#bobiverse,#$mid"
+    # Shop only — #bobiverse is bob-* (+ Halloy/chair). JOIN creates #{mid} if needed.
+    $Channel = "#$mid"
 }
 $resolved = [Environment]::ExpandEnvironmentVariables($IrcHome)
 if (-not (Test-Path -LiteralPath $resolved)) {

@@ -134,7 +134,9 @@ ACKs one English line (status + weekly). `weekly=0` still answers
 (empty weekly is not deaf; #54). Optional **grok-talk** (LLM listen+reply;
 FR #56, Bob stamps UAT) is off by default: set `grok-talk.json`
 `{"grok_talk_enabled": true}` or env `AGENTIC_IRC_GROK_TALK=1` on a seat
-after UAT; requires `weekly` > 0. Jobs go to `grok-inbox.jsonl`;
+after UAT; fuel is peer `weekly` > 0 **or** Cursor Models
+`remaining_pct` / aliases on `bob-peers/<id>.json` (not tray `cursor_label`).
+Jobs go to `grok-inbox.jsonl`;
 completions via `grok-outbox.jsonl` → `outbox.txt`
 (`docs/grok-talk-envelope-v1.md`, `scripts/grok_talk_drain.py`).
 Watch stays no grok.exe. Recycle Watch-Bobiverse after pull so the

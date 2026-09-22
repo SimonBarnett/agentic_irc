@@ -1,12 +1,17 @@
-# Redacted irc.log snippet (issue #125 evidence)
-# After fleet bob-ionos recycle with dual-channel irc_agent on this SHA:
-#   INFO joined #bobiverse,#ionos as bob-ionos
-# Ergo JOIN lines (passwords and host details omitted):
+# Issue #125 evidence (redact host/IP before commit)
 #
+# Offline (this SHA):
+#   py_compile scripts/start_worker_irc_agent.py
+#   pytest tests/test_ionos_must5_must2.py tests/test_bobreport.py -k ionos -q
+#
+# Ionos after merge+pull to C:\ai\agentic_irc (not a side copy) + Watch recycle:
+#   ~/.agentic-irc-bobiverse/irc.log or Ergo log — bob-ionos JOIN #bobiverse and JOIN #ionos
+#   git worker live — Start-BobWorkerIrcAgent → w-io-<pid> JOIN #ionos (NAMES #ionos)
+#
+# Example Ergo lines (redacted):
 # :bob-ionos!~bob-ionos@<redacted> JOIN #bobiverse
 # :bob-ionos!~bob-ionos@<redacted> JOIN #ionos
+# :w-io-4412!~w-io-4412@<redacted> JOIN #ionos
 #
-# Worker shop client while git job live (Start-BobWorkerIrcAgent / start_worker_irc_agent.py):
-# :w-io-<pid>!~w-io-<pid>@<redacted> JOIN #ionos
-#
-# Capture on ionos after merge+pull of this branch into C:\ai\agentic_irc and Watch recycle.
+# Grok-talk MUST 5: bob-peers/ionos.json matches tests/fixtures/ionos-peer-live-2026-09-21.json
+# until POINT remaining= or refresh_peer_cursor_remaining; then fuel_ok and ACK omit cannot grok-talk.

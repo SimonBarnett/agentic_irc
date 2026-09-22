@@ -17,9 +17,17 @@ import bobreport
 SCRIPTS = Path(__file__).resolve().parent
 
 
+def default_fleet_home() -> str:
+    for key in ("BOB_IRC_HOME", "AGENTIC_IRC_HOME"):
+        raw = (os.environ.get(key) or "").strip()
+        if raw:
+            return os.path.expanduser(raw)
+    return os.path.expanduser("~/.agentic-irc-bobiverse")
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--fleet-home", default=os.path.expanduser("~/.agentic-irc-bobiverse"))
+    ap.add_argument("--fleet-home", default=default_fleet_home())
     ap.add_argument("--machine-id", required=True)
     ap.add_argument("--pid", required=True, help="worker OS pid (nick suffix)")
     ap.add_argument("--python", default=sys.executable)

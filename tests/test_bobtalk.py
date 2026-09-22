@@ -146,20 +146,10 @@ def test_mention_ack_when_weekly_zero(tmp_path):
 
 
 def test_mention_ack_weekly_zero_with_cursor_remaining_not_cannot(tmp_path):
-    """MUST 5 (#70): live peer shape weekly=0 + remaining_pct; ACK must not say cannot grok-talk."""
-    bobstat.write_peer(
-        tmp_path,
-        {
-            "ok": True,
-            "id": "ionos",
-            "weekly": 0,
-            "cursor_label": "82%",
-            "remaining_pct": 82,
-            "running": 0,
-            "queued": 0,
-            "jobs": [],
-        },
-    )
+    """MUST 5: ACK after POINT persists remaining on live Watch-shaped peer."""
+    from ionos_peer_live import apply_point_remaining
+
+    apply_point_remaining(tmp_path, 82)
     line = bobtalk.mention_reply_line(
         tmp_path, "ionos", ["bob-ionos"], "simon", "@bob-ionos status?"
     )

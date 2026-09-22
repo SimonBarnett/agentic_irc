@@ -123,20 +123,11 @@ def test_no_enqueue_when_weekly_zero(tmp_path, monkeypatch):
 
 
 def test_enqueue_when_weekly_zero_but_cursor_remaining(tmp_path, monkeypatch):
-    """MUST 5 (#70): weekly=0 + remaining_pct > 0 still enqueues."""
+    """MUST 5: weekly=0 + POINT remaining on live ionos peer still enqueues."""
+    from ionos_peer_live import apply_point_remaining
+
     _enable_grok_talk(tmp_path, monkeypatch)
-    bobstat.write_peer(
-        tmp_path,
-        {
-            "ok": True,
-            "id": "ionos",
-            "weekly": 0,
-            "remaining_pct": 42,
-            "running": 0,
-            "queued": 0,
-            "jobs": [],
-        },
-    )
+    apply_point_remaining(tmp_path, 42)
     dedupe: dict[tuple[str, str], float] = {}
     job = grok_talk.enqueue_mention(
         tmp_path,
@@ -156,19 +147,10 @@ def test_enqueue_when_weekly_zero_but_cursor_remaining(tmp_path, monkeypatch):
 
 
 def test_no_enqueue_when_weekly_zero_and_remaining_zero(tmp_path, monkeypatch):
+    from ionos_peer_live import write_live_watch_peer
+
     _enable_grok_talk(tmp_path, monkeypatch)
-    bobstat.write_peer(
-        tmp_path,
-        {
-            "ok": True,
-            "id": "ionos",
-            "weekly": 0,
-            "remaining_pct": 0,
-            "running": 0,
-            "queued": 0,
-            "jobs": [],
-        },
-    )
+    write_live_watch_peer(tmp_path)
     dedupe: dict[tuple[str, str], float] = {}
     assert (
         grok_talk.enqueue_mention(

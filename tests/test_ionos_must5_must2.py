@@ -14,33 +14,12 @@ import bobstat
 import bobtalk
 import grok_talk
 import start_worker_irc_agent
+from ionos_peer_live import apply_point_remaining, write_live_watch_peer
 
 ROOT = Path(__file__).resolve().parents[1]
 FIX = Path(__file__).resolve().parent / "fixtures"
 SPAWN = ROOT / "scripts" / "start_worker_irc_agent.py"
-LIVE = FIX / "ionos-peer-live-2026-09-21.json"
 USAGE_FIX = FIX / "cursor-usage-82pct.json"
-
-
-def _write_live_peer(tmp_path: Path) -> dict:
-    doc = json.loads(LIVE.read_text(encoding="utf-8"))
-    bobstat.write_peer(tmp_path, doc)
-    return doc
-
-
-def test_live_ionos_peer_no_remaining_until_point_or_usage(tmp_path):
-    """Live Watch shape (no remaining_*): fuel stays off until POINT or usage refresh."""
-    doc = _write_live_peer(tmp_path)
-    got = bobstat.read_peer(tmp_path, "ionos")
-    assert got["weekly"] == 0
-    assert got.get("cursor_label") == "82%"
-    assert numeric_missing(got)
-    assert grok_talk.fuel_ok(tmp_path, "ionos") is False
-    line = bobtalk.mention_reply_line(
-        tmp_path, "ionos", ["bob-ionos"], "simon", "@bob-ionos status?"
-    )
-    assert line is not None
-    assert "cannot grok-talk" in line
 
 
 def numeric_missing(peer: dict) -> bool:
@@ -50,18 +29,25 @@ def numeric_missing(peer: dict) -> bool:
     return True
 
 
+def test_live_ionos_peer_no_remaining_until_point_or_usage(tmp_path):
+    """Live Watch shape (no remaining_*): fuel stays off until POINT or usage refresh."""
+    doc = write_live_watch_peer(tmp_path)
+    got = bobstat.read_peer(tmp_path, "ionos")
+    assert got["weekly"] == 0
+    assert got.get("cursor_label") == doc.get("cursor_label")
+    assert numeric_missing(got)
+    assert grok_talk.fuel_ok(tmp_path, "ionos") is False
+    line = bobtalk.mention_reply_line(
+        tmp_path, "ionos", ["bob-ionos"], "simon", "@bob-ionos status?"
+    )
+    assert line is not None
+    assert "cannot grok-talk" in line
+
+
 def test_live_ionos_peer_fuel_ok_after_point_remaining_ingest(tmp_path):
     """BOB v1 POINT remaining= on live ionos peer → bob-peers fuel + ACK (MUST 5)."""
-    doc = _write_live_peer(tmp_path)
-    point = (
-        f"BOB v1 id=ionos weekly=0 running={int(doc['running'])} queued={int(doc['queued'])} "
-        f"lastSeen={doc['lastSeen']} jobs=- remaining=82"
-    )
-    parsed = bobstat.parse_bob_point(point)
-    assert parsed is not None
-    bobstat.write_peer(tmp_path, parsed)
-    got = bobstat.read_peer(tmp_path, "ionos")
-    assert got["remaining_pct"] == 82
+    peer = apply_point_remaining(tmp_path, 82)
+    assert peer["remaining_pct"] == 82
     assert grok_talk.fuel_ok(tmp_path, "ionos") is True
     line = bobtalk.mention_reply_line(
         tmp_path, "ionos", ["bob-ionos"], "simon", "@bob-ionos status?"
@@ -71,9 +57,36 @@ def test_live_ionos_peer_fuel_ok_after_point_remaining_ingest(tmp_path):
     assert "weekly=0 (cursor remaining=82%)" in line
 
 
+def test_live_ionos_peer_grok_talk_enqueue_after_point(tmp_path, monkeypatch):
+    """Replay bob-peers/ionos.json after POINT: inbox when grok-talk enabled (MUST 5)."""
+    (tmp_path / "grok-talk.json").write_text('{"grok_talk_enabled": true}\n', encoding="utf-8")
+    apply_point_remaining(tmp_path, 82)
+    peer_path = tmp_path / "bob-peers" / "ionos.json"
+    assert peer_path.is_file()
+    on_disk = json.loads(peer_path.read_text(encoding="utf-8"))
+    assert on_disk.get("remaining_pct") == 82
+    assert grok_talk.fuel_ok(tmp_path, "ionos") is True
+    dedupe: dict[tuple[str, str], float] = {}
+    job = grok_talk.enqueue_mention(
+        tmp_path,
+        "ionos",
+        "bob-ionos",
+        ["bob-ionos"],
+        "simon",
+        "#ionos",
+        "@bob-ionos status?",
+        to_me=False,
+        to_channel=True,
+        dedupe_last=dedupe,
+        now=2000.0,
+    )
+    assert job
+    assert grok_talk.inbox_path(tmp_path).is_file()
+
+
 def test_live_ionos_peer_fuel_ok_after_cursor_usage_refresh(tmp_path):
     """Watch file + Get-CursorAgentUsage-shaped doc (not cursor_label) → fuel."""
-    _write_live_peer(tmp_path)
+    write_live_watch_peer(tmp_path)
     usage = json.loads(USAGE_FIX.read_text(encoding="utf-8"))
     assert bobstat.refresh_peer_cursor_remaining(tmp_path, "ionos", usage_doc=usage)
     got = bobstat.read_peer(tmp_path, "ionos")
@@ -89,16 +102,9 @@ def test_live_ionos_peer_fuel_ok_after_cursor_usage_refresh(tmp_path):
 def test_write_peer_expands_remaining_aliases_and_preserves(tmp_path):
     bobstat.write_peer(
         tmp_path,
-        {
-            "ok": True,
-            "id": "ionos",
-            "weekly": 0,
-            "cursor_label": "82%",
-            "remaining_pct": 82,
-            "running": 0,
-            "queued": 0,
-            "jobs": [],
-        },
+        bobstat.parse_bob_point(
+            "BOB v1 id=ionos weekly=0 running=0 queued=0 lastSeen=t jobs=- remaining=82"
+        ),
     )
     got = bobstat.read_peer(tmp_path, "ionos")
     assert got["account_remaining_pct"] == 82
@@ -128,6 +134,14 @@ def test_parse_bob_point_remaining_wire_field():
     assert doc["cursor_remaining_pct"] == 82
     roundtrip = bobstat.format_bob_point(doc)
     assert "remaining=82" in roundtrip
+
+
+def test_cursor_label_alone_is_not_fuel(tmp_path):
+    write_live_watch_peer(tmp_path)
+    got = bobstat.read_peer(tmp_path, "ionos")
+    assert got.get("cursor_label") == "82%"
+    assert numeric_missing(got)
+    assert grok_talk.fuel_ok(tmp_path, "ionos") is False
 
 
 def test_start_worker_irc_agent_utf8_py_compile_and_dry_run(tmp_path):

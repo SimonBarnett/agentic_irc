@@ -12,7 +12,7 @@
 #include <time.h>
 
 /* Keep in sync with VERSION */
-#define AIRC_THIN_VERSION "0.3.1"
+#define AIRC_THIN_VERSION "0.3.2"
 
 static void usage(void)
 {

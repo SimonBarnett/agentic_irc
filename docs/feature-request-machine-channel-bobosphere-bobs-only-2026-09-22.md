@@ -1,0 +1,29 @@
+# Feature request: per-machine channel for bob + talk seats (bobosphere = bobs only)
+
+**Date:** 2026-09-22
+**Repo:** https://github.com/SimonBarnett/agentic_irc
+**GitHub:** https://github.com/SimonBarnett/agentic_irc/issues/100
+**Raised by:** Simon on #agentic_irc
+**UAT owner:** human
+
+## Problem
+
+Talk seats were in #bobiverse with builders. Bobosphere is for ob-* only.
+Shop #{machine} holds bob + {machine}-* (+ workers). Jeeves is in every room.
+
+## LOCKED
+
+1. Create = first JOIN of #{machine-id}.
+2. ob-{machine} → #bobiverse + #{machine}.
+3. {machine}-{pid} talk seats → #{machine} (+ extras e.g. #agentic_irc); not #bobiverse.
+4. w-* → shop only.
+5. Only bobs in #bobiverse.
+6. Jeeves (irc_agent.py --chair) → #bobiverse + every #{machine}.
+
+## Deliverable
+
+channels_for_nick, parse_talk_seat_nick, chair_channels, Start-TalkSeat default, tests, skill.
+
+## Non-goals
+
+ChanServ; auto-PART remote seats (recycle locally); Mode 3 PIN chair on shops.

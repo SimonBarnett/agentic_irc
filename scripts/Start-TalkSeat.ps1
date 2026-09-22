@@ -1,5 +1,7 @@
 # Start or reuse irc_agent + irc_listen for a talk seat.
 # Nick = {machine-id}-{SeatPid} where SeatPid is this PowerShell session $PID (not python children).
+# Keep this PowerShell session alive while the talk seat is in use (seat= in coordinator.pid).
+# Detached irc_listen is started via Start-IrcTsr.ps1; tail $IrcHome/listen.stdout.log for wakes.
 param(
     [Parameter(Mandatory = $true)]
     [string]$MachineId,
@@ -29,44 +31,64 @@ $env:AGENTIC_IRC_PASSWORD = (Get-Content -LiteralPath $pwFile -Raw).Trim()
 $env:AGENTIC_IRC_DEBUG = '1'
 $py = (Get-Command python -ErrorAction Stop).Source
 $agentPath = Join-Path $Scripts 'irc_agent.py'
+$guardPath = Join-Path $Scripts 'talk_seat_pid.py'
+function Get-HomePythonProcs {
+    param([string]$HomePath)
+    $agentProc = Get-CimInstance Win32_Process -Filter "Name='python.exe'" |
+        Where-Object { $_.CommandLine -match 'irc_agent.py' -and $_.CommandLine -match [regex]::Escape($HomePath) } |
+        Select-Object -First 1
+    $listenProc = Get-CimInstance Win32_Process -Filter "Name='python.exe'" |
+        Where-Object { $_.CommandLine -match 'irc_listen.py' -and $_.CommandLine -match [regex]::Escape($HomePath) } |
+        Select-Object -First 1
+    return $agentProc, $listenProc
+}
 function Stop-CursorHomeAgents {
+    param([string]$HomePath)
     Get-CimInstance Win32_Process -Filter "Name='python.exe'" |
         Where-Object {
             $_.CommandLine -match 'irc_(agent|listen)\.py' -and
-            $_.CommandLine -match [regex]::Escape($resolved)
+            $_.CommandLine -match [regex]::Escape($HomePath)
         } | ForEach-Object {
             Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue
         }
     Start-Sleep -Milliseconds 400
 }
-$coordPath = Join-Path $resolved 'coordinator.pid'
-$lockNick = ''
-$lockSeat = ''
-if (Test-Path -LiteralPath $coordPath) {
-    Get-Content -LiteralPath $coordPath | ForEach-Object {
-        if ($_ -match '^nick=(.+)$') { $lockNick = $Matches[1].Trim() }
-        if ($_ -match '^seat=(.+)$') { $lockSeat = $Matches[1].Trim() }
+function Assert-HomeBind {
+    param(
+        [string]$HomePath,
+        [string]$ExpectedNick,
+        [string]$LiveAgentNick,
+        [bool]$LiveListen
+    )
+    $bindArgs = @(
+        $guardPath,
+        '--bind-home',
+        '--home', $HomePath,
+        '--expected-nick', $ExpectedNick
+    )
+    if ($LiveAgentNick) { $bindArgs += @('--live-agent-nick', $LiveAgentNick) }
+    if ($LiveListen) { $bindArgs += '--live-listen' }
+    $out = & $py $bindArgs 2>&1
+    if ($LASTEXITCODE -eq 3) {
+        $msg = ($out | Out-String).Trim()
+        if (-not $msg) { $msg = "home $HomePath is owned by another talk seat" }
+        Write-Error $msg
+    }
+    if ($LASTEXITCODE -ne 0 -and $LASTEXITCODE -ne 3) {
+        Write-Error "talk_seat_pid.py --bind-home failed (exit $LASTEXITCODE): $out"
     }
 }
-$agent = Get-CimInstance Win32_Process -Filter "Name='python.exe'" |
-    Where-Object { $_.CommandLine -match 'irc_agent.py' -and $_.CommandLine -match [regex]::Escape($resolved) } |
-    Select-Object -First 1
+$agent, $listen = Get-HomePythonProcs -HomePath $resolved
 $needStart = $true
+$agentNick = ''
 if ($agent -and ($agent.CommandLine -match '--nick\s+(\S+)')) {
-    if ($Matches[1] -eq $expectedNick) { $needStart = $false }
+    $agentNick = $Matches[1]
+    if ($agentNick -eq $expectedNick) { $needStart = $false }
 }
-# Two Cursor TUIs on one box: default home is the first seat. A second
-# Start-TalkSeat with a different $PID must not kill that agent (Ergo
-# ghosts the live nick; Halloy looks like login-kicks-the-other).
-if ($needStart -and $agent -and $lockNick -and $lockNick -ne $expectedNick) {
-    Write-Error @"
-home $resolved is owned by nick=$lockNick seat=$lockSeat (live irc_agent).
-This call wants $expectedNick. Use a different -IrcHome (e.g. ~/.agentic-irc-cursor-2).
-Do not reuse the first talk-seat home or the same nick.
-"@
-}
+$hasListen = $null -ne $listen
+Assert-HomeBind -HomePath $resolved -ExpectedNick $expectedNick -LiveAgentNick $agentNick -LiveListen:$hasListen
 if ($needStart) {
-    Stop-CursorHomeAgents
+    Stop-CursorHomeAgents -HomePath $resolved
     Start-Process -FilePath $py -ArgumentList @(
         '-u', $agentPath,
         '--host', $IrcHost,
@@ -76,9 +98,7 @@ if ($needStart) {
         '--nick', $expectedNick
     ) -WindowStyle Hidden -PassThru | Out-Null
     Start-Sleep -Milliseconds 800
-    $agent = Get-CimInstance Win32_Process -Filter "Name='python.exe'" |
-        Where-Object { $_.CommandLine -match 'irc_agent.py' -and $_.CommandLine -match [regex]::Escape($resolved) } |
-        Select-Object -First 1
+    $agent, $listen = Get-HomePythonProcs -HomePath $resolved
 }
 if (-not $agent) {
     Write-Error "irc_agent did not start for home $resolved"
@@ -87,8 +107,11 @@ $agentPid = $agent.ProcessId
 $nick = ''
 if ($agent.CommandLine -match '--nick\s+(\S+)') { $nick = $Matches[1] }
 if ($nick -and $nick -ne $expectedNick) {
+    $agentNick = $nick
+    $hasListen = $null -ne $listen
+    Assert-HomeBind -HomePath $resolved -ExpectedNick $expectedNick -LiveAgentNick $agentNick -LiveListen:$hasListen
     Write-Output "INFO talk-seat nick=$nick expected=$expectedNick - restarting agent"
-    Stop-CursorHomeAgents
+    Stop-CursorHomeAgents -HomePath $resolved
     Start-Process -FilePath $py -ArgumentList @(
         '-u', $agentPath,
         '--host', $IrcHost,
@@ -98,9 +121,7 @@ if ($nick -and $nick -ne $expectedNick) {
         '--nick', $expectedNick
     ) -WindowStyle Hidden -PassThru | Out-Null
     Start-Sleep -Milliseconds 800
-    $agent = Get-CimInstance Win32_Process -Filter "Name='python.exe'" |
-        Where-Object { $_.CommandLine -match 'irc_agent.py' -and $_.CommandLine -match [regex]::Escape($resolved) } |
-        Select-Object -First 1
+    $agent, $listen = Get-HomePythonProcs -HomePath $resolved
     $agentPid = if ($agent) { $agent.ProcessId } else { 0 }
     $nick = $expectedNick
 }
@@ -110,9 +131,7 @@ if (-not $nick) {
 $env:AGENTIC_IRC_DEBUG = '1'
 & (Join-Path $Scripts 'Start-IrcTsr.ps1') -IrcHome $resolved -Scripts $Scripts -SeatPid $SeatPid -Nick $nick | Out-Null
 $listenPid = ''
-$listen = Get-CimInstance Win32_Process -Filter "Name='python.exe'" |
-    Where-Object { $_.CommandLine -match 'irc_listen.py' -and $_.CommandLine -match [regex]::Escape($resolved) } |
-    Select-Object -First 1
+$agent, $listen = Get-HomePythonProcs -HomePath $resolved
 if ($listen) { $listenPid = $listen.ProcessId }
 @(
     "nick=$nick"
@@ -122,3 +141,4 @@ if ($listen) { $listenPid = $listen.ProcessId }
     "home=$resolved"
 ) | Set-Content -LiteralPath (Join-Path $resolved 'coordinator.pid') -Encoding utf8
 Write-Output "INFO nick=$nick seat=$SeatPid agent=$agentPid listen=$listenPid home=$resolved"
+Write-Output "INFO keep this PowerShell session alive (seat=$SeatPid); listen detached at $(Join-Path $resolved 'listen.stdout.log')"

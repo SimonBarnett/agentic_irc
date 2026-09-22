@@ -2,6 +2,7 @@
 # Seat id: nick suffix and digest pid = seat= (coordinator PowerShell $PID), not listen=/agent=.
 # Prefer scripts/Start-TalkSeat.ps1 to start agent + listener with correct nick.
 # Do not use $Home (read-only). Does not start a second listener or irc_agent.
+# Listen is always Start-Process detached (survives Cursor agent shell exit).
 param(
     [string]$IrcHome = $(Join-Path $env:USERPROFILE '.agentic-irc-cursor'),
     [string]$Scripts = 'C:\ai\agentic_irc\scripts',
@@ -27,7 +28,11 @@ $listen = Get-CimInstance Win32_Process -Filter "Name='python.exe'" |
 if (-not $listen) {
     $py = (Get-Command python -ErrorAction Stop).Source
     $listenPath = Join-Path $Scripts 'irc_listen.py'
-    $proc = Start-Process -FilePath $py -ArgumentList @('-u', $listenPath, '--home', $resolved) -WindowStyle Hidden -PassThru
+    $stdoutLog = Join-Path $resolved 'listen.stdout.log'
+    $stderrLog = Join-Path $resolved 'listen.stderr.log'
+    $proc = Start-Process -FilePath $py -ArgumentList @('-u', $listenPath, '--home', $resolved) `
+        -WindowStyle Hidden -PassThru `
+        -RedirectStandardOutput $stdoutLog -RedirectStandardError $stderrLog
     $listenPid = $proc.Id
 } else {
     $listenPid = $listen.ProcessId
@@ -47,4 +52,4 @@ if ($SeatPid) {
     $lines = @("nick=$Nick", "seat=$SeatPid", "listen=$listenPid", "agent=$agentPid", "home=$resolved")
 }
 $lines | Set-Content -LiteralPath $coordPath -Encoding utf8
-Write-Output "INFO TSR listen=$listenPid agent=$agentPid seat=$SeatPid nick=$Nick"
+Write-Output "INFO TSR listen=$listenPid agent=$agentPid seat=$SeatPid nick=$Nick log=$(Join-Path $resolved 'listen.stdout.log')"

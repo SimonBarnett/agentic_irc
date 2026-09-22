@@ -146,6 +146,64 @@ def auto_talk_seat_nick(nick: str, seat_pid: int) -> str:
     return talk_seat_nick(mid, seat_pid)
 
 
+def home_bind_refusal(
+    coord: dict[str, str],
+    expected_nick: str,
+    *,
+    live_agent_nick: str | None = None,
+    has_live_listen: bool = False,
+) -> str | None:
+    """None if Start-TalkSeat may bind; else a one-line refusal (no secrets)."""
+    expected = (expected_nick or "").strip()
+    if not expected:
+        return "expected talk-seat nick is required"
+    lock_nick = (coord.get("nick") or "").strip()
+    lock_seat = (coord.get("seat") or "").strip()
+    agent_nick = (live_agent_nick or "").strip()
+    occupied = bool(agent_nick) or has_live_listen
+
+    if agent_nick and agent_nick != expected:
+        if lock_nick == expected:
+            return None
+        seat_part = f" seat={lock_seat}" if lock_seat else ""
+        return (
+            f"home has live irc_agent nick={agent_nick}{seat_part}; "
+            f"this seat wants {expected}. Use a different -IrcHome "
+            "(e.g. ~/.agentic-irc-cursor-2). Do not kill the other seat's listen."
+        )
+
+    if lock_nick and lock_nick != expected and occupied:
+        seat_part = f" seat={lock_seat}" if lock_seat else ""
+        return (
+            f"coordinator.pid nick={lock_nick}{seat_part} with live listen/agent; "
+            f"this seat wants {expected}. Use a different -IrcHome "
+            "(e.g. ~/.agentic-irc-cursor-2). Do not steal the first talk-seat home."
+        )
+    return None
+
+
+def check_home_bind(
+    home: Path | str,
+    expected_nick: str,
+    *,
+    live_agent_nick: str | None = None,
+    has_live_listen: bool = False,
+) -> str | None:
+    path = Path(home) / "coordinator.pid"
+    doc: dict[str, str] = {}
+    if path.is_file():
+        try:
+            doc = parse_coordinator_pid(path.read_text(encoding="utf-8"))
+        except OSError:
+            doc = {}
+    return home_bind_refusal(
+        doc,
+        expected_nick,
+        live_agent_nick=live_agent_nick,
+        has_live_listen=has_live_listen,
+    )
+
+
 def main(argv: list[str] | None = None) -> int:
     import argparse
     import sys
@@ -154,7 +212,34 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--home", default="", help="check coordinator.pid under this home")
     p.add_argument("--nick", default="")
     p.add_argument("--pid", type=int, default=0)
+    p.add_argument(
+        "--bind-home",
+        action="store_true",
+        help="refuse binding a home owned by another talk seat (exit 3)",
+    )
+    p.add_argument("--expected-nick", default="")
+    p.add_argument("--live-agent-nick", default="")
+    p.add_argument(
+        "--live-listen",
+        action="store_true",
+        help="irc_listen is running for this home",
+    )
     args = p.parse_args(argv)
+    if args.bind_home:
+        if not args.home or not args.expected_nick:
+            print("INFO pass --home and --expected-nick with --bind-home", flush=True)
+            return 1
+        agent_nick = (args.live_agent_nick or "").strip() or None
+        err = check_home_bind(
+            args.home,
+            args.expected_nick,
+            live_agent_nick=agent_nick,
+            has_live_listen=bool(args.live_listen),
+        )
+        if err:
+            print(err, flush=True)
+            return 3
+        return 0
     if args.home:
         err = check_coordinator_nick(args.home)
     elif args.nick and args.pid:

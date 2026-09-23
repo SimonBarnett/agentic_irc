@@ -1004,15 +1004,8 @@ class Client:
         finally:
             self.dead.set()
 
-    def drain_outbox_once(self) -> list[str]:
-        """Send complete unread outbox lines. Offset persisted; restart does not skip JOIN."""
-        if not getattr(self.args, "chair", False):
-            try:
-                grok_talk.drain_completions_to_outbox(self.home, outbox=self.outbox)
-            except OSError:
-                pass
-        path = self.outbox
-        if not path.exists() or self.sock is None:
+    def _drain_outbox_path(self, path: Path) -> list[str]:
+        if self.sock is None or not path.exists():
             return []
         last = load_outbox_pos(path)
         lines, new_last = take_outbox_lines(path, last)
@@ -1029,6 +1022,21 @@ class Client:
             sent.append(line)
         if new_last != last:
             save_outbox_pos(path, new_last)
+        return sent
+
+    def drain_outbox_once(self) -> list[str]:
+        """Send complete unread outbox lines. Offset persisted; restart does not skip JOIN."""
+        if not getattr(self.args, "chair", False):
+            try:
+                grok_talk.drain_completions_to_outbox(self.home, outbox=self.outbox)
+            except OSError:
+                pass
+        if self.sock is None:
+            return []
+        sent = self._drain_outbox_path(self.outbox)
+        if getattr(self.args, "chair", False):
+            chair_out = bobreport.fleet_digest_home(self.home) / "chair-outbox.txt"
+            sent.extend(self._drain_outbox_path(chair_out))
         return sent
 
     def outbox_loop(self, gen: int | None = None) -> None:

@@ -187,6 +187,8 @@ BOM-prefixed line is not `PRIVMSG ` so it becomes `say()` on `#bobiverse`.
 
 `drain_outbox_once`: only lines starting with `PRIVMSG ` are sent raw; everything else is `say()` to the default channel. Writing `JOIN #airc-moot` to `outbox.txt` posts the words on `#bobiverse`. To enter an extra room, **recycle the agent** with `#airc-moot` (etc.) in `--channel` (or fix `channels_for_nick` â€” ionos owns that). Confirmed 2026-09-22 Mode 3 desk.
 
+`GIT` webhook lines are Jeeves only (skill `jeeves-git-webhook`). They live in `chair-outbox.txt`, which only `irc_agent.py --chair` drains. Do not copy a `GIT` line onto this seat's `outbox.txt`, and do not re-say one you saw from `bob-*`.
+
 Identity is DPAPI-wrapped on Windows; Unix 0600. Never commit it. Never PRIVMSG `sk`. Never dump `inbox/*.bin` into chat.
 
 SASL is optional and **unproven** until a session log shows numeric 903. Env only: `AGENTIC_IRC_SASL_USER`, `AGENTIC_IRC_SASL_PASSWORD`. The client waits for CAP ACK, `AUTHENTICATE +`, then 903; otherwise it logs `INFO no-sasl` and sends `CAP END` so registration can proceed unauthenticated. Do not claim SASL worked because the functions exist. Do not put SASL assignments in commits or prompts.

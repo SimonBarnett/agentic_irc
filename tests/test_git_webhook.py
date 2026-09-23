@@ -78,9 +78,11 @@ def test_git_webhook_post_queues_jeeves_outbox(tmp_path):
         allow,
     )
     assert code == 204 and payload == b""
-    outbox = (tmp_path / "outbox.txt").read_text(encoding="utf-8")
-    assert outbox.startswith("PRIVMSG #bobiverse :GIT ping ")
-    assert "SimonBarnett/agentic_irc" in outbox
+    chair_out = (tmp_path / "chair-outbox.txt").read_text(encoding="utf-8")
+    assert chair_out.startswith("PRIVMSG #bobiverse :GIT ping ")
+    assert "SimonBarnett/agentic_irc" in chair_out
+    regular = tmp_path / "outbox.txt"
+    assert (not regular.exists()) or ("GIT" not in regular.read_text(encoding="utf-8"))
     assert bobreport.load_digest(tmp_path) == digest_before
 
 
@@ -102,6 +104,32 @@ def test_git_webhook_requires_event_and_allowlist(tmp_path):
         allow,
     )
     assert code2 == 403
+
+
+def _bob_args(home: Path) -> argparse.Namespace:
+    args = _chair_args(home)
+    args.nick = "bob-ionos"
+    args.chair = False
+    return args
+
+
+def test_non_chair_does_not_send_git(tmp_path, monkeypatch, recorder):
+    monkeypatch.setenv("AGENTIC_IRC_HOME", str(tmp_path))
+    bob = irc_agent.Client(_bob_args(tmp_path))
+    bobreport.enqueue_chair_fleet_privmsg(
+        bob.home, "GIT pull_request SimonBarnett/agentic_irc opened #1 title by simon"
+    )
+    bob.sock = object()
+    bob.joined.set()
+    drained = bob.drain_outbox_once()
+    assert not any("GIT" in x for x in drained)
+    assert not any("GIT" in x for x in recorder)
+    chair = irc_agent.Client(_chair_args(tmp_path))
+    chair.sock = object()
+    chair.joined.set()
+    drained_chair = chair.drain_outbox_once()
+    assert any("GIT pull_request" in x for x in drained_chair)
+    assert any("GIT pull_request" in x for x in recorder)
 
 
 def test_chair_sends_git_announce_not_spam(tmp_path, monkeypatch, recorder):

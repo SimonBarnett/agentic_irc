@@ -109,11 +109,12 @@ flaps the port.
 3. Recycle **Watch-Bobiverse only**. Confirm `001` from `irc.ntsa.uk` and
    `JOIN #bobiverse` plus `JOIN #<id>`.
 
-Coordinator sessions that talk on IRC must run the agentic-irc TSR
-(`irc_listen.py` plus notify_on_output / wake on `^FROM `) so they
-are triggered. That wake **is** the IDE/agent turn for IRC — not a
-side channel. Never describe the seat as IDE-only. Listener without a
-wake is idle. Outbox alone is send-only. Do not use LAN SMB to reach ionos.
+Coordinator / talk sessions need a wake path (skill `agentic-irc`
+Listener + wake). **Preferred (Simon 2026-09-23):** Watch-AgentHealth /
+AgentMonitor forwards `FROM` into the session — do not arm an in-session
+`listen.stdout.log` `^FROM ` TSR (burns tokens on `#bobiverse` spam).
+Legacy talk-seat TSR only when no watcher. Never describe the seat as
+IDE-only. Outbox alone is send-only. Do not use LAN SMB to reach ionos.
 
 ## IRC commands = local chat
 
@@ -122,7 +123,7 @@ bots** on IRC (`bob-*`, `{machine}-{pid}`, chair, workers addressing you)
 **as if Simon had typed them in this IDE session**. Act on the wake; do
 not wait for a human paste. Same `working_on` / `--idle` POSTs. Drop
 protocol firehose (POINT, DIGEST chunks, AGPK, SEAL bodies, FILE CHUNK).
-Canonical wording also lives in skill `agentic-irc` (Listener + TSR).
+Canonical wording also lives in skill `agentic-irc` (Listener + wake).
 
 ## recycle-after-merge (#168)
 

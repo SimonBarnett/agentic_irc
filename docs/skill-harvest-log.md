@@ -1,5 +1,13 @@
 ﻿# Skill harvest log
 
+## 2026-09-23 — preferred IRC wake = Watch-AgentHealth
+
+Simon: do not arm in-session `listen.stdout.log` `^FROM ` TSR (burns
+Cursor turns on `#bobiverse` spam). Preferred: Watch-AgentHealth /
+AgentMonitor forwards FROM. Updated `agentic-irc` Listener + wake CAST
+IRON; `bob-irc` coordinator wake note. Fleet skill home:
+`agentic_build` `watch-agent-health`.
+
 ## 2026-09-23 — git webhooks announced by Jeeves
 
 Simon `#bobiverse`: harvest the parked git-webhook FR as a skill.

@@ -14,11 +14,11 @@ import bobstat
 import bobtalk
 
 REPORT_CMD = "!report"
-REPORT_GONE = "ERR report gone — use callback or GET /bob/v1/digest"
+REPORT_GONE = "ERR report gone — use callback or GET /bob/v1/report"
 NO_MACHINE = "ERR no such machine"
-DEFAULT_DIGEST_URL = "http://bob.ntsa.uk/bob/v1/digest"
+DEFAULT_DIGEST_URL = "https://irc.ntsa.uk/bob/v1/report"
 DIGEST_URL_ENV = "AGENTIC_IRC_DIGEST_URL"
-BOBIVERSE_GONE = "ERR !bobiverse gone — GET http://bob.ntsa.uk/bob/v1/digest"
+BOBIVERSE_GONE = "ERR !bobiverse gone — GET https://irc.ntsa.uk/bob/v1/report"
 DIGEST_PREFIX = "BOB DIGEST v1 "
 MAX_DIGEST_LINE = 350
 FLEET_CHANNEL = "#bobiverse"
@@ -125,7 +125,7 @@ _TRAY_MACHINE_EXPORT_KEYS = (
 WORKER_NICK_RE = re.compile(r"^w-([a-z0-9]+)-(\d+)_?$", re.I)
 
 HELP_TEXT = (
-    "GET http://bob.ntsa.uk/bob/v1/digest   fleet JSON digest\n"
+    "GET https://irc.ntsa.uk/bob/v1/report   fleet JSON digest\n"
     "!recycle <id>       Jeeves only: fleet recycle\n"
     "write: POST reportUrl (no !report; no !bobiverse)"
 )

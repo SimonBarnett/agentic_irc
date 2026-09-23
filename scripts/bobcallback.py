@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Digest callback: POST /bob/v1/report + /bob/v1/git; public GET /bob/v1/digest (#174)."""
+"""Digest callback: POST /bob/v1/report + /bob/v1/git; public GET digest (#174).
+
+GET/HEAD on /bob/v1/report returns the JSON digest (same body as /bob/v1/digest).
+IIS already proxies reportUrl; browsers must not keep seeing 405.
+"""
 from __future__ import annotations
 
 import json
@@ -14,7 +18,8 @@ DIGEST_PATH = "/bob/v1/digest"
 DIGEST_ALIAS = "/digest"
 SECRET_ENV = "BOB_REPORT_SECRET"
 ALLOW_ENV = "BOB_REPORT_ALLOW"
-DIGEST_GET_PATHS = frozenset({DIGEST_PATH, DIGEST_ALIAS})
+# Public read paths (GET/HEAD). REPORT_PATH is also the write URL (POST).
+DIGEST_GET_PATHS = frozenset({DIGEST_PATH, DIGEST_ALIAS, REPORT_PATH})
 
 
 def secret_path() -> Path:
@@ -45,8 +50,6 @@ def _check_post_route(
     allow = allow_ips if allow_ips is not None else load_allow_ips()
     if route not in (REPORT_PATH, GIT_WEBHOOK_PATH):
         return 404, b""
-    if verb in ("GET", "HEAD"):
-        return 405, b""
     if verb != "POST":
         return 405, b""
     ip = (peer_ip or "").split("%", 1)[0]
@@ -133,12 +136,14 @@ def handle_request(
     """Pure request handler. No sockets. Public GET digest; POST still gated."""
     verb = (method or "").upper()
     route = (path or "").split("?", 1)[0]
-    if route in DIGEST_GET_PATHS:
-        if verb in ("GET", "HEAD"):
-            code, payload = handle_digest_get(home, briefer_nick)
-            if verb == "HEAD":
-                return code, b""
-            return code, payload
+    # GET/HEAD digest on /bob/v1/digest, /digest, and reportUrl (/bob/v1/report).
+    if verb in ("GET", "HEAD") and route in DIGEST_GET_PATHS:
+        code, payload = handle_digest_get(home, briefer_nick)
+        if verb == "HEAD":
+            return code, b""
+        return code, payload
+    # POST to digest-only aliases is not a write path.
+    if route in (DIGEST_PATH, DIGEST_ALIAS):
         return 405, b""
     gate = _check_post_route(verb, route, peer_ip, allow_ips)
     if gate[0] != 0:
@@ -177,6 +182,8 @@ def make_handler(home: Path, secret: str, allow_ips: set[str], briefer_nick: str
                 briefer_nick,
             )
             self.send_response(code)
+            if payload:
+                self.send_header("Content-Type", "application/json; charset=utf-8")
             self.send_header("Content-Length", str(len(payload)))
             self.end_headers()
             if payload and method != "HEAD":
@@ -220,7 +227,7 @@ def main() -> None:
     import argparse
 
     p = argparse.ArgumentParser(
-        description="POST /bob/v1/report and /bob/v1/git; public GET /bob/v1/digest"
+        description="POST /bob/v1/report + /bob/v1/git; GET digest on /bob/v1/report and /bob/v1/digest"
     )
     p.add_argument("--home", default="", help="AGENTIC_IRC_HOME (digest.json)")
     p.add_argument("--bind", default="127.0.0.1")
@@ -230,7 +237,7 @@ def main() -> None:
     httpd = serve(home, host=args.bind, port=args.port)
     host, port = httpd.server_address[:2]
     print(
-        f"INFO report listen {host}:{port} GET {DIGEST_PATH} POST {REPORT_PATH} POST {GIT_WEBHOOK_PATH}",
+        f"INFO report listen {host}:{port} GET {REPORT_PATH}|{DIGEST_PATH} POST {REPORT_PATH} POST {GIT_WEBHOOK_PATH}",
         flush=True,
     )
     try:

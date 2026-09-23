@@ -1,6 +1,13 @@
 ﻿# Skill harvest log
 
-<<<<<<< Updated upstream
+## 2026-09-23 — preferred IRC wake = Watch-AgentHealth
+
+Simon: do not arm in-session `listen.stdout.log` `^FROM ` TSR (burns
+Cursor turns on `#bobiverse` spam). Preferred: Watch-AgentHealth /
+AgentMonitor forwards FROM. Updated `agentic-irc` Listener + wake CAST
+IRON; `bob-irc` coordinator wake note. Fleet skill home:
+`agentic_build` `watch-agent-health`.
+
 ## 2026-09-23 — git webhooks announced by Jeeves
 
 Simon `#bobiverse`: harvest the parked git-webhook FR as a skill.
@@ -26,28 +33,6 @@ it. Outbox append UTF-8 no BOM (`Add-Content -Encoding utf8` BOM-breaks
 `PRIVMSG `). `Start-TalkSeat`/`Start-IrcTsr`/`Assert-TalkSeatNick`
 default `-Scripts` is `$PSScriptRoot` (ionos `C:\ai`, marchhare `D:\ai`).
 Skill `agentic-irc`.
-=======
-## 2026-09-23 — preferred IRC wake = Watch-AgentHealth
-
-Simon: do not arm in-session `listen.stdout.log` `^FROM ` TSR (burns
-Cursor turns on `#bobiverse` spam). Preferred: Watch-AgentHealth /
-AgentMonitor forwards FROM. Updated `agentic-irc` Listener + wake CAST
-IRON; `bob-irc` coordinator wake note. Fleet skill home:
-`agentic_build` `watch-agent-health`.
-
-## 2026-09-22 — Watch-AgentHealth monitor vs watch-seat agent
-
-Simon: monitor is deterministic; agent only handles what the monitor
-forwards. `Watch-AgentHealth.ps1` tails `listen.stdout.log` under
-`.agentic-irc-watch-{cursor|grok}`, health-checks the agent process,
-and `resume -p` each `FROM …` line into the saved session. The agent
-owns `irc_agent` + detached `irc_listen` for `.agentic-irc-watch-*`
-only; it does not run, restart, or duplicate the monitor, and does not
-idle-wait in the IDE for the next IRC line. Each wake: act on the
-forwarded line (or Simon in IDE), reply via `outbox` if needed, end
-turn. Desktop `Watch-Agent Cursor.cmd` keeps the monitor window open;
-Cursor health tracks cursor-agent by session id, not launcher PS.
->>>>>>> Stashed changes
 
 ## 2026-09-22 — outbox JOIN is chat; same-box pong miss = killproc
 

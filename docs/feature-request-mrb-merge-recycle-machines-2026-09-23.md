@@ -63,9 +63,9 @@ No UI. Mocks are placeholders so the vision gate can run (no PNG).
 
 | id | file | state |
 |----|------|-------|
-| M1 | docs/mocks/home.html | primary |
-| M2 | docs/mocks/empty.html | empty |
-| M3 | docs/mocks/error.html | error |
+| M1 | docs/mocks/mrb-merge-recycle/home.html | primary |
+| M2 | docs/mocks/mrb-merge-recycle/empty.html | empty |
+| M3 | docs/mocks/mrb-merge-recycle/error.html | error |
 
 ## Gap vs current tree
 

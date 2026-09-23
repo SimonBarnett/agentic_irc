@@ -294,23 +294,27 @@ def _default_restart_chair(irc_root: Path, home: Path) -> None:
     callback = scripts / "bobcallback.py"
     home_s = str(Path(home).expanduser().resolve())
     helper = Path(home_s) / "recycle-chair-after-exit.ps1"
+
+    def _ps_sq(s: str) -> str:
+        return "'" + str(s).replace("'", "''") + "'"
+
     helper.write_text(
         "\n".join(
             [
                 f"$waitPid = {os.getpid()}",
-                f"$install = {repr(str(install))}",
-                f"$callback = {repr(str(callback))}",
-                f"$home = {repr(home_s)}",
-                f"$scripts = {repr(str(scripts))}",
+                f"$install = {_ps_sq(install)}",
+                f"$callback = {_ps_sq(callback)}",
+                f"$agentHome = {_ps_sq(home_s)}",
+                f"$scripts = {_ps_sq(scripts)}",
                 "while (Get-Process -Id $waitPid -ErrorAction SilentlyContinue) { Start-Sleep -Seconds 1 }",
                 "if (Test-Path -LiteralPath $install) {",
                 "  Start-Process -FilePath powershell.exe -ArgumentList @('-NoProfile','-ExecutionPolicy','Bypass','-File',$install) -WorkingDirectory $scripts -WindowStyle Hidden | Out-Null",
                 "}",
                 "Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {",
-                "  $_.CommandLine -and $_.CommandLine -match 'bobcallback\\.py' -and $_.CommandLine.Contains($home)",
+                "  $_.CommandLine -and $_.CommandLine -match 'bobcallback\\.py' -and $_.CommandLine.Contains($agentHome)",
                 "} | ForEach-Object { Stop-Process -Id ([int]$_.ProcessId) -Force -ErrorAction SilentlyContinue }",
                 "if (Test-Path -LiteralPath $callback) {",
-                "  Start-Process -FilePath python -ArgumentList @('-u',$callback,'--home',$home) -WorkingDirectory $scripts -WindowStyle Hidden | Out-Null",
+                "  Start-Process -FilePath python -ArgumentList @('-u',$callback,'--home',$agentHome) -WorkingDirectory $scripts -WindowStyle Hidden | Out-Null",
                 "}",
                 "",
             ]
@@ -361,12 +365,19 @@ def execute_local_recycle(
     h = hooks or RecycleHooks()
     irc_root = find_agentic_irc_root()
     build_root = find_agentic_build_root()
-    if irc_root:
-        (h.git_pull or _default_git_pull)(irc_root)
-    if build_root:
-        (h.restart_watch or _default_restart_watch)(build_root, mid)
-        (h.recycle_tray or _default_recycle_tray)(build_root)
-    if ionos_chair and mid == CHAIR_HOME_MACHINE and irc_root:
+    if h.git_pull:
+        h.git_pull(irc_root or Path("."))
+    elif irc_root:
+        _default_git_pull(irc_root)
+    if h.restart_watch:
+        h.restart_watch(build_root or Path("."), mid)
+    elif build_root:
+        _default_restart_watch(build_root, mid)
+    if h.recycle_tray:
+        h.recycle_tray(build_root or Path("."))
+    elif build_root:
+        _default_recycle_tray(build_root)
+    if ionos_chair and mid == CHAIR_HOME_MACHINE and (h.restart_chair or irc_root):
         (h.restart_chair or _default_restart_chair)(irc_root, Path(home))
         if h.restart_callback:
             h.restart_callback(Path(home), irc_root)

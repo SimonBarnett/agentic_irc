@@ -145,9 +145,45 @@ def test_default_chair_does_not_wait_on_self(monkeypatch, tmp_path):
     helper = home / "recycle-chair-after-exit.ps1"
     assert helper.is_file()
     text = helper.read_text(encoding="utf-8")
+    assert "$agentHome =" in text
     assert "Install-BobChair.ps1" in text
     assert "bobcallback.py" in text
     assert "Get-Process -Id $waitPid" in text
+    assert "--home',$agentHome" in text or "--home,$agentHome" in text
+
+
+def test_chair_helper_agent_home_executes_under_powershell(monkeypatch, tmp_path):
+    import shutil
+    import subprocess
+
+    real_popen = subprocess.Popen
+    monkeypatch.setattr(bob_recycle.os, "name", "nt")
+    monkeypatch.setattr(bob_recycle.subprocess, "Popen", lambda *_a, **_k: object())
+    scripts = tmp_path / "scripts"
+    scripts.mkdir()
+    (scripts / "Install-BobChair.ps1").write_text("# install\n", encoding="utf-8")
+    (scripts / "bobcallback.py").write_text("# cb\n", encoding="utf-8")
+    home = tmp_path / "agent-home"
+    home.mkdir()
+    bob_recycle._default_restart_chair(tmp_path, home)
+    helper = home / "recycle-chair-after-exit.ps1"
+    assigns = [
+        ln
+        for ln in helper.read_text(encoding="utf-8").splitlines()
+        if ln.startswith("$agentHome") or ln.startswith("$install") or ln.startswith("$callback") or ln.startswith("$scripts")
+    ]
+    probe = tmp_path / "probe-agent-home.ps1"
+    probe.write_text("\n".join(assigns) + "\nWrite-Output $agentHome\n", encoding="utf-8")
+    exe = shutil.which("powershell.exe") or shutil.which("pwsh")
+    if not exe:
+        import pytest
+
+        pytest.skip("powershell.exe not on PATH")
+    monkeypatch.setattr(bob_recycle.subprocess, "Popen", real_popen)
+    out = subprocess.check_output([exe, "-NoProfile", "-File", str(probe)], text=True)
+    want = str(home.resolve())
+    assert want in out
+    assert out.strip().splitlines()[-1].strip() == want
 
 
 def test_refuse_never_calls_kill_or_popen(monkeypatch):

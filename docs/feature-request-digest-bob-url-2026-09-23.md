@@ -10,7 +10,11 @@ Bob (and any fleet box) reads fleet digest and shared account metrics from a pub
 
 ## Shape
 
-**service** (LOCKED) — HTTP digest read endpoint + gated webhook writer + long-running metrics PS1. No UI mocks.
+LOCKED
+
+Primary: service
+
+HTTP digest read endpoint + gated webhook writer + long-running metrics PS1. No UI mocks.
 
 ## Success
 

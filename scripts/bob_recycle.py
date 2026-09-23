@@ -190,7 +190,8 @@ def _win_kill_matching_ps1(script_name: str) -> list[int]:
     return killed
 
 
-def _default_restart_watch(build_root: Path, machine_id: str) -> None:
+def _stop_bobiverse_moot(build_root: Path, machine_id: str) -> None:
+    """Match Watch-BobTray Stop-BobiverseMoot. Do not stop BobFleet-* / Watch-BobJobs."""
     if os.name != "nt":
         return
     task = f"_Watch-Bobiverse-{machine_id}"
@@ -199,22 +200,50 @@ def _default_restart_watch(build_root: Path, machine_id: str) -> None:
             "powershell",
             "-NoProfile",
             "-Command",
-            f"Stop-ScheduledTask -TaskName '{task}' -ErrorAction SilentlyContinue; "
-            f"Start-ScheduledTask -TaskName '{task}' -ErrorAction SilentlyContinue",
+            f"Stop-ScheduledTask -TaskName '{task}' -ErrorAction SilentlyContinue",
         ],
         check=False,
         capture_output=True,
         text=True,
     )
+    _win_kill_matching_ps1("Watch-Bobiverse.ps1")
+    _win_kill_matching_ps1("_Watch-Bobiverse")
+    for pid, cmd in _win_process_commandlines("irc_agent.py"):
+        low = cmd.lower()
+        if "bobiverse" not in low:
+            continue
+        if "--chair" in low:
+            continue
+        subprocess.run(["taskkill", "/F", "/PID", str(pid)], check=False, capture_output=True)
+
+
+def _start_bobiverse_moot_wrapper(build_root: Path, machine_id: str) -> None:
+    """Match Start-BobiverseMootWrapper: scheduled task XOR wrapper, not both."""
+    if os.name != "nt":
+        return
+    task = f"_Watch-Bobiverse-{machine_id}"
+    started = subprocess.run(
+        [
+            "powershell",
+            "-NoProfile",
+            "-Command",
+            f"Start-ScheduledTask -TaskName '{task}' -ErrorAction Stop",
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if started.returncode == 0:
+        return
     wrap = build_root / "tools" / f"_Watch-Bobiverse-{machine_id}.ps1"
     generic = build_root / "tools" / "_Watch-Bobiverse.ps1"
-    script = wrap if wrap.is_file() else generic
+    watch = build_root / "tools" / "Watch-Bobiverse.ps1"
+    script = wrap if wrap.is_file() else generic if generic.is_file() else watch
     if not script.is_file():
         return
-    ps = "powershell.exe"
     subprocess.Popen(
         [
-            ps,
+            "powershell.exe",
             "-NoProfile",
             "-WindowStyle",
             "Hidden",
@@ -226,6 +255,11 @@ def _default_restart_watch(build_root: Path, machine_id: str) -> None:
         cwd=str(build_root),
         creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, "CREATE_NO_WINDOW") else 0,
     )
+
+
+def _default_restart_watch(build_root: Path, machine_id: str) -> None:
+    _stop_bobiverse_moot(build_root, machine_id)
+    _start_bobiverse_moot_wrapper(build_root, machine_id)
 
 
 def _default_recycle_tray(build_root: Path) -> None:
@@ -252,24 +286,49 @@ def _default_recycle_tray(build_root: Path) -> None:
 
 
 def _default_restart_chair(irc_root: Path, home: Path) -> None:
-    import agent_control
-
+    """Detach chair + bobcallback restart. Do not wait in this process."""
+    if os.name != "nt":
+        return
     scripts = irc_root / "scripts"
     install = scripts / "Install-BobChair.ps1"
-    agent_control.graceful_stop_agent(home, "recycle-chair", wait_s=8.0)
-    if install.is_file() and os.name == "nt":
-        subprocess.Popen(
+    callback = scripts / "bobcallback.py"
+    home_s = str(Path(home).expanduser().resolve())
+    helper = Path(home_s) / "recycle-chair-after-exit.ps1"
+    helper.write_text(
+        "\n".join(
             [
-                "powershell.exe",
-                "-NoProfile",
-                "-ExecutionPolicy",
-                "Bypass",
-                "-File",
-                str(install),
-            ],
-            cwd=str(scripts),
-            creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, "CREATE_NO_WINDOW") else 0,
-        )
+                f"$waitPid = {os.getpid()}",
+                f"$install = {repr(str(install))}",
+                f"$callback = {repr(str(callback))}",
+                f"$home = {repr(home_s)}",
+                f"$scripts = {repr(str(scripts))}",
+                "while (Get-Process -Id $waitPid -ErrorAction SilentlyContinue) { Start-Sleep -Seconds 1 }",
+                "if (Test-Path -LiteralPath $install) {",
+                "  Start-Process -FilePath powershell.exe -ArgumentList @('-NoProfile','-ExecutionPolicy','Bypass','-File',$install) -WorkingDirectory $scripts -WindowStyle Hidden | Out-Null",
+                "}",
+                "Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {",
+                "  $_.CommandLine -and $_.CommandLine -match 'bobcallback\\.py' -and $_.CommandLine.Contains($home)",
+                "} | ForEach-Object { Stop-Process -Id ([int]$_.ProcessId) -Force -ErrorAction SilentlyContinue }",
+                "if (Test-Path -LiteralPath $callback) {",
+                "  Start-Process -FilePath python -ArgumentList @('-u',$callback,'--home',$home) -WorkingDirectory $scripts -WindowStyle Hidden | Out-Null",
+                "}",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    subprocess.Popen(
+        [
+            "powershell.exe",
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            str(helper),
+        ],
+        cwd=str(scripts),
+        creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, "CREATE_NO_WINDOW") else 0,
+    )
 
 
 def _default_restart_callback(home: Path, irc_root: Path) -> None:
@@ -309,7 +368,8 @@ def execute_local_recycle(
         (h.recycle_tray or _default_recycle_tray)(build_root)
     if ionos_chair and mid == CHAIR_HOME_MACHINE and irc_root:
         (h.restart_chair or _default_restart_chair)(irc_root, Path(home))
-        (h.restart_callback or _default_restart_callback)(Path(home), irc_root)
+        if h.restart_callback:
+            h.restart_callback(Path(home), irc_root)
     return plan
 
 

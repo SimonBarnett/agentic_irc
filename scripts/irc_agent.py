@@ -486,6 +486,12 @@ class Client:
             if who:
                 self.whisper(who, bob_recycle.ack_message(mid, local=True))
             info(f"INFO recycle local machine={mid}")
+            try:
+                import agent_control
+
+                agent_control.request_agent_quit(self.home, "recycle-chair")
+            except Exception:
+                pass
             return
         wire = bob_recycle.format_recycle_wire(mid)
         dest = bobreport.FLEET_CHANNEL

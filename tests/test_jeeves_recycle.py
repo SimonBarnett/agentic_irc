@@ -61,6 +61,7 @@ def test_chair_handles_recycle_ionos(tmp_path, recorder, monkeypatch):
     assert executed == ["ionos"]
     assert any("started ionos" in x for x in recorder)
     assert not any("RECYCLE v1" in x for x in recorder)
+    assert (tmp_path / "agent.quit.request").is_file()
 
 
 def test_bob_ignores_recycle_command(tmp_path, recorder):

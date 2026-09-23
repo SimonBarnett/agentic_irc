@@ -59,3 +59,100 @@ def test_refuse_unknown_does_not_execute():
 def test_protocol_line_recycle():
     assert bobtalk.parse_recycle_command("!recycle ionos")
     assert bobtalk.is_protocol_line("!recycle flamingo")
+
+
+def test_default_watch_is_stop_then_one_start(monkeypatch, tmp_path):
+    runs: list[str] = []
+    pops: list[list[str]] = []
+    kills: list[str] = []
+
+    monkeypatch.setattr(bob_recycle.os, "name", "nt")
+    monkeypatch.setattr(bob_recycle, "_win_kill_matching_ps1", lambda n: kills.append(n) or [])
+    monkeypatch.setattr(bob_recycle, "_win_process_commandlines", lambda _s: [])
+
+    def fake_run(cmd, **_k):
+        text = " ".join(str(x) for x in cmd)
+        runs.append(text)
+        class R:
+            returncode = 1 if "Start-ScheduledTask" in text else 0
+        return R()
+
+    def fake_popen(cmd, **_k):
+        pops.append([str(x) for x in cmd])
+        return object()
+
+    monkeypatch.setattr(bob_recycle.subprocess, "run", fake_run)
+    monkeypatch.setattr(bob_recycle.subprocess, "Popen", fake_popen)
+    wrap = tmp_path / "tools"
+    wrap.mkdir()
+    script = wrap / "_Watch-Bobiverse-flamingo.ps1"
+    script.write_text("# wrap\n", encoding="utf-8")
+    (wrap / "Watch-BobTray.ps1").write_text("# tray\n", encoding="utf-8")
+    bob_recycle._default_restart_watch(tmp_path, "flamingo")
+    assert any("Stop-ScheduledTask" in x for x in runs)
+    assert any("Start-ScheduledTask" in x for x in runs)
+    assert any("Watch-Bobiverse" in x for x in kills)
+    assert len(pops) == 1
+    assert any("_Watch-Bobiverse-flamingo.ps1" in x for x in pops[0])
+    assert not any("Watch-BobJobs" in " ".join(x) for x in pops)
+    assert not any("BobFleet" in r for r in runs)
+
+
+def test_default_tray_kills_old_and_starts_once(monkeypatch, tmp_path):
+    pops: list[list[str]] = []
+    killed: list[str] = []
+    monkeypatch.setattr(bob_recycle.os, "name", "nt")
+    monkeypatch.setattr(bob_recycle, "_win_kill_matching_ps1", lambda n: killed.append(n) or [11])
+    monkeypatch.setattr(bob_recycle.time, "sleep", lambda _s: None)
+
+    def fake_popen(cmd, **_k):
+        pops.append([str(x) for x in cmd])
+        return object()
+
+    monkeypatch.setattr(bob_recycle.subprocess, "Popen", fake_popen)
+    tools = tmp_path / "tools"
+    tools.mkdir()
+    (tools / "Watch-BobTray.ps1").write_text("# tray\n", encoding="utf-8")
+    bob_recycle._default_recycle_tray(tmp_path)
+    assert killed == ["Watch-BobTray.ps1"]
+    assert len(pops) == 1
+    assert any("Watch-BobTray.ps1" in x for x in pops[0])
+
+
+def test_default_chair_does_not_wait_on_self(monkeypatch, tmp_path):
+    pops: list[list[str]] = []
+    waited = []
+
+    def boom(*_a, **_k):
+        waited.append(True)
+        raise AssertionError("must not graceful_stop_agent")
+
+    monkeypatch.setattr(bob_recycle.os, "name", "nt")
+    monkeypatch.setattr(bob_recycle.subprocess, "Popen", lambda cmd, **_k: pops.append([str(x) for x in cmd]) or object())
+    import agent_control
+
+    monkeypatch.setattr(agent_control, "graceful_stop_agent", boom)
+    scripts = tmp_path / "scripts"
+    scripts.mkdir()
+    (scripts / "Install-BobChair.ps1").write_text("# install\n", encoding="utf-8")
+    (scripts / "bobcallback.py").write_text("# cb\n", encoding="utf-8")
+    monkeypatch.setattr(bob_recycle, "find_agentic_irc_root", lambda: tmp_path)
+    home = tmp_path / "home"
+    home.mkdir()
+    bob_recycle._default_restart_chair(tmp_path, home)
+    assert waited == []
+    assert len(pops) == 1
+    helper = home / "recycle-chair-after-exit.ps1"
+    assert helper.is_file()
+    text = helper.read_text(encoding="utf-8")
+    assert "Install-BobChair.ps1" in text
+    assert "bobcallback.py" in text
+    assert "Get-Process -Id $waitPid" in text
+
+
+def test_refuse_never_calls_kill_or_popen(monkeypatch):
+    pops: list = []
+    monkeypatch.setattr(bob_recycle.subprocess, "Popen", lambda *a, **k: pops.append(a) or object())
+    monkeypatch.setattr(bob_recycle, "_win_kill_matching_ps1", lambda n: pops.append(("kill", n)) or [])
+    assert bob_recycle.parse_recycle_query("!recycle nope") == ("refuse", "nope")
+    assert pops == []

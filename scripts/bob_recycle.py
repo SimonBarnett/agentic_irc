@@ -1,0 +1,328 @@
+"""Jeeves !recycle {machine} and RECYCLE v1 wire (issue #152)."""
+from __future__ import annotations
+
+import os
+import subprocess
+import time
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Callable
+
+import bobreport
+
+RECYCLE_WIRE_PREFIX = "RECYCLE v1 "
+CHAIR_HOME_MACHINE = "ionos"
+
+
+def format_recycle_wire(machine_id: str) -> str:
+    mid = (machine_id or "").strip().lower()
+    return f"{RECYCLE_WIRE_PREFIX}{mid}"
+
+
+def parse_recycle_wire(body: str) -> str | None:
+    text = (body or "").strip()
+    if not text.lower().startswith(RECYCLE_WIRE_PREFIX.lower()):
+        return None
+    token = text[len(RECYCLE_WIRE_PREFIX) :].strip().split(None, 1)[0]
+    return resolve_recycle_machine(token)
+
+
+def resolve_recycle_machine(token: str) -> str | None:
+    mid = bobreport.normalize_machine_id(token)
+    if not mid or mid not in bobreport.FLEET_MACHINE_IDS:
+        return None
+    return mid
+
+
+def parse_recycle_query(body: str) -> tuple[str, str | None] | None:
+    """Return (kind, machine_id). kind is 'run' or 'refuse'. None if not !recycle."""
+    text = (body or "").strip()
+    if not text:
+        return None
+    parts = text.split()
+    if parts[0].lower() != "!recycle":
+        return None
+    if len(parts) < 2:
+        return ("refuse", None)
+    mid = resolve_recycle_machine(parts[1])
+    if not mid:
+        return ("refuse", parts[1].lower())
+    return ("run", mid)
+
+
+def local_fleet_machine_id() -> str | None:
+    raw = (os.environ.get("BOB_MACHINE_ID") or os.environ.get("COMPUTERNAME") or "").strip().lower()
+    if not raw:
+        return None
+    return resolve_recycle_machine(raw) or bobreport.normalize_machine_id(raw)
+
+
+def chair_targets_local(machine_id: str) -> bool:
+    return machine_id == CHAIR_HOME_MACHINE
+
+
+def find_agentic_irc_root() -> Path | None:
+    here = Path(__file__).resolve().parent
+    if (here / "irc_agent.py").is_file():
+        return here.parent
+    return None
+
+
+def find_agentic_build_root() -> Path | None:
+    for candidate in (
+        Path(os.environ.get("BOB_REPO_ROOT", "")).expanduser(),
+        Path(r"C:\ai\agentic_build"),
+        Path(r"D:\ai\agentic_build"),
+    ):
+        if not str(candidate):
+            continue
+        tray = candidate / "tools" / "Watch-BobTray.ps1"
+        if tray.is_file():
+            return candidate
+    return None
+
+
+@dataclass
+class RecyclePlan:
+    machine_id: str
+    ionos_chair: bool
+    steps: list[str] = field(default_factory=list)
+
+
+def build_recycle_plan(machine_id: str, *, ionos_chair: bool) -> RecyclePlan:
+    steps = ["git_pull_agentic_irc", "restart_watch_bobiverse", "recycle_watch_bobtray"]
+    if ionos_chair and machine_id == CHAIR_HOME_MACHINE:
+        steps.extend(["restart_bob_chair", "restart_bobcallback"])
+    return RecyclePlan(machine_id=machine_id, ionos_chair=ionos_chair, steps=steps)
+
+
+@dataclass
+class RecycleHooks:
+    git_pull: Callable[[Path], None] | None = None
+    restart_watch: Callable[[Path, str], None] | None = None
+    recycle_tray: Callable[[Path], None] | None = None
+    restart_chair: Callable[[Path, Path], None] | None = None
+    restart_callback: Callable[[Path, Path], None] | None = None
+
+
+def _default_git_pull(repo: Path) -> None:
+    subprocess.run(
+        ["git", "-C", str(repo), "pull", "--ff-only"],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+
+def _win_process_commandlines(match_substr: str) -> list[tuple[int, str]]:
+    if os.name != "nt":
+        return []
+    try:
+        out = subprocess.check_output(
+            [
+                "powershell",
+                "-NoProfile",
+                "-Command",
+                "Get-CimInstance Win32_Process -Filter \"Name='python.exe'\" | "
+                "Select-Object ProcessId,CommandLine | ConvertTo-Json -Compress",
+            ],
+            text=True,
+            errors="replace",
+        )
+    except (OSError, subprocess.CalledProcessError):
+        return []
+    import json
+
+    try:
+        rows = json.loads(out)
+    except json.JSONDecodeError:
+        return []
+    if isinstance(rows, dict):
+        rows = [rows]
+    hits: list[tuple[int, str]] = []
+    for row in rows or []:
+        cmd = str(row.get("CommandLine") or "")
+        if match_substr.lower() in cmd.lower():
+            try:
+                hits.append((int(row.get("ProcessId")), cmd))
+            except (TypeError, ValueError):
+                continue
+    return hits
+
+
+def _win_kill_matching_ps1(script_name: str) -> list[int]:
+    if os.name != "nt":
+        return []
+    try:
+        out = subprocess.check_output(
+            [
+                "powershell",
+                "-NoProfile",
+                "-Command",
+                f"$n='{script_name}'; Get-CimInstance Win32_Process | "
+                "Where-Object { $_.CommandLine -and $_.CommandLine -match $n } | "
+                "Select-Object ProcessId | ConvertTo-Json -Compress",
+            ],
+            text=True,
+            errors="replace",
+        )
+    except (OSError, subprocess.CalledProcessError):
+        return []
+    import json
+
+    try:
+        rows = json.loads(out)
+    except json.JSONDecodeError:
+        return []
+    if isinstance(rows, dict):
+        rows = [rows] if rows.get("ProcessId") else []
+    killed: list[int] = []
+    for row in rows or []:
+        try:
+            pid = int(row.get("ProcessId"))
+        except (TypeError, ValueError):
+            continue
+        try:
+            subprocess.run(["taskkill", "/F", "/PID", str(pid)], check=False, capture_output=True)
+            killed.append(pid)
+        except OSError:
+            pass
+    return killed
+
+
+def _default_restart_watch(build_root: Path, machine_id: str) -> None:
+    if os.name != "nt":
+        return
+    task = f"_Watch-Bobiverse-{machine_id}"
+    subprocess.run(
+        [
+            "powershell",
+            "-NoProfile",
+            "-Command",
+            f"Stop-ScheduledTask -TaskName '{task}' -ErrorAction SilentlyContinue; "
+            f"Start-ScheduledTask -TaskName '{task}' -ErrorAction SilentlyContinue",
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    wrap = build_root / "tools" / f"_Watch-Bobiverse-{machine_id}.ps1"
+    generic = build_root / "tools" / "_Watch-Bobiverse.ps1"
+    script = wrap if wrap.is_file() else generic
+    if not script.is_file():
+        return
+    ps = "powershell.exe"
+    subprocess.Popen(
+        [
+            ps,
+            "-NoProfile",
+            "-WindowStyle",
+            "Hidden",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            str(script),
+        ],
+        cwd=str(build_root),
+        creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, "CREATE_NO_WINDOW") else 0,
+    )
+
+
+def _default_recycle_tray(build_root: Path) -> None:
+    _win_kill_matching_ps1("Watch-BobTray.ps1")
+    tray = build_root / "tools" / "Watch-BobTray.ps1"
+    if not tray.is_file() or os.name != "nt":
+        return
+    time.sleep(0.3)
+    subprocess.Popen(
+        [
+            "powershell.exe",
+            "-NoProfile",
+            "-STA",
+            "-WindowStyle",
+            "Hidden",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            str(tray),
+        ],
+        cwd=str(build_root),
+        creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, "CREATE_NO_WINDOW") else 0,
+    )
+
+
+def _default_restart_chair(irc_root: Path, home: Path) -> None:
+    import agent_control
+
+    scripts = irc_root / "scripts"
+    install = scripts / "Install-BobChair.ps1"
+    agent_control.graceful_stop_agent(home, "recycle-chair", wait_s=8.0)
+    if install.is_file() and os.name == "nt":
+        subprocess.Popen(
+            [
+                "powershell.exe",
+                "-NoProfile",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                str(install),
+            ],
+            cwd=str(scripts),
+            creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, "CREATE_NO_WINDOW") else 0,
+        )
+
+
+def _default_restart_callback(home: Path, irc_root: Path) -> None:
+    if os.name != "nt":
+        return
+    home_s = str(Path(home).expanduser().resolve())
+    for pid, _cmd in _win_process_commandlines("bobcallback.py"):
+        if home_s.replace("\\", "\\\\") in _cmd or home_s in _cmd:
+            subprocess.run(["taskkill", "/F", "/PID", str(pid)], check=False, capture_output=True)
+    cb = irc_root / "scripts" / "bobcallback.py"
+    if not cb.is_file():
+        return
+    subprocess.Popen(
+        ["python", "-u", str(cb), "--home", home_s],
+        cwd=str(irc_root / "scripts"),
+        creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, "CREATE_NO_WINDOW") else 0,
+    )
+
+
+def execute_local_recycle(
+    machine_id: str,
+    home: Path | str,
+    *,
+    ionos_chair: bool = False,
+    hooks: RecycleHooks | None = None,
+) -> RecyclePlan:
+    """Run recycle on this box. Returns the plan that was executed."""
+    mid = resolve_recycle_machine(machine_id) or machine_id
+    plan = build_recycle_plan(mid, ionos_chair=ionos_chair)
+    h = hooks or RecycleHooks()
+    irc_root = find_agentic_irc_root()
+    build_root = find_agentic_build_root()
+    if irc_root:
+        (h.git_pull or _default_git_pull)(irc_root)
+    if build_root:
+        (h.restart_watch or _default_restart_watch)(build_root, mid)
+        (h.recycle_tray or _default_recycle_tray)(build_root)
+    if ionos_chair and mid == CHAIR_HOME_MACHINE and irc_root:
+        (h.restart_chair or _default_restart_chair)(irc_root, Path(home))
+        (h.restart_callback or _default_restart_callback)(Path(home), irc_root)
+    return plan
+
+
+def refuse_message(token: str | None) -> str:
+    if token:
+        return f"recycle: refused unknown machine {token}"
+    return "recycle: need machine (flamingo, marchhare, ionos, dev1)"
+
+
+def ack_message(machine_id: str, *, local: bool) -> str:
+    disp = bobreport.SHORT_TO_MACHINE.get(machine_id, machine_id)
+    if machine_id == "ce-priority-dev1":
+        disp = "dev1"
+    if local:
+        return f"recycle: started {disp} on this box"
+    return f"recycle: requested {disp}"

@@ -11,6 +11,7 @@ import bobstat
 FLEET_MOOT_ID = "b0b1be15e0000001"
 FLEET_MACHINE_ORDER = ("flamingo", "marchhare", "ionos", "ce-priority-dev1")
 BOBIVERSE_CMD = "!bobiverse"
+RECYCLE_CMD = "!recycle"
 BOBIVERSE_COOLDOWN_S = 60.0
 BOBIVERSE_AGENT_COOLDOWN_S = 120.0
 MENTION_COOLDOWN_S = 20.0
@@ -25,6 +26,7 @@ _PROTOCOL_HEADS = (
     "bob tray v1 ",
     "bob digest v1 ",
     "bob v1 ",
+    "recycle v1 ",
     "moot v1 point ",
     "moot v1 open ",
     "moot v1 join ",
@@ -36,6 +38,7 @@ _PROTOCOL_HEADS = (
     "moot v1 roster ",
     "moot v1 handoff ",
     "!bobiverse",
+    "!recycle",
     "!report",
 )
 
@@ -99,6 +102,13 @@ def parse_bobiverse_command(body: str) -> bool:
     if not text:
         return False
     return text.split(None, 1)[0].lower() == BOBIVERSE_CMD
+
+
+def parse_recycle_command(body: str) -> bool:
+    text = (body or "").strip()
+    if not text:
+        return False
+    return text.split(None, 1)[0].lower() == RECYCLE_CMD
 
 
 def is_tray_asker(nick: str) -> bool:

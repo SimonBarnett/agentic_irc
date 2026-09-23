@@ -125,6 +125,7 @@ HELP_TEXT = (
     "!bobiverse          JSON digest (whisper)\n"
     "!bobiverse <id>     one machine\n"
     "!bobiverse ?        this text\n"
+    "!recycle <id>       Jeeves only: fleet recycle\n"
     "write: POST reportUrl (no !report)"
 )
 

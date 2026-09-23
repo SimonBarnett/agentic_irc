@@ -161,7 +161,7 @@ def test_cc_traces_gated_on_pm_open():
     assert bobreport.route_cc("assistant", False) == frozenset({bobreport.CC_SHOP})
     assert bobreport.CC_QUERY in bobreport.route_cc("assistant", True)
     assert bobreport.route_cc("secret", True) == frozenset()
-    assert bobreport.route_cc("working_on", True) == frozenset({bobreport.CC_SHOP})
+    assert bobreport.route_cc("working_on", True) == frozenset()
 
 
 def test_bobiverse_forms(tmp_path):

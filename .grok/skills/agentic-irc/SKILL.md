@@ -31,7 +31,7 @@ Shop rooms are `#<machine-id>` (`#flamingo`, `#marchhare`, `#ionos`, `#ce-priori
 | `w-<shortid>-<pid>` worker | `#{machine}` only | Never `#bobiverse`. Ionos: `w-io-<pid>` → `#ionos`. Spawn helper: `scripts/start_worker_irc_agent.py` (UTF-8) must exist under `C:\ai\agentic_irc\scripts` or `D:\ai\agentic_irc\scripts` (sister search paths). Callers: `agentic_build` `Start-BobCursor` + `Start-BobWorker` after that install. |
 | Jeeves `--chair` | `#bobiverse` + every shop | skill `bob-irc` |
 
-Prefer `scripts/Start-TalkSeat.ps1 -MachineId <id>` (default `#bobiverse,#<machine>,#agentic_irc`). `coordinator.pid` **`seat=`** is authoritative; `listen=` / `agent=` are diagnostics only. Worker homes: `~\.agentic-irc-bobiverse\workers\<id>\<pid>`. Shop + open Query: `This is what I'm working on: …`. Thinking/tool traces go to Query only. One voice: do not write the same line to `bob-*` and the session outbox. Secrets-shaped lines drop. Status read is `!bobiverse` (chair whisper) only — do not send `!report`. Digest chair facts: skill `bob-irc`. Mode 3 pairing PIN is never on `#bobiverse` (skill `invite-airc`).
+Prefer `scripts/Start-TalkSeat.ps1 -MachineId <id>` (default `#bobiverse,#<machine>,#agentic_irc`). `coordinator.pid` **`seat=`** is authoritative; `listen=` / `agent=` are diagnostics only. Worker homes: `~\.agentic-irc-bobiverse\workers\<id>\<pid>`. **`working_on` / idle: webhook only** (`post_working_on.py` — never `PRIVMSG simon` or shop for status). Shop: conversation stdout. Open Query: thinking/tool traces only (not working_on). One voice: do not write the same line to `bob-*` and the session outbox. Secrets-shaped lines drop. Status read is `!bobiverse` (chair whisper) only — do not send `!report`. Digest chair facts: skill `bob-irc`. Mode 3 pairing PIN is never on `#bobiverse` (skill `invite-airc`). `bob-*` assigns idle workers with `PRIVMSG #{machine}`, not Query.
 
 Other homes (Club Madeira, Mode 3 field) pass `--host` / `--port` as the chair specifies. `irc_agent.py` defaults to `irc.ntsa.uk:6697` if `--host` is omitted. Fleet Watch-Bobiverse always passes host/port from `bobiverse.json`.
 
@@ -257,8 +257,7 @@ Before any `outbox.txt` line:
    nick. No Watch-CursorIrc on flamingo. Act if addressed or Simon asked.
    **Wrong:** tell Simon the seat only replies when they ask in the IDE.
    **Right:** each wake is the same obligation as local chat (step 4).
-   Working-on goes to an open Query (`PRIVMSG simon :This is what I'm
-   working on: â€¦`). Create the worker **before** setting `working_on`:
+   **Do not** send `working_on` on IRC (no Query, no shop). Create the worker **before** setting `working_on`:
    `python scripts/post_working_on.py --machine flamingo --pid <seatPid>
    --nick flamingo-<seatPid> --kind cursor --create` (same **seatPid** as
    the nick suffix; script exits if they differ). Run this from the repo

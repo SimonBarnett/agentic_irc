@@ -1137,7 +1137,8 @@ def route_cc(kind: str, pm_open: bool) -> frozenset[str]:
             dest.add(CC_QUERY)
         return frozenset(dest)
     if k in ("working_on",):
-        return frozenset({CC_SHOP})
+        # Issue #167: status is webhook-only; never IRC shop or Query.
+        return frozenset()
     return frozenset()
 
 

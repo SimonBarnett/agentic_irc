@@ -22,8 +22,9 @@ Do **not** point agents at `mrb-*.pdf`. Do **not** implement `!report` (#36 writ
 
 ## Rooms
 
-- Fleet: `#bobiverse` — everyone (bobs, coordinators, Halloy `simon`, chair).
-  No POINT firehose.
+- Fleet: `#bobiverse` — **Jeeves** (GIT, digest chair) + **`bob-*`** (listen for
+  next job). Halloy `simon` operator OK. Talk seats and `w-*` workers do **not**
+  JOIN here by default. No POINT firehose.
 - Shop: `#flamingo` `#marchhare` `#ionos` `#ce-priority-dev1` (`#dev1` same).
   Machine names with `#`. Not `#bob-flamingo` / `#bob-ionos`.
   **`bob-ionos`** is the ionos Bob/Grok builder seat; **`#ionos`** is its shop
@@ -79,12 +80,13 @@ Do **not** point agents at `mrb-*.pdf`. Do **not** implement `!report` (#36 writ
 
 ## CC
 
-Shop: conversation stdout + `This is what I'm working on: …`
-Open Query (Halloy PM): working-on + thinking/tool traces.
-One voice: the `{machine}-{pid}` seat talks. Do not write the same line
-to both `bob-*` and the session outbox. Secrets-shaped lines: drop.
-Workers never JOIN `#bobiverse`. If Simon says `ping` (plain), reply
-`pong` on the same target.
+Shop: conversation stdout only. **`working_on` is webhook-only** (issue #167) —
+`post_working_on.py`, not IRC. Open Query (Halloy PM): thinking/tool traces
+only (not working_on). One voice: the `{machine}-{pid}` seat talks. Do not
+write the same line to both `bob-*` and the session outbox. Secrets-shaped
+lines: drop. Workers never JOIN `#bobiverse`. `bob-*` picks idle workers and
+assigns on `#{machine}` (shop PRIVMSG), not Query. If Simon says `ping`
+(plain), reply `pong` on the same target.
 
 ## Connect
 

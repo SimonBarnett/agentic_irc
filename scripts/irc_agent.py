@@ -380,15 +380,8 @@ class Client:
         out = bobreport.merge_worker_working_on(self._digest_home(), mid, pid, raw)
         if not out.ok or not out.actions:
             return
-        shop = self._shop_channel()
-        if not shop or shop.lower() == bobreport.FLEET_CHANNEL:
-            return
         nick = self.live_nick or self.original_nick
-        line = bobreport.working_on_shop_line(nick, raw)
-        for piece in bobreport.split_irc_text(line):
-            self.send("PRIVMSG " + shop + " :" + piece)
-            time.sleep(FLOOD_S)
-        # Same moment as shop announce: write-only digest webhook (Simon 2026-09-22).
+        # Issue #167: webhook only — no shop PRIVMSG for working_on.
         try:
             import post_working_on as _pwo
 

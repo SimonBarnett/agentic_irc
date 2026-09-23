@@ -355,13 +355,23 @@ def test_working_on_shop_line_and_bob_action(tmp_path, monkeypatch, recorder):
     _open_moot(tmp_path)
     job = "agentic_irc shop-channel FR (BUILD)"
     shop_line = bobreport.working_on_shop_line("w-fl-4412", job)
+    posted: list[dict] = []
+
+    def fake_post(payload: dict) -> int:
+        posted.append(dict(payload))
+        return 204
+
+    monkeypatch.setattr("post_working_on.post", fake_post)
     w = irc_agent.Client(_args(tmp_path, "w-fl-4412", channel="#flamingo"))
     w.cc_send("working_on", job)
     assert bobreport.load_digest(tmp_path)["machines"]["flamingo"]["workers"]["4412"]["working_on"] == job
-    assert recorder == [f"PRIVMSG #flamingo :{shop_line}"]
+    assert recorder == []
+    assert posted and posted[-1].get("working_on") == job
     recorder.clear()
+    posted.clear()
     w.cc_send("working_on", job)
     assert recorder == []
+    assert posted == []
     w.cc_send("assistant", "visible stdout")
     assert recorder == ["PRIVMSG #flamingo :visible stdout"]
     assert not any("#bobiverse" in x for x in recorder)

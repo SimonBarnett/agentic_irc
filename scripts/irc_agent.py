@@ -18,6 +18,7 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import bob_recycle  # noqa: E402
 import bobreport  # noqa: E402
 import bobstat  # noqa: E402
 import bobtalk  # noqa: E402
@@ -463,6 +464,63 @@ class Client:
         info(f"INFO bobiverse digest to={who} form={form} lines={len(lines)}")
         return True
 
+    def _handle_recycle_command(self, asker: str, body: str) -> None:
+        if not getattr(self.args, "chair", False):
+            return
+        parsed = bob_recycle.parse_recycle_query(body)
+        if not parsed:
+            return
+        kind, machine_id = parsed
+        who = (asker or "").strip()
+        if not who or who.lower() in self._mine_nicks():
+            return
+        if kind == "refuse":
+            if who:
+                self.whisper(who, bob_recycle.refuse_message(machine_id))
+            return
+        mid = machine_id or ""
+        if bob_recycle.chair_targets_local(mid):
+            bob_recycle.execute_local_recycle(
+                mid, self.home, ionos_chair=True, hooks=getattr(self, "_recycle_hooks", None)
+            )
+            if who:
+                self.whisper(who, bob_recycle.ack_message(mid, local=True))
+            info(f"INFO recycle local machine={mid}")
+            try:
+                import agent_control
+
+                agent_control.request_agent_quit(self.home, "recycle-chair")
+            except Exception:
+                pass
+            return
+        wire = bob_recycle.format_recycle_wire(mid)
+        dest = bobreport.FLEET_CHANNEL
+        self.send("PRIVMSG " + dest + " :" + wire)
+        time.sleep(FLOOD_S)
+        if who:
+            self.whisper(who, bob_recycle.ack_message(mid, local=False))
+        info(f"INFO recycle wire machine={mid}")
+
+    def _maybe_execute_recycle_wire(self, src: str, body: str) -> bool:
+        if getattr(self.args, "chair", False):
+            return False
+        if not bobtalk.is_fleet_bob_nick(self.original_nick):
+            return False
+        mid = bob_recycle.parse_recycle_wire(body)
+        if not mid:
+            return False
+        local = self._local_machine_id()
+        if not local or local != mid:
+            return False
+        chair = (bobreport.digest_chair_nick(self.home) or "").strip().lower()
+        if not chair or src.strip().lower() != chair:
+            return False
+        bob_recycle.execute_local_recycle(
+            mid, self.home, ionos_chair=False, hooks=getattr(self, "_recycle_hooks", None)
+        )
+        info(f"INFO recycle wire accepted machine={mid} from={src}")
+        return True
+
     def _local_machine_id(self) -> str | None:
         return bobreport.machine_from_nick(self.original_nick)
 
@@ -822,6 +880,11 @@ class Client:
                 if pulled is not None:
                     self._on_digest_whisper(src, pulled)
                     return
+        if bobtalk.parse_recycle_command(body):
+            self._handle_recycle_command(src, body)
+            return
+        if self._maybe_execute_recycle_wire(src, body):
+            return
         if bobtalk.parse_bobiverse_command(body):
             self._answer_bobiverse(src, body)
             return

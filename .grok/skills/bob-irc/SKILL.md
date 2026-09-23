@@ -15,10 +15,13 @@ Canonical facts (do not duplicate the nick table here): `agentic_build/docs/bobi
 Registry machine id for DEV1 is **`ce-priority-dev1`** → nick `bob-dev1` (alias `dev1`).
 
 Live specs in **this** repo: `docs/feature-request-shop-channel-worker-cc-webhook-2026-09-21.md`
-(issue #46 — shop channels, pid workers, write-only callback, `!bobiverse` only),
+(issue #46 — shop channels, pid workers, callback),
+`docs/feature-request-digest-bob-url-2026-09-23.md` (issue #174 — public digest GET,
+`!bobiverse` removed, 2-min metrics PS1),
 `docs/feature-request-house-clean-irc-kit-2026-09-21.md` (issue #34),
 `docs/multi-agent-one-host.md`, `docs/beacon-v1-2026-09-19.md`. Index: `docs/README.md`.
 Do **not** point agents at `mrb-*.pdf`. Do **not** implement `!report` (#36 write path scrubbed).
+Do **not** use `!bobiverse` to refresh or read the digest (#174).
 
 ## Rooms
 
@@ -46,27 +49,28 @@ Do **not** point agents at `mrb-*.pdf`. Do **not** implement `!report` (#36 writ
 
 ## Status read / write
 
-- **Read:** `!bobiverse` / `!bobiverse ?` / `!bobiverse <id>` — **digest chair
-  only** whispers JSON (not the channel). Live chair nick is `Jeeves`
-  (`AGENTIC_IRC_CHAIR_NICK` / `digest.json` `chairNick`). Persist `chairNick`
-  on **each** `bob-*` home. Missing chairNick falls back to briefer, so
-  builders whisper too. `bob-<machine>` without `--chair` must not answer.
-  Digest file is **not** HTTP GET. Each box has its own `digest.json`;
-  flamingo local is not ionos.
+- **Read:** public HTTP GET `http://bob.ntsa.uk/bob/v1/digest` (alias `/digest`).
+  No secret. Nothing in the digest is secure. `!bobiverse` is **gone** (#174) —
+  chair whispers one ERR pointer to that URL if asked. bob-* refresh local
+  `digest.json` via HTTP GET (not IRC). Override with `AGENTIC_IRC_DIGEST_URL`.
+  Each box still keeps a local `digest.json` copy.
 - **Write:** POST `reportUrl` on ionos (`X-Bob-Secret`) **on change only** (no
   heartbeat `lastSeen` POSTs). Create the worker first (`--create`: merge
   pid/nick/kind, no `working_on`), then POST `working_on` or idle:
   `scripts/post_working_on.py --machine <id> --pid <pid>
   --nick <machine>-<pid> --create` then `--working-on '…'` or `--idle`.
   204 = change, 200 = same. Skip if unchanged. `scripts/bobcallback.py`
-  `POST /bob/v1/report`: first change **204**, duplicate **200**, GET/HEAD
-  **405**. Default bind `127.0.0.1` is not peer-reachable — bind a
-  reachable address and open the IONOS port. DNS is optional (IP URL is
-  fine). Live write URL: `http://irc.ntsa.uk:80/bob/v1/report`
-  (GET **405**, POST **204**/**200**; **401** = secret mismatch —
-  writers need ionos `~\.grok\bob\report.secret`, not a local-only
-  copy). `BOB_REPORT_ALLOW` is IPs. `reportUrl` belongs in
-  `bobiverse.json` (add it if missing). See
+  `POST /bob/v1/report`: first change **204**, duplicate **200**; public
+  **GET /bob/v1/digest** returns JSON. Default bind `127.0.0.1` is not
+  peer-reachable — bind a reachable address and open the IONOS port. DNS
+  is optional (IP URL is fine). Live write URL:
+  `http://irc.ntsa.uk:80/bob/v1/report` (POST **204**/**200**; **401** =
+  secret mismatch — writers need ionos `~\.grok\bob\report.secret`).
+  Live read URL: `http://bob.ntsa.uk/bob/v1/digest` (HTTP GET).
+  `BOB_REPORT_ALLOW` is IPs for POST only. Metrics: long-running
+  `tools/Watch-BobDigestMetrics.ps1` every 2 minutes posts xAI weekly +
+  Cursor pcent; digest keeps the **lesser** remaining % as SoT when the
+  same account is reported from many boxes. See
   `docs/bob-report-callback-change-only.md`. Watch skip-heartbeat is
   agentic_build #141.
 - **Git webhooks:** skill `jeeves-git-webhook` (issue #147). `POST /bob/v1/git`
@@ -152,7 +156,8 @@ recycle `bob-*` Watch per machine). Nick suffix = **coordinator PowerShell
 Human monitor (flamingo): Halloy nick not `bob-*` (e.g. `simon`).
 `%AppData%\halloy\config.toml`: server `irc.ntsa.uk:6697` TLS,
 `password_file` = connect.password, channel `#bobiverse` only (shops are
-dynamic). `/join #flamingo` while that bob is up. Type `!bobiverse`.
+dynamic). `/join #flamingo` while that bob is up. Read digest at
+`http://bob.ntsa.uk/bob/v1/digest` (do not type `!bobiverse` — it is gone).
 Address a `bob-*` nick (`@bob-ionos`, `bob-flamingo:`, Query): that seat
 ACKs one English line (status + weekly). `weekly=0` still answers
 (empty weekly is not deaf; #54). Optional **grok-talk** (LLM listen+reply;
@@ -166,7 +171,7 @@ completions via `grok-outbox.jsonl` → `outbox.txt`
 Watch stays no grok.exe. Recycle Watch-Bobiverse after pull so the
 running `irc_agent` loads mention ACK + grok-talk hooks.
 
-`!bobiverse` `online` is shop JOIN / report POST, not NAMES. A box that
+Digest `online` is shop JOIN / report POST, not NAMES. A box that
 only POINTs on `#bobiverse` still shows `I am offline` in the digest.
 
 ## Recycle while a second irc_agent is up
@@ -197,6 +202,7 @@ Do not `Stop-ScheduledTask BobFleet-*` to recover IRC.
 
 - Point any `bob-*` nick at Libera.
 - Run two Watch-Bobiverse processes.
-- Open public `:6667` or a GET digest URL.
+- Open public `:6667` (plain IRC). Public digest GET is only `/bob/v1/digest`.
 - WinRM.
 - Stamp UAT (Bob only).
+- Use `!bobiverse` to update or read the digest (#174).

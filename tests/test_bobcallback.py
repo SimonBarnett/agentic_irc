@@ -48,8 +48,6 @@ def test_post_merge_no_get_digest(tmp_path):
     for method, path, expect in (
         ("GET", "/bob/v1/report", 405),
         ("HEAD", "/bob/v1/report", 405),
-        ("GET", "/digest", 404),
-        ("GET", "/bob/v1/digest", 404),
         ("GET", "/", 404),
     ):
         code, payload = bobcallback.handle_request(
@@ -57,7 +55,19 @@ def test_post_merge_no_get_digest(tmp_path):
         )
         assert code == expect
         assert payload == b""
-        assert b"flamingo" not in payload
+
+    for path in ("/bob/v1/digest", "/digest"):
+        code, payload = bobcallback.handle_request(
+            "GET", path, {}, b"", "127.0.0.1", tmp_path, secret, allow
+        )
+        assert code == 200
+        assert b"ionos" in payload
+        parsed = json.loads(payload.decode("utf-8"))
+        assert parsed["machines"]["ionos"]["workers"]["884"]["working_on"] == "callback"
+        code_h, payload_h = bobcallback.handle_request(
+            "HEAD", path, {}, b"", "127.0.0.1", tmp_path, secret, allow
+        )
+        assert code_h == 200 and payload_h == b""
 
 
 def test_callback_auth_and_allowlist(tmp_path):
@@ -103,10 +113,11 @@ def test_callback_auth_and_allowlist(tmp_path):
     assert code == 400
 
 
-def test_serve_factory_has_no_get_digest(tmp_path):
+def test_serve_factory_has_public_get_digest(tmp_path):
     handler_cls = bobcallback.make_handler(tmp_path, "s", {"127.0.0.1"})
     assert hasattr(handler_cls, "do_GET")
     assert hasattr(handler_cls, "do_POST")
     src = Path(bobcallback.__file__).read_text(encoding="utf-8")
-    assert "digest.json" not in src.lower() or "never returns digest" in src
-    assert "do_GET" in src and "GET never" in src
+    assert "DIGEST_PATH" in src
+    assert "handle_digest_get" in src
+    assert "do_GET" in src

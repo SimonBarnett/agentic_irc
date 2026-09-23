@@ -169,9 +169,12 @@ def test_bobiverse_forms(tmp_path):
     assert bobreport.parse_bobiverse_query("!BOBIVERSE ?") == ("help", None)
     assert bobreport.parse_bobiverse_query("!bobiverse flamingo") == ("machine", "flamingo")
     assert bobreport.parse_bobiverse_query("!bobiverse dev1") == ("machine", "ce-priority-dev1")
+    assert bobreport.BOBIVERSE_GONE.startswith("ERR !bobiverse gone")
+    assert "bob.ntsa.uk" in bobreport.digest_url()
     help_lines = bobreport.format_digest_whisper_lines(tmp_path, "bob-flamingo", form="help")
     assert help_lines == bobreport.HELP_TEXT.splitlines()
     assert "no !report" in "\n".join(help_lines)
+    assert "bob.ntsa.uk" in "\n".join(help_lines)
     miss = bobreport.format_digest_whisper_lines(tmp_path, "bob-flamingo", form="machine", machine_id="nope")
     assert miss == [bobreport.NO_MACHINE]
     bobreport.start_worker(tmp_path, "flamingo", 4412, "agentic_irc shop-channel FR")
@@ -189,6 +192,44 @@ def test_bobiverse_forms(tmp_path):
     obj = json.loads("".join(pieces))
     assert "ionos" in obj["machines"]
     assert obj["machines"]["ionos"]["status"] == "I am offline"
+
+
+def test_cursor_pools_lesser_across_machines(tmp_path):
+    bobreport.apply_callback(
+        tmp_path,
+        {"op": "merge", "machine": "flamingo", "pcent": {"cursor-models": 80}},
+    )
+    bobreport.apply_callback(
+        tmp_path,
+        {"op": "merge", "machine": "ionos", "pcent": {"cursor-models": 12}},
+    )
+    obj = bobreport.build_digest_object(tmp_path, "Jeeves")
+    models = next(p for p in obj["cursor_pools"] if p.get("id") == "cursor-models")
+    assert models["remaining"] == 12
+    bobreport.apply_callback(
+        tmp_path,
+        {"op": "merge", "machine": "flamingo", "pcent": {"cursor-models": 99}, "weekly": 90},
+    )
+    bobreport.apply_callback(
+        tmp_path,
+        {"op": "merge", "machine": "flamingo", "weekly": 40},
+    )
+    ent = bobreport.load_digest(tmp_path)["machines"]["flamingo"]
+    assert ent["pcent"]["cursor-models"] == 80
+    assert ent["weekly"] == 40
+    obj2 = bobreport.build_digest_object(tmp_path, "Jeeves")
+    models2 = next(p for p in obj2["cursor_pools"] if p.get("id") == "cursor-models")
+    assert models2["remaining"] == 12
+
+
+def test_watch_metrics_script_present():
+    root = Path(__file__).resolve().parents[1]
+    script = root / "tools" / "Watch-BobDigestMetrics.ps1"
+    assert script.is_file()
+    text = script.read_text(encoding="utf-8")
+    assert "IntervalSeconds = 120" in text
+    assert "Get-BobWeeklyRemaining" in text
+    assert "bob/v1/report" in text
 
 
 def test_callback_merge_delete_shop_down(tmp_path):
@@ -501,7 +542,7 @@ def test_cursor_pools_weekly_vs_cursor_period_and_peer_pcent(tmp_path):
     models_pool = next(p for p in obj["cursor_pools"] if p.get("id") == "cursor-models")
     assert models_pool["period_end"] == cursor_end
     assert models_pool["reset"] == cursor_end
-    assert models_pool["remaining"] == 55
+    assert models_pool["remaining"] == 12
     assert models_pool.get("overage") is None
     assert models_pool["seat"] == "cursor-models"
 
@@ -544,4 +585,4 @@ def test_cursor_pools_official_groups_reject_xai_seat_labels(tmp_path):
     assert labels.intersection({"Cursor Models", "Other Models", "Grok Weekly"})
     models = next(p for p in pools if p["id"] == "cursor-models")
     assert models["label"] == "Cursor Models"
-    assert models["remaining"] == 99
+    assert models["remaining"] == 40

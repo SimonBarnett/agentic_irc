@@ -155,6 +155,7 @@ class Client:
             self.channels = [chan]
         self.chan = self.channels[0]
         self._pending_joins: set[str] = {c.lower() for c in self.channels}
+        self._last_call_channel: str | None = None
         if args.home:
             os.environ["AGENTIC_IRC_HOME"] = str(Path(args.home).expanduser())
         self.home = seal.home()
@@ -203,8 +204,23 @@ class Client:
             self.sock.sendall((line + "\r\n").encode("utf-8"))
 
     def say(self, msg: str) -> None:
-        self.send("PRIVMSG " + self.chan + " :" + msg)
+        dest = self._reply_channel()
+        self.send("PRIVMSG " + dest + " :" + msg)
         time.sleep(FLOOD_S)
+
+    def _reply_channel(self) -> str:
+        """Prefer last inbound joined channel (call channel); else primary JOIN."""
+        last = (self._last_call_channel or "").strip()
+        if last and self._joined_channel(last):
+            return bobreport.normalize_channel(last) or self.chan
+        return self.chan
+
+    def _note_call_channel(self, target: str) -> None:
+        if not self._joined_channel(target):
+            return
+        ch = bobreport.normalize_channel(target)
+        if ch:
+            self._last_call_channel = ch
 
     def _joined_channel(self, target: str) -> bool:
         t = bobreport.normalize_channel(target).lower()
@@ -631,7 +647,7 @@ class Client:
             return True
         self._mention_last[key] = now
         if to_channel:
-            dest = bobreport.normalize_channel(target) or self.chan
+            dest = bobreport.normalize_channel(target) or self._reply_channel()
             self.send("PRIVMSG " + dest + " :" + line)
             time.sleep(FLOOD_S)
         else:
@@ -880,6 +896,8 @@ class Client:
         tgt_l = target.lower()
         to_channel = self._joined_channel(target)
         to_me = tgt_l in self._mine_nicks()
+        if to_channel:
+            self._note_call_channel(target)
         if not to_channel and not to_me:
             return
         if to_me:

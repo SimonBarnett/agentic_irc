@@ -99,7 +99,7 @@ def outbox_pos_path(outbox: Path) -> Path:
 
 
 def load_outbox_pos(outbox: Path) -> int:
-    """Byte offset of last successfully drained complete line. Missing ÔåÆ 0 (restart sends JOIN)."""
+    """Byte offset of last successfully drained complete line. Missing → 0 (restart sends JOIN)."""
     p = outbox_pos_path(outbox)
     if not p.exists():
         return 0
@@ -395,7 +395,7 @@ class Client:
             payload["working_on"] = raw
             code = _pwo.post(payload)
             info(f"INFO working_on webhook POST {code} machine={mid} pid={pid}")
-        except Exception as exc:  # noqa: BLE001 ÔÇö never break IRC announce on webhook fail
+        except Exception as exc:  # noqa: BLE001 — never break IRC announce on webhook fail
             info(f"INFO working_on webhook skip: {exc}")
 
     def apply_digest_callback(self, payload: dict) -> None:

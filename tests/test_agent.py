@@ -307,35 +307,3 @@ def test_bob_nick_acks_channel_mention(tmp_path: Path, monkeypatch):
     assert acks, sent
     assert "weekly=0" in acks[0]
     assert acks[0].startswith("PRIVMSG #bobiverse :")
-
-
-def test_quit_req_parts_then_quits(tmp_path: Path, monkeypatch):
-    monkeypatch.setenv("AGENTIC_IRC_HOME", str(tmp_path))
-    (tmp_path / "quit.req").write_text("tui closed\n", encoding="utf-8")
-    c = irc_agent.Client(_args(tmp_path, "flamingo-1"))
-    sent: list[str] = []
-    c.send = lambda line: sent.append(line)  # type: ignore[method-assign]
-    c.sock = object()  # type: ignore[assignment]
-    c.channels = ["#bobiverse", "#flamingo"]
-    assert c.apply_quit_request() is True
-    assert "PART #bobiverse :tui closed" in sent
-    assert "PART #flamingo :tui closed" in sent
-    assert "QUIT :tui closed" in sent
-    assert c.stop.is_set()
-    assert not (tmp_path / "quit.req").exists()
-
-
-def test_outbox_quit_is_raw_not_say(tmp_path: Path, monkeypatch):
-    monkeypatch.setenv("AGENTIC_IRC_HOME", str(tmp_path))
-    monkeypatch.setattr(irc_agent, "FLOOD_S", 0)
-    (tmp_path / "outbox.txt").write_text("QUIT :tui closed\n", encoding="utf-8")
-    c = irc_agent.Client(_args(tmp_path, "flamingo-1"))
-    sent: list[str] = []
-    c.send = lambda line: sent.append(line)  # type: ignore[method-assign]
-    c.say = lambda msg: sent.append("SAY:" + msg)  # type: ignore[method-assign]
-    c.sock = object()  # type: ignore[assignment]
-    c.channels = ["#bobiverse"]
-    assert c.drain_outbox_once() == ["QUIT :tui closed"]
-    assert "QUIT :tui closed" in sent
-    assert not any(x.startswith("SAY:") for x in sent)
-    assert c.stop.is_set()

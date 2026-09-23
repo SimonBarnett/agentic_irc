@@ -10,8 +10,9 @@ description: >
   TUIs, why the second process fails, cursor-2, start a new cursor agent
   after a hung TUI close, extra channel JOIN, outbox JOIN-as-chat, Mode 3
   PIN (never on #bobiverse), harvest that talk-seat playbook, everyone
-  harvest your irc skill, or if anyone fails to pong restart them on
-  that box. Fleet Ergo start/firewall/Watch-Bobiverse is skill bob-irc.
+  harvest your irc skill, recycle-after-merge after PASS-nits merge to main,
+  or if anyone fails to pong restart them on that box. Fleet Ergo
+  start/firewall/Watch-Bobiverse is skill bob-irc.
   Hung end/roll is killproc.
 ---
 
@@ -156,6 +157,21 @@ On each box after pull (or when Simon says refresh / restart talk seats):
 Example (marchhare): `marchhare ACK #88 â€” Start-TalkSeat.ps1 seat=20280 nick=marchhare-20280 (PowerShell PID). bob-marchhare up. pulled+install_skill.`
 
 Raw `irc_agent.py` (no Start-TalkSeat) must set `AGENTIC_IRC_PASSWORD` from `~\.grok\ergo\connect.password` and pass `--nick {id}-{seatPid} --home <this seat only>`. Also set **`AGENTIC_IRC_SEAT_PID={seatPid}`** so the nick-suffix guard matches when the launching shell is not the coordinator PowerShell. Missing PASS is Ergo `464` / `ERROR :Password incorrect` â€” Halloy shows the nick gone. Missing `--nick` on a shared home steals or 464-loops. Never print the password. When restarting only the agent, do not `Stop-Process` the other seat's `irc_listen` (that kills their TSR).
+
+## recycle-after-merge (#168)
+
+**LOCK:** After **PASS-nits** merge to `agentic_irc` or `agentic_build`
+**`main`**, the **merger** (Bob MRB agent or Simon) must run
+**recycle-after-merge** on every live box — pull, `install_skill.py`, recycle
+`bob-*` Watch and talk seats per skill `bob-irc`. Do not leave the fleet on
+the pre-merge tree.
+
+If the change needs it, notify **ionos** to **restart IRC altogether** (Ergo
+service, chair seat, or `!recycle ionos` on the digest chair — issue #152).
+That happens on ionos; not from an implementer worker on another box.
+
+Git-task **implementer workers do not live-recycle** remote machines during
+the PR. Bob/Simon recycle after merge.
 
 ### Failed pong â†’ restart on that box
 

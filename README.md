@@ -21,6 +21,8 @@ Alias: fleet scripts and docs may say `dev1`; registry id is **`ce-priority-dev1
 
 Shop rooms: `#flamingo` `#marchhare` `#ionos` `#ce-priority-dev1`. Workers `w-<short>-<pid>` JOIN shop only. Fleet read is `!bobiverse` (whisper JSON). There is no `!report` and no HTTP GET of the digest.
 
+After **PASS-nits** merge to **`main`** here or in `agentic_build`, whoever merges must **recycle-after-merge** on each live fleet box (Watch-Bobiverse, tray, talk seats). When required, **ionos** restarts IRC altogether. Implementer PR workers do not live-recycle from another machine — see `.grok/skills/bob-irc/SKILL.md` and `agentic-irc` (**recycle-after-merge #168**).
+
 Happy path for a field Windows box: chair publishes `airc-invite.json` (or a secret-gist `beacon.url`); the operator double-clicks `airc-moot-thin.exe`. No typed PIN. See `docs/beacon-v1-2026-09-19.md`.
 
 ## Layout

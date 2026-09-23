@@ -2,8 +2,9 @@
 name: bob-irc
 description: >
   Private Ergo for #bobiverse on ionos (irc.ntsa.uk:6697 TLS). Use when the user
-  says join Ergo, irc.ntsa.uk, bobiverse IRC, recycle Watch-Bobiverse, BobIrcd,
-  Libera banned, Halloy, shop channel, !bobiverse, or /bob-irc. Fleet status is
+  says join Ergo, irc.ntsa.uk, bobiverse IRC, recycle Watch-Bobiverse,
+  recycle-after-merge, PASS-nits merge main, BobIrcd, Libera banned, Halloy,
+  shop channel, !bobiverse, or /bob-irc. Fleet status is
   this server, not Libera. Job queue is grok-build-fleet.
 ---
 
@@ -116,6 +117,23 @@ bots** on IRC (`bob-*`, `{machine}-{pid}`, chair, workers addressing you)
 not wait for a human paste. Same `working_on` / `--idle` POSTs. Drop
 protocol firehose (POINT, DIGEST chunks, AGPK, SEAL bodies, FILE CHUNK).
 Canonical wording also lives in skill `agentic-irc` (Listener + TSR).
+
+## recycle-after-merge (#168)
+
+**LOCK:** After **PASS-nits** merge to `agentic_irc` or `agentic_build`
+**`main`**, whoever merges (Bob MRB agent or Simon) owns **recycle-after-merge**
+on the live fleet. Pull on each box, then recycle **Watch-Bobiverse**,
+**Watch-BobTray**, and talk seats as the change needs (see **Join a build box**
+and **Recycle while a second irc_agent is up** above).
+
+When the change needs it, **ionos** must **restart IRC altogether** (e.g.
+`Start-Service BobIrcd`, recycle chair/Jeeves, or chair-only `!recycle ionos`
+per issue #152). That is Bob/Simon on ionos — not an implementer worker on
+another machine.
+
+**Implementer PR workers do not live-recycle** flamingo, marchhare, or ionos
+from ce-priority-dev1 or any remote seat. Docs/skills/code only until merge;
+then the merger recycles.
 
 ## Post-merge fleet announce (#88 talk-seat PID)
 

@@ -143,9 +143,10 @@ def test_default_chair_does_not_wait_on_self(monkeypatch, tmp_path):
     bob_recycle._default_restart_chair(tmp_path, home)
     assert waited == []
     assert len(pops) == 1
-    helper = home / "recycle-chair-after-exit.ps1"
-    assert helper.is_file()
-    text = helper.read_text(encoding="utf-8")
+    helper_path = os.path.join(bob_recycle._native_abspath(home), "recycle-chair-after-exit.ps1")
+    assert os.path.isfile(helper_path)
+    with open(helper_path, encoding="utf-8") as fh:
+        text = fh.read()
     assert "$agentHome =" in text
     assert "Install-BobChair.ps1" in text
     assert "bobcallback.py" in text
@@ -167,10 +168,12 @@ def test_chair_helper_agent_home_executes_under_powershell(monkeypatch, tmp_path
     home = tmp_path / "agent-home"
     home.mkdir()
     bob_recycle._default_restart_chair(tmp_path, home)
-    helper = home / "recycle-chair-after-exit.ps1"
+    helper_path = os.path.join(bob_recycle._native_abspath(home), "recycle-chair-after-exit.ps1")
+    with open(helper_path, encoding="utf-8") as fh:
+        helper_lines = fh.read().splitlines()
     assigns = [
         ln
-        for ln in helper.read_text(encoding="utf-8").splitlines()
+        for ln in helper_lines
         if ln.startswith("$agentHome") or ln.startswith("$install") or ln.startswith("$callback") or ln.startswith("$scripts")
     ]
     probe = tmp_path / "probe-agent-home.ps1"

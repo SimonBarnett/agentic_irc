@@ -58,7 +58,11 @@ LOCKED
 
 ## Screens
 
-No UI. No `docs/mocks/` for this FR.
+| id | file | state |
+|----|------|-------|
+| M1 | docs/mocks/home.html | key — fleet + shop as designed |
+| M2 | docs/mocks/empty.html | empty — no shop assign |
+| M3 | docs/mocks/error.html | error — Query working_on / ghost flamingo |
 
 ## Gap vs current tree (`eee0bd0` / skill)
 

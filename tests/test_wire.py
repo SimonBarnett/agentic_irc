@@ -118,6 +118,7 @@ def test_irc_skill_leaflets_exist():
         "agentic-dumb",
         "invite-airc",
         "bob-irc",
+        "jeeves-git-webhook",
     )
     import install_skill as inst
 
@@ -126,6 +127,7 @@ def test_irc_skill_leaflets_exist():
         text = (root / ".grok" / "skills" / name / "SKILL.md").read_text(encoding="utf-8")
         assert ("name: " + name) in text
     assert "bob-irc" not in inst.COPY_SCRIPTS
+    assert "jeeves-git-webhook" not in inst.COPY_SCRIPTS
 
 
 def test_install_skill_scripts_include_grok_talk():

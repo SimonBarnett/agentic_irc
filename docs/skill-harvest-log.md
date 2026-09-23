@@ -1,5 +1,13 @@
 ﻿# Skill harvest log
 
+## 2026-09-23 — git webhooks announced by Jeeves
+
+Simon `#bobiverse`: harvest the parked git-webhook FR as a skill.
+`.grok/skills/jeeves-git-webhook` owns issue #147 (accept git webhooks
+on the ionos listener; Jeeves announces; digest `POST /bob/v1/report`
+unchanged; park-only until Simon says go). `bob-irc` points there.
+`install_skill.py` copies the leaflet and does not dump scripts.
+
 ## 2026-09-22 — caller polls IRC; Agent TSR on data
 
 Simon `#bobiverse`: agent still initialises IRC; checking for new

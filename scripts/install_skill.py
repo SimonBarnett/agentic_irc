@@ -38,6 +38,7 @@ SKILLS = (
     "agentic-dumb",
     "invite-airc",
     "bob-irc",
+    "jeeves-git-webhook",
 )
 COPY_SCRIPTS = (
     "agentic-irc",

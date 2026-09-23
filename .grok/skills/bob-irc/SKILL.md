@@ -67,6 +67,8 @@ Do **not** point agents at `mrb-*.pdf`. Do **not** implement `!report` (#36 writ
   `bobiverse.json` (add it if missing). See
   `docs/bob-report-callback-change-only.md`. Watch skip-heartbeat is
   agentic_build #141.
+- **Git webhooks:** skill `jeeves-git-webhook` (issue #147). Do not copy
+  that playbook here.
 - **Chair seat:** `scripts/Install-BobChair.ps1` / `irc_agent.py --chair` JOINs
   `#bobiverse` only. MOOT floor chair is separate from digest chair.
 - Machines persist (`status`: `I am online` / `I am offline`). Workers are

@@ -568,6 +568,17 @@ class CallbackOutcome:
     changed: bool = True
 
 
+@dataclass
+class GitWebhookOutcome:
+    ok: bool
+    err: str = ""
+    announced: bool = False
+
+
+GIT_ANNOUNCE_PREFIX = "GIT "
+MAX_GIT_ANNOUNCE = 380
+
+
 CHAIR_NICK_ENV = "AGENTIC_IRC_CHAIR_NICK"
 
 
@@ -1002,6 +1013,115 @@ def apply_callback(home: Path, payload: dict, briefer_nick: str = "") -> Callbac
             return CallbackOutcome(ok=True, actions=actions)
         return CallbackOutcome(ok=False, err=out.err or "bad shop-down")
     return CallbackOutcome(ok=False, err="bad op")
+
+
+def _github_actor(payload: dict) -> str:
+    for key in ("sender", "pusher"):
+        ent = payload.get(key)
+        if isinstance(ent, dict):
+            name = str(ent.get("login") or ent.get("name") or "").strip()
+            if name:
+                return name
+    return ""
+
+
+def _github_repo_name(payload: dict) -> str:
+    repo = payload.get("repository")
+    if isinstance(repo, dict):
+        return str(repo.get("full_name") or repo.get("name") or "").strip()
+    return ""
+
+
+def format_github_webhook_announce(event: str, payload: dict) -> str:
+    """Single fleet line for digest chair (Jeeves) on #bobiverse."""
+    ev = (event or "").strip().lower()
+    repo = _github_repo_name(payload)
+    actor = _github_actor(payload)
+    bits: list[str] = [ev]
+    if repo:
+        bits.append(repo)
+    if ev == "ping":
+        zen = str(payload.get("zen") or "").strip()
+        if zen:
+            bits.append(zen[:80])
+    elif ev == "push":
+        ref = str(payload.get("ref") or "").strip()
+        if ref.startswith("refs/heads/"):
+            ref = ref[len("refs/heads/") :]
+        if ref:
+            bits.append(ref)
+        after = str(payload.get("after") or "").strip()
+        if after:
+            bits.append(after[:12])
+        commits = payload.get("commits")
+        if isinstance(commits, list) and commits:
+            bits.append(f"{len(commits)} commit(s)")
+    elif ev == "pull_request":
+        pr = payload.get("pull_request")
+        if isinstance(pr, dict):
+            action = str(payload.get("action") or "").strip()
+            if action:
+                bits.append(action)
+            num = pr.get("number")
+            if num is not None:
+                bits.append(f"#{num}")
+            title = str(pr.get("title") or "").strip()
+            if title:
+                bits.append(title[:120])
+    elif ev == "issues":
+        issue = payload.get("issue")
+        if isinstance(issue, dict):
+            action = str(payload.get("action") or "").strip()
+            if action:
+                bits.append(action)
+            num = issue.get("number")
+            if num is not None:
+                bits.append(f"#{num}")
+            title = str(issue.get("title") or "").strip()
+            if title:
+                bits.append(title[:120])
+    else:
+        action = str(payload.get("action") or "").strip()
+        if action:
+            bits.append(action)
+    if actor:
+        bits.append(f"by {actor}")
+    line = GIT_ANNOUNCE_PREFIX + " ".join(p for p in bits if p)
+    if len(line) > MAX_GIT_ANNOUNCE:
+        line = line[: MAX_GIT_ANNOUNCE - 1] + "…"
+    return line
+
+
+def enqueue_chair_fleet_privmsg(home: Path, body: str, channel: str = FLEET_CHANNEL) -> bool:
+    """Append PRIVMSG for digest chair outbox (Jeeves drains to IRC)."""
+    text = (body or "").replace("\r", " ").replace("\n", " ").strip()
+    if not text or looks_like_secret(text):
+        return False
+    root = fleet_digest_home(Path(home))
+    outbox = root / "outbox.txt"
+    try:
+        outbox.parent.mkdir(parents=True, exist_ok=True)
+        with outbox.open("a", encoding="utf-8") as fh:
+            fh.write(f"PRIVMSG {channel} :{text}\n")
+        return True
+    except OSError:
+        return False
+
+
+def apply_git_webhook(home: Path, event: str, payload: dict) -> GitWebhookOutcome:
+    if not (event or "").strip():
+        return GitWebhookOutcome(ok=False, err="no event")
+    if not isinstance(payload, dict):
+        return GitWebhookOutcome(ok=False, err="malformed")
+    blob = json.dumps(payload, separators=(",", ":"))
+    if looks_like_secret(blob):
+        return GitWebhookOutcome(ok=False, err="secret")
+    line = format_github_webhook_announce(event, payload)
+    if not line.startswith(GIT_ANNOUNCE_PREFIX) or looks_like_secret(line):
+        return GitWebhookOutcome(ok=False, err="announce")
+    if not enqueue_chair_fleet_privmsg(home, line):
+        return GitWebhookOutcome(ok=False, err="outbox")
+    return GitWebhookOutcome(ok=True, announced=True)
 
 
 def route_cc(kind: str, pm_open: bool) -> frozenset[str]:

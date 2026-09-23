@@ -107,4 +107,4 @@ def test_bobiverse_unchanged_after_recycle_parser(tmp_path, monkeypatch, recorde
     bobreport.persist_chair_nick(tmp_path, "bob-chair")
     chair = irc_agent.Client(_args(tmp_path, "bob-chair", chair=True))
     chair.handle_privmsg("simon!u@h", "#bobiverse", "!bobiverse")
-    assert any(x.startswith("PRIVMSG simon :") for x in recorder)
+    assert any(bobreport.BOBIVERSE_GONE in x for x in recorder)

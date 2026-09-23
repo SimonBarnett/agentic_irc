@@ -431,6 +431,7 @@ class Client:
         self._pm_open[n.lower()] = time.time()
 
     def _answer_bobiverse(self, asker: str, body: str) -> bool:
+        """!bobiverse removed (#174). Whisper one-line pointer to public digest URL."""
         who = (asker or "").strip()
         if not who or who.lower() in self._mine_nicks():
             return True
@@ -439,22 +440,14 @@ class Client:
         parsed = bobreport.parse_bobiverse_query(body)
         if not parsed:
             return True
-        form, machine_id = parsed
         now = time.time()
         key = who.lower()
-        tray = bobtalk.is_tray_asker(who)
-        cooldown = bobtalk.BOBIVERSE_AGENT_COOLDOWN_S if tray else bobtalk.BOBIVERSE_COOLDOWN_S
-        last_map = self._bobiverse_last_tray if tray else self._bobiverse_last_query
-        last = last_map.get(key, 0.0)
-        if now - last < cooldown:
+        last = self._bobiverse_last_query.get(key, 0.0)
+        if now - last < bobtalk.BOBIVERSE_COOLDOWN_S:
             return True
-        last_map[key] = now
-        briefer = bobtalk.briefer_nick(self._fleet_moot_state()) or self.live_nick
-        lines = bobreport.format_digest_whisper_lines(
-            self.home, briefer, form=form, machine_id=machine_id, english=not tray
-        )
-        self._deliver_whispers(who, lines)
-        info(f"INFO bobiverse digest to={who} form={form} lines={len(lines)}")
+        self._bobiverse_last_query[key] = now
+        self._deliver_whispers(who, [bobreport.BOBIVERSE_GONE])
+        info(f"INFO bobiverse refused to={who} url={bobreport.digest_url()}")
         return True
 
     def _handle_recycle_command(self, asker: str, body: str) -> None:
@@ -545,17 +538,40 @@ class Client:
             info(f"INFO ghost-prune nicks={','.join(pruned)}")
 
     def _maybe_bobiverse_pull(self) -> None:
+        """Refresh local digest via public HTTP GET (#174). No IRC !bobiverse."""
         if not self._should_bobiverse_pull():
-            return
-        if not self._joined_channel(bobreport.FLEET_CHANNEL):
             return
         now = time.time()
         if now - self._bobiverse_pull_last < bobtalk.BOBIVERSE_AGENT_COOLDOWN_S:
             return
         self._bobiverse_pull_last = now
-        self.send("PRIVMSG " + bobreport.FLEET_CHANNEL + " :" + bobtalk.BOBIVERSE_CMD)
-        time.sleep(FLOOD_S)
-        info("INFO bobiverse pull sent")
+        doc = bobreport.fetch_digest_http()
+        if not isinstance(doc, dict):
+            info("INFO digest http pull failed")
+            return
+        self._on_digest_http(doc)
+        info(f"INFO digest http pull ok url={bobreport.digest_url()}")
+
+    def _on_digest_http(self, doc: dict) -> None:
+        if not isinstance(doc.get("machines"), dict):
+            return
+        if not self._should_bobiverse_pull():
+            return
+        mid = self._local_machine_id()
+        machines = doc.get("machines") if isinstance(doc.get("machines"), dict) else {}
+        chair_ent = machines.get(mid) if mid else None
+        payload = None
+        if mid and isinstance(chair_ent, dict):
+            payload = bobreport.merge_payload_local_peer_ahead_of_chair(self.home, mid, chair_ent)
+        bobreport.ingest_fleet_digest_pull(self.home, doc)
+        if not payload:
+            return
+        try:
+            import post_working_on as _pwo
+
+            _pwo.post(payload)
+        except Exception:
+            pass
 
     def _on_digest_whisper(self, from_nick: str, doc: dict) -> None:
         if not isinstance(doc.get("machines"), dict):
@@ -1216,7 +1232,7 @@ def main() -> None:
     p.add_argument(
         "--chair",
         action="store_true",
-        help="digest chair (Jeeves): JOIN #bobiverse + every #{machine}; !bobiverse + webhook digest",
+        help="digest chair (Jeeves): JOIN #bobiverse + every #{machine}; webhook digest + public GET",
     )
     p.add_argument(
         "--auto-nick",

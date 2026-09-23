@@ -1093,12 +1093,12 @@ def format_github_webhook_announce(event: str, payload: dict) -> str:
 
 
 def enqueue_chair_fleet_privmsg(home: Path, body: str, channel: str = FLEET_CHANNEL) -> bool:
-    """Append PRIVMSG for digest chair outbox (Jeeves drains to IRC)."""
+    """Append PRIVMSG to chair-outbox.txt. Only irc_agent --chair drains it."""
     text = (body or "").replace("\r", " ").replace("\n", " ").strip()
     if not text or looks_like_secret(text):
         return False
     root = fleet_digest_home(Path(home))
-    outbox = root / "outbox.txt"
+    outbox = root / "chair-outbox.txt"
     try:
         outbox.parent.mkdir(parents=True, exist_ok=True)
         with outbox.open("a", encoding="utf-8") as fh:

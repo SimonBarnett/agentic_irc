@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 
@@ -173,7 +174,12 @@ def test_chair_helper_agent_home_executes_under_powershell(monkeypatch, tmp_path
         if ln.startswith("$agentHome") or ln.startswith("$install") or ln.startswith("$callback") or ln.startswith("$scripts")
     ]
     probe = tmp_path / "probe-agent-home.ps1"
-    probe.write_text("\n".join(assigns) + "\nWrite-Output $agentHome\n", encoding="utf-8")
+    probe.write_text(
+        "\n".join(assigns)
+        + "\n$homeArg = (@('-u',$callback,'--home',$agentHome))[-1]\n"
+        + "Write-Output $homeArg\n",
+        encoding="utf-8",
+    )
     exe = shutil.which("powershell.exe") or shutil.which("pwsh")
     if not exe:
         import pytest
@@ -181,9 +187,11 @@ def test_chair_helper_agent_home_executes_under_powershell(monkeypatch, tmp_path
         pytest.skip("powershell.exe not on PATH")
     monkeypatch.setattr(bob_recycle.subprocess, "Popen", real_popen)
     out = subprocess.check_output([exe, "-NoProfile", "-File", str(probe)], text=True)
-    want = str(home.resolve())
-    assert want in out
-    assert out.strip().splitlines()[-1].strip() == want
+    want = bob_recycle._native_abspath(home)
+    got = out.strip().splitlines()[-1].strip()
+    assert got == want
+    profile = os.path.normpath(os.path.expanduser("~"))
+    assert got != profile or want == profile
 
 
 def test_refuse_never_calls_kill_or_popen(monkeypatch):

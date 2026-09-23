@@ -68,6 +68,11 @@ def find_agentic_irc_root() -> Path | None:
     return None
 
 
+def _native_abspath(path: Path | str) -> str:
+    """Absolute path string without pathlib.resolve() (POSIX-safe when os.name is faked)."""
+    return os.path.normpath(os.path.abspath(os.path.expanduser(os.fspath(path))))
+
+
 def find_agentic_build_root() -> Path | None:
     for candidate in (
         Path(os.environ.get("BOB_REPO_ROOT", "")).expanduser(),
@@ -292,35 +297,34 @@ def _default_restart_chair(irc_root: Path, home: Path) -> None:
     scripts = irc_root / "scripts"
     install = scripts / "Install-BobChair.ps1"
     callback = scripts / "bobcallback.py"
-    home_s = str(Path(home).expanduser().resolve())
-    helper = Path(home_s) / "recycle-chair-after-exit.ps1"
+    home_s = _native_abspath(home)
+    helper_path = os.path.join(home_s, "recycle-chair-after-exit.ps1")
 
-    def _ps_sq(s: str) -> str:
-        return "'" + str(s).replace("'", "''") + "'"
+    def _ps_sq(s: Path | str) -> str:
+        return "'" + os.fspath(s).replace("'", "''") + "'"
 
-    helper.write_text(
-        "\n".join(
-            [
-                f"$waitPid = {os.getpid()}",
-                f"$install = {_ps_sq(install)}",
-                f"$callback = {_ps_sq(callback)}",
-                f"$agentHome = {_ps_sq(home_s)}",
-                f"$scripts = {_ps_sq(scripts)}",
-                "while (Get-Process -Id $waitPid -ErrorAction SilentlyContinue) { Start-Sleep -Seconds 1 }",
-                "if (Test-Path -LiteralPath $install) {",
-                "  Start-Process -FilePath powershell.exe -ArgumentList @('-NoProfile','-ExecutionPolicy','Bypass','-File',$install) -WorkingDirectory $scripts -WindowStyle Hidden | Out-Null",
-                "}",
-                "Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {",
-                "  $_.CommandLine -and $_.CommandLine -match 'bobcallback\\.py' -and $_.CommandLine.Contains($agentHome)",
-                "} | ForEach-Object { Stop-Process -Id ([int]$_.ProcessId) -Force -ErrorAction SilentlyContinue }",
-                "if (Test-Path -LiteralPath $callback) {",
-                "  Start-Process -FilePath python -ArgumentList @('-u',$callback,'--home',$agentHome) -WorkingDirectory $scripts -WindowStyle Hidden | Out-Null",
-                "}",
-                "",
-            ]
-        ),
-        encoding="utf-8",
+    helper_body = "\n".join(
+        [
+            f"$waitPid = {os.getpid()}",
+            f"$install = {_ps_sq(install)}",
+            f"$callback = {_ps_sq(callback)}",
+            f"$agentHome = {_ps_sq(home_s)}",
+            f"$scripts = {_ps_sq(scripts)}",
+            "while (Get-Process -Id $waitPid -ErrorAction SilentlyContinue) { Start-Sleep -Seconds 1 }",
+            "if (Test-Path -LiteralPath $install) {",
+            "  Start-Process -FilePath powershell.exe -ArgumentList @('-NoProfile','-ExecutionPolicy','Bypass','-File',$install) -WorkingDirectory $scripts -WindowStyle Hidden | Out-Null",
+            "}",
+            "Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {",
+            "  $_.CommandLine -and $_.CommandLine -match 'bobcallback\\.py' -and $_.CommandLine.Contains($agentHome)",
+            "} | ForEach-Object { Stop-Process -Id ([int]$_.ProcessId) -Force -ErrorAction SilentlyContinue }",
+            "if (Test-Path -LiteralPath $callback) {",
+            "  Start-Process -FilePath python -ArgumentList @('-u',$callback,'--home',$agentHome) -WorkingDirectory $scripts -WindowStyle Hidden | Out-Null",
+            "}",
+            "",
+        ]
     )
+    with open(helper_path, "w", encoding="utf-8") as fh:
+        fh.write(helper_body)
     subprocess.Popen(
         [
             "powershell.exe",
@@ -328,7 +332,7 @@ def _default_restart_chair(irc_root: Path, home: Path) -> None:
             "-ExecutionPolicy",
             "Bypass",
             "-File",
-            str(helper),
+            helper_path,
         ],
         cwd=str(scripts),
         creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, "CREATE_NO_WINDOW") else 0,
@@ -338,7 +342,7 @@ def _default_restart_chair(irc_root: Path, home: Path) -> None:
 def _default_restart_callback(home: Path, irc_root: Path) -> None:
     if os.name != "nt":
         return
-    home_s = str(Path(home).expanduser().resolve())
+    home_s = _native_abspath(home)
     for pid, _cmd in _win_process_commandlines("bobcallback.py"):
         if home_s.replace("\\", "\\\\") in _cmd or home_s in _cmd:
             subprocess.run(["taskkill", "/F", "/PID", str(pid)], check=False, capture_output=True)

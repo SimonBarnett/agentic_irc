@@ -170,11 +170,11 @@ def test_bobiverse_forms(tmp_path):
     assert bobreport.parse_bobiverse_query("!bobiverse flamingo") == ("machine", "flamingo")
     assert bobreport.parse_bobiverse_query("!bobiverse dev1") == ("machine", "ce-priority-dev1")
     assert bobreport.BOBIVERSE_GONE.startswith("ERR !bobiverse gone")
-    assert "bob.ntsa.uk" in bobreport.digest_url()
+    assert "irc.ntsa.uk" in bobreport.digest_url()
     help_lines = bobreport.format_digest_whisper_lines(tmp_path, "bob-flamingo", form="help")
     assert help_lines == bobreport.HELP_TEXT.splitlines()
     assert "no !report" in "\n".join(help_lines)
-    assert "bob.ntsa.uk" in "\n".join(help_lines)
+    assert "irc.ntsa.uk" in "\n".join(help_lines)
     miss = bobreport.format_digest_whisper_lines(tmp_path, "bob-flamingo", form="machine", machine_id="nope")
     assert miss == [bobreport.NO_MACHINE]
     bobreport.start_worker(tmp_path, "flamingo", 4412, "agentic_irc shop-channel FR")

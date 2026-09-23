@@ -49,11 +49,12 @@ Do **not** use `!bobiverse` to refresh or read the digest (#174).
 
 ## Status read / write
 
-- **Read:** public HTTP GET `http://bob.ntsa.uk/bob/v1/digest` (alias `/digest`).
-  No secret. Nothing in the digest is secure. `!bobiverse` is **gone** (#174) —
-  chair whispers one ERR pointer to that URL if asked. bob-* refresh local
-  `digest.json` via HTTP GET (not IRC). Override with `AGENTIC_IRC_DIGEST_URL`.
-  Each box still keeps a local `digest.json` copy.
+- **Read:** public HTTP GET `https://irc.ntsa.uk/bob/v1/report` (same path as
+  write; also `/bob/v1/digest` and `/digest`). No secret. Nothing in the digest
+  is secure. `!bobiverse` is **gone** (#174) — chair whispers one ERR pointer
+  to that URL if asked. bob-* refresh local `digest.json` via HTTP GET (not
+  IRC). Override with `AGENTIC_IRC_DIGEST_URL`. Each box still keeps a local
+  `digest.json` copy.
 - **Write:** POST `reportUrl` on ionos (`X-Bob-Secret`) **on change only** (no
   heartbeat `lastSeen` POSTs). Create the worker first (`--create`: merge
   pid/nick/kind, no `working_on`), then POST `working_on` or idle:
@@ -61,12 +62,11 @@ Do **not** use `!bobiverse` to refresh or read the digest (#174).
   --nick <machine>-<pid> --create` then `--working-on '…'` or `--idle`.
   204 = change, 200 = same. Skip if unchanged. `scripts/bobcallback.py`
   `POST /bob/v1/report`: first change **204**, duplicate **200**; public
-  **GET /bob/v1/digest** returns JSON. Default bind `127.0.0.1` is not
-  peer-reachable — bind a reachable address and open the IONOS port. DNS
-  is optional (IP URL is fine). Live write URL:
-  `http://irc.ntsa.uk:80/bob/v1/report` (POST **204**/**200**; **401** =
-  secret mismatch — writers need ionos `~\.grok\bob\report.secret`).
-  Live read URL: `http://bob.ntsa.uk/bob/v1/digest` (HTTP GET).
+  **GET /bob/v1/report** (and `/bob/v1/digest`) returns JSON. Default bind
+  `127.0.0.1` is not peer-reachable — bind a reachable address and open the
+  IONOS port. DNS is optional (IP URL is fine). Live URL:
+  `https://irc.ntsa.uk/bob/v1/report` (GET digest JSON; POST **204**/**200**;
+  **401** = secret mismatch — writers need ionos `~\.grok\bob\report.secret`).
   `BOB_REPORT_ALLOW` is IPs for POST only. Metrics: long-running
   `tools/Watch-BobDigestMetrics.ps1` every 2 minutes posts xAI weekly +
   Cursor pcent; digest keeps the **lesser** remaining % as SoT when the
@@ -158,7 +158,7 @@ Human monitor (flamingo): Halloy nick not `bob-*` (e.g. `simon`).
 `%AppData%\halloy\config.toml`: server `irc.ntsa.uk:6697` TLS,
 `password_file` = connect.password, channel `#bobiverse` only (shops are
 dynamic). `/join #flamingo` while that bob is up. Read digest at
-`http://bob.ntsa.uk/bob/v1/digest` (do not type `!bobiverse` — it is gone).
+`https://irc.ntsa.uk/bob/v1/report` (do not type `!bobiverse` — it is gone).
 Address a `bob-*` nick (`@bob-ionos`, `bob-flamingo:`, Query): that seat
 ACKs one English line (status + weekly). `weekly=0` still answers
 (empty weekly is not deaf; #54). Optional **grok-talk** (LLM listen+reply;
@@ -203,7 +203,8 @@ Do not `Stop-ScheduledTask BobFleet-*` to recover IRC.
 
 - Point any `bob-*` nick at Libera.
 - Run two Watch-Bobiverse processes.
-- Open public `:6667` (plain IRC). Public digest GET is only `/bob/v1/digest`.
+- Open public `:6667` (plain IRC). Public digest GET is `/bob/v1/report`
+  (also `/bob/v1/digest`).
 - WinRM.
 - Stamp UAT (Bob only).
 - Use `!bobiverse` to update or read the digest (#174).

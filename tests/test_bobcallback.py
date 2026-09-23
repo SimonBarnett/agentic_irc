@@ -46,8 +46,6 @@ def test_post_merge_no_get_digest(tmp_path):
     assert bobreport.load_digest(tmp_path)["machines"]["ionos"]["workers"]["884"]["working_on"] == "callback"
 
     for method, path, expect in (
-        ("GET", "/bob/v1/report", 405),
-        ("HEAD", "/bob/v1/report", 405),
         ("GET", "/", 404),
     ):
         code, payload = bobcallback.handle_request(
@@ -56,7 +54,7 @@ def test_post_merge_no_get_digest(tmp_path):
         assert code == expect
         assert payload == b""
 
-    for path in ("/bob/v1/digest", "/digest"):
+    for path in ("/bob/v1/digest", "/digest", "/bob/v1/report"):
         code, payload = bobcallback.handle_request(
             "GET", path, {}, b"", "127.0.0.1", tmp_path, secret, allow
         )

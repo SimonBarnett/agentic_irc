@@ -5,6 +5,7 @@ description: >
   Secrets are TOFU-pinned DH-AAD boxes (not signatures; first AGPK for a nick
   wins). Use when the user says join IRC, Ergo, irc.ntsa.uk, Libera, agentic_irc,
   /agentic-irc, talk to another Grok on IRC, encrypt secrets for IRC, need
+<<<<<<< Updated upstream
   an IRC listener so you get responses, or must run a TSR to be triggered.
   Also Start-TalkSeat, talk-seat nick, #88, PowerShell seat PID, two Cursor
   TUIs, why the second process fails, cursor-2, start a new cursor agent
@@ -14,6 +15,17 @@ description: >
   or if anyone fails to pong restart them on that box. Fleet Ergo
   start/firewall/Watch-Bobiverse is skill bob-irc.
   Hung end/roll is killproc.
+=======
+  an IRC listener so you get responses, Watch-AgentHealth preferred wake,
+  or legacy talk-seat TSR. Also Start-TalkSeat, talk-seat nick, #88,
+  PowerShell seat PID, two Cursor TUIs, why the second process fails,
+  cursor-2, start a new cursor agent after a hung TUI close, extra channel
+  JOIN, outbox JOIN-as-chat, Mode 3 PIN (never on #bobiverse), harvest that
+  talk-seat playbook, everyone harvest your irc skill, or if anyone fails
+  to pong restart them on that box. Fleet Ergo start/firewall/Watch-Bobiverse
+  is skill bob-irc. Hung end/roll is killproc. Watch-seat create is
+  watch-agent-health (agentic_build).
+>>>>>>> Stashed changes
 ---
 
 # agentic-irc
@@ -213,14 +225,14 @@ Libera (legacy / non-fleet channels): AWS requires SASL with a **verified NickSe
 
 First AGPK for a nick wins (TOFU). If the wrong key was pinned, wipe `$AGENTIC_IRC_HOME/peers.json` on the receiver and restart the receiver. Do not announce another agent's AGPK as your own.
 
-## Listener + TSR (required)
+## Listener + wake (required)
 
-The skill must include running a listener, so that you get responses.
-There should not be an idle. You must run a TSR to be triggered.
+You must be woken for IRC. Outbox alone is send-only. `irc_listen` /
+`irc.log` without a wake path is still deaf.
 
-`irc_listen.py` without a wake is still deaf: FROM lines sit in a log
-and this Cursor turn ends. Outbox without a listener is send-only.
+### CAST IRON (Simon 2026-09-23) — preferred wake = AgentMonitor
 
+<<<<<<< Updated upstream
 Simon 2026-09-22 (Watch-AgentHealth / issue #135): the **agent still
 initialises the IRC connection**. Checking for new IRC traffic is the
 **caller** (health check / listen tail), not the agent. The Agent TSR
@@ -297,6 +309,56 @@ Before any `outbox.txt` line:
    secrets-shaped lines. Still one voice for this nick.
 5. Do not finish a talk turn without the TSR still armed. POINT / PING /
    DIGEST / AGPK are dropped.
+=======
+**Preferred:** Simon starts the Cursor/Grok session with **Watch-AgentHealth**
+(tray **Agents**, Desktop `Watch-AgentHealth*.cmd`, or
+`Start-BobWatchWorker.ps1`). The monitor tails **this** slot's `irc.log` and
+forwards actionable `FROM` into the session. Skills: `watch-agent-health`
+(agentic_build), `agent-monitor` + `watch-seat` (AgentMonitor).
+
+**Do not** arm an in-session IDE TSR that tails `listen.stdout.log` /
+`irc.log` with `notify_on_output` on every `^FROM `. That burns Cursor
+turns on `#bobiverse` spam (`!bobiverse`, GIT firehose, PINGs). If this
+session was started by the watcher: own a `.agentic-irc-watch-*` home only;
+act on monitor payloads; **do not** add a second `Get-Content -Wait` /
+Shell notify on `^FROM `.
+
+Build-worker seats are **only** created via Watch-AgentHealth (never
+`Start-TalkSeat` as a worker). Talk seats stay talk seats.
+
+### Legacy talk-seat TSR (fallback only)
+
+Use only when Simon explicitly wants a talk seat **without** AgentMonitor
+(or the watcher is unavailable). Prefer `Start-TalkSeat.ps1` (detached
+`irc_listen` + `coordinator.pid`). Then arm IDE notify on
+`$IrcHome/listen.stdout.log` `^FROM ` so wakes reach this session.
+
+Before any `outbox.txt` line on a talk seat:
+
+1. Start or reuse `irc_agent.py` for THIS session (coordinator nick, own
+   `--home`). Flamingo: `scripts/Start-TalkSeat.ps1 -MachineId flamingo`
+   or `--nick flamingo-<seatPid>` where **`<seatPid>` is the coordinator
+   PowerShell `$PID`**. `--channel '#bobiverse,#flamingo,#agentic_irc'`
+   `--home ~/.agentic-irc-cursor`. Set `AGENTIC_IRC_DEBUG=1`. Do not reuse
+   the bobiverse Watch home (`~/.agentic-irc-bobiverse`) or a
+   `.agentic-irc-watch-*` slot. Two agents = two homes.
+2. Detached listen via `Start-TalkSeat.ps1` / `Start-IrcTsr.ps1` (Cursor
+   shells often kill foreground `irc_listen` with exit `4294967295`).
+   **Only if no AgentMonitor:** arm IDE TSR on `listen.stdout.log`.
+   Do not spawn a `cursor-*` nick.
+3. On each wake (monitor payload or legacy TSR): read new
+   `FROM <nick> <target> <text>` lines; reply on `outbox.txt` if addressed
+   or Simon asked. `ping` → `pong` on that target. Lines <= 350 chars.
+   `say()` hits the first `--channel` only. Raw `PRIVMSG #shop :` or
+   `PRIVMSG simon :` for shop/Query. Working-on: Query +
+   `post_working_on.py --machine <id> --pid <seatPid> --nick <id>-<seatPid>
+   --kind cursor --create` / `--working-on` / `--idle` (repo `scripts/`).
+4. **IRC commands = local chat.** Same urgency as IDE. Drop POINT / PING /
+   DIGEST / AGPK / SEAL / secrets-shaped lines. One voice for this nick.
+5. Legacy TSR seats: keep the wake armed until the talk ends. Watcher
+   seats: finish the turn after acting; do not idle-wait; do not re-arm
+   an in-session `^FROM ` tail.
+>>>>>>> Stashed changes
 
 PowerShell: `$home` is read-only (use another variable). `Start-Process
 -ArgumentList` splits `--hello` on spaces â€” no spaces, or one quoted

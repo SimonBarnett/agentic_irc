@@ -145,6 +145,19 @@ def test_mention_ack_when_weekly_zero(tmp_path):
     assert "align shop-channel" in line
 
 
+def test_mention_ack_weekly_zero_with_cursor_remaining_not_cannot(tmp_path):
+    """MUST 5: ACK after POINT persists remaining on live Watch-shaped peer."""
+    from ionos_peer_live import apply_point_remaining
+
+    apply_point_remaining(tmp_path, 82)
+    line = bobtalk.mention_reply_line(
+        tmp_path, "ionos", ["bob-ionos"], "simon", "@bob-ionos status?"
+    )
+    assert line is not None
+    assert "cannot grok-talk" not in line
+    assert "weekly=0 (cursor remaining=82%)" in line
+
+
 def test_query_counts_as_addressed(tmp_path):
     bobstat.write_peer(
         tmp_path,

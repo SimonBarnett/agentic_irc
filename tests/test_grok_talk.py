@@ -122,6 +122,53 @@ def test_no_enqueue_when_weekly_zero(tmp_path, monkeypatch):
     assert not grok_talk.inbox_path(tmp_path).exists()
 
 
+def test_enqueue_when_weekly_zero_but_cursor_remaining(tmp_path, monkeypatch):
+    """MUST 5: weekly=0 + POINT remaining on live ionos peer still enqueues."""
+    from ionos_peer_live import apply_point_remaining
+
+    _enable_grok_talk(tmp_path, monkeypatch)
+    apply_point_remaining(tmp_path, 42)
+    dedupe: dict[tuple[str, str], float] = {}
+    job = grok_talk.enqueue_mention(
+        tmp_path,
+        "ionos",
+        "bob-ionos",
+        ["bob-ionos"],
+        "simon",
+        "#bobiverse",
+        "@bob-ionos what is status?",
+        to_me=False,
+        to_channel=True,
+        dedupe_last=dedupe,
+        now=2000.0,
+    )
+    assert job
+    assert grok_talk.inbox_path(tmp_path).is_file()
+
+
+def test_no_enqueue_when_weekly_zero_and_remaining_zero(tmp_path, monkeypatch):
+    from ionos_peer_live import write_live_watch_peer
+
+    _enable_grok_talk(tmp_path, monkeypatch)
+    write_live_watch_peer(tmp_path)
+    dedupe: dict[tuple[str, str], float] = {}
+    assert (
+        grok_talk.enqueue_mention(
+            tmp_path,
+            "ionos",
+            "bob-ionos",
+            ["bob-ionos"],
+            "simon",
+            "#bobiverse",
+            "@bob-ionos ping",
+            to_me=False,
+            to_channel=True,
+            dedupe_last=dedupe,
+        )
+        is None
+    )
+
+
 def test_no_enqueue_protocol_or_bob_asker(tmp_path, monkeypatch):
     _enable_grok_talk(tmp_path, monkeypatch)
     bobstat.write_peer(
@@ -224,3 +271,34 @@ def test_grok_disabled_matches_ack_only_no_inbox(tmp_path, monkeypatch):
     c.handle_privmsg("cursor-flamingo!u@h", "#bobiverse", "@bob-ionos hello?")
     assert sent
     assert not grok_talk.inbox_path(tmp_path).exists()
+
+def test_reply_channel_follows_last_call_channel(tmp_path, monkeypatch):
+    monkeypatch.setenv("AGENTIC_IRC_HOME", str(tmp_path))
+    sent: list[str] = []
+
+    def _send(self, line: str) -> None:
+        sent.append(line)
+
+    monkeypatch.setattr(irc_agent.Client, "send", _send)
+    c = irc_agent.Client(_args(tmp_path, nick="bob-flamingo"))
+    c.channels = ["#bobiverse", "#flamingo"]
+    c.chan = "#bobiverse"
+    c._pending_joins = {x.lower() for x in c.channels}
+    assert c._reply_channel() == "#bobiverse"
+    c._note_call_channel("#flamingo")
+    assert c._reply_channel() == "#flamingo"
+    c.say("pong")
+    assert any(x.startswith("PRIVMSG #flamingo :pong") for x in sent)
+    # bare outbox drain uses say -> sticky channel
+    sent.clear()
+    out = tmp_path / "outbox.txt"
+    out.write_text("hello shop\n", encoding="utf-8")
+    c.outbox = out
+    c.sock = object()  # truthy for drain
+    c._drain_outbox_path(out)
+    assert any(x.startswith("PRIVMSG #flamingo :hello shop") for x in sent)
+
+
+def test_reply_target_for_same_channel():
+    assert grok_talk.reply_target_for("simon", "#agentic_irc", True) == "#agentic_irc"
+    assert grok_talk.reply_target_for("simon", "#agentic_irc", False) == "simon"

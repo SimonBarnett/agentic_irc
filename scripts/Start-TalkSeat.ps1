@@ -5,12 +5,14 @@ param(
     [Parameter(Mandatory = $true)]
     [string]$MachineId,
     [string]$IrcHome = $(Join-Path $env:USERPROFILE '.agentic-irc-cursor'),
-    [string]$Scripts = 'C:\ai\agentic_irc\scripts',
+    [string]$Scripts = $PSScriptRoot,
     [string]$IrcHost = 'irc.ntsa.uk',
     [int]$Port = 6697,
     [string]$Channel = ''
 )
 $ErrorActionPreference = 'Stop'
+. (Join-Path $Scripts 'IrcProcess.ps1')
+$SeatPid = $PID
 $mid = $MachineId.Trim().ToLower()
 if (-not $Channel) {
     # Fleet + shop + FR talk room (issue #108).
@@ -42,6 +44,10 @@ function Get-HomePythonProcs {
 }
 function Stop-CursorHomeAgents {
     param([string]$HomePath)
+    $gracePath = Join-Path $Scripts 'agent_control.py'
+    if (Test-Path -LiteralPath $gracePath) {
+        & $py $gracePath --home $HomePath --reason 'talk-seat recycle' --wait-s 12 2>&1 | Out-Null
+    }
     Get-CimInstance Win32_Process -Filter "Name='python.exe'" |
         Where-Object {
             $_.CommandLine -match 'irc_(agent|listen)\.py' -and
@@ -76,17 +82,31 @@ function Assert-HomeBind {
         Write-Error "talk_seat_pid.py --bind-home failed (exit $LASTEXITCODE): $out"
     }
 }
-function Start-TalkAgent {
-    param([string]$HomePath)
-    Start-Process -FilePath $py -ArgumentList @(
+function Start-OneSeatAgent {
+    param([string]$NickToStart)
+    $prior = Join-Path $Scripts 'prior_irc.py'
+    Invoke-PriorIrcClean -Python $py -ScriptPath $prior -Nick $NickToStart -Home $resolved
+    $null = Start-HiddenPython -Python $py -ArgumentList @(
         '-u', $agentPath,
         '--host', $IrcHost,
         '--port', "$Port",
         '--channel', $Channel,
-        '--home', $HomePath,
-        '--nick', "$mid-0",
-        '--auto-nick'
-    ) -WindowStyle Hidden -PassThru | Out-Null
+        '--home', $resolved,
+        '--nick', $NickToStart
+    ) -WorkingDirectory $Scripts
+}
+$agent, $listen = Get-HomePythonProcs -HomePath $resolved
+$needStart = $true
+$agentNick = ''
+if ($agent -and ($agent.CommandLine -match '--nick\s+(\S+)')) {
+    $agentNick = $Matches[1]
+    if ($agentNick -eq $expectedNick) { $needStart = $false }
+}
+$hasListen = $null -ne $listen
+Assert-HomeBind -HomePath $resolved -ExpectedNick $expectedNick -LiveAgentNick $agentNick -LiveListen:$hasListen
+if ($needStart) {
+    Stop-CursorHomeAgents -HomePath $resolved
+    Start-OneSeatAgent -NickToStart $expectedNick
     Start-Sleep -Milliseconds 800
 }
 $agent, $listen = Get-HomePythonProcs -HomePath $resolved
@@ -123,7 +143,8 @@ if ($nick -and $nick -ne $expectedNick) {
     Assert-HomeBind -HomePath $resolved -ExpectedNick $expectedNick -LiveAgentNick $agentNick -LiveListen:$hasListen
     Write-Output "INFO talk-seat nick=$nick expected=$expectedNick - restarting agent"
     Stop-CursorHomeAgents -HomePath $resolved
-    Start-TalkAgent -HomePath $resolved
+    Start-OneSeatAgent -NickToStart $expectedNick
+    Start-Sleep -Milliseconds 800
     $agent, $listen = Get-HomePythonProcs -HomePath $resolved
     if (-not $agent) {
         Write-Error "irc_agent did not restart for home $resolved"
@@ -135,8 +156,13 @@ if ($nick -and $nick -ne $expectedNick) {
 if (-not $nick) {
     $nick = $expectedNick
 }
-$env:AGENTIC_IRC_SEAT_PID = "$agentPid"
-& (Join-Path $Scripts 'Start-IrcTsr.ps1') -IrcHome $resolved -Scripts $Scripts -Nick $nick | Out-Null
+$env:AGENTIC_IRC_DEBUG = '1'
+if (-not $needStart -and $agent) {
+    # Keep this seat's agent. Drop same-nick twins and hung listens on this home.
+    Invoke-PriorIrcClean -Python $py -ScriptPath (Join-Path $Scripts 'prior_irc.py') `
+        -Nick $expectedNick -Home $resolved -KeepPid ([int]$agent.ProcessId)
+}
+& (Join-Path $Scripts 'Start-IrcTsr.ps1') -IrcHome $resolved -Scripts $Scripts -SeatPid $SeatPid -Nick $nick | Out-Null
 $listenPid = ''
 $agent, $listen = Get-HomePythonProcs -HomePath $resolved
 if ($listen) { $listenPid = $listen.ProcessId }

@@ -1,7 +1,7 @@
 # Exit 0 when talk-seat nick suffix matches coordinator.pid agent= (irc_agent PID).
 param(
     [string]$IrcHome = $(Join-Path $env:USERPROFILE '.agentic-irc-cursor'),
-    [string]$Scripts = 'C:\ai\agentic_irc\scripts'
+    [string]$Scripts = $PSScriptRoot
 )
 $ErrorActionPreference = 'Stop'
 $resolved = [Environment]::ExpandEnvironmentVariables($IrcHome)

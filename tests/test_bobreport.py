@@ -34,6 +34,11 @@ def test_channels_for_nick():
         "#flamingo",
     ]
     assert bobreport.channels_for_nick("w-fl-4412", "#bobiverse") == ["#flamingo"]
+    assert bobreport.channels_for_nick("bob-ionos", "#bobiverse") == [
+        "#bobiverse",
+        "#ionos",
+    ]
+    assert bobreport.channels_for_nick("w-io-4412", "#bobiverse") == ["#ionos"]
     assert bobreport.channels_for_nick("alice", "#ops") == ["#ops"]
     assert bobreport.normalize_channel("#dev1") == "#ce-priority-dev1"
     # Talk seats share #{machine} with bob-* and rejoin #bobiverse (issue #108).
@@ -53,6 +58,24 @@ def test_channels_for_nick():
         "#marchhare",
         "#ionos",
         "#ce-priority-dev1",
+    ]
+
+
+def test_worker_irc_agent_args_ionos():
+    args = bobreport.worker_irc_agent_args("/tmp/fleet", "ionos", 4412)
+    assert args["nick"] == "w-io-4412"
+    assert args["channel"] == "#ionos"
+    assert args["home"].replace("\\", "/").endswith("workers/ionos/4412")
+
+
+def test_expand_join_channels():
+    assert bobreport.expand_join_channels("#bobiverse,#ionos") == [
+        "#bobiverse",
+        "#ionos",
+    ]
+    assert bobreport.expand_join_channels(":#bobiverse,#ionos") == [
+        "#bobiverse",
+        "#ionos",
     ]
 
 
@@ -138,7 +161,7 @@ def test_cc_traces_gated_on_pm_open():
     assert bobreport.route_cc("assistant", False) == frozenset({bobreport.CC_SHOP})
     assert bobreport.CC_QUERY in bobreport.route_cc("assistant", True)
     assert bobreport.route_cc("secret", True) == frozenset()
-    assert bobreport.route_cc("working_on", True) == frozenset({bobreport.CC_SHOP})
+    assert bobreport.route_cc("working_on", True) == frozenset()
 
 
 def test_bobiverse_forms(tmp_path):
@@ -146,9 +169,12 @@ def test_bobiverse_forms(tmp_path):
     assert bobreport.parse_bobiverse_query("!BOBIVERSE ?") == ("help", None)
     assert bobreport.parse_bobiverse_query("!bobiverse flamingo") == ("machine", "flamingo")
     assert bobreport.parse_bobiverse_query("!bobiverse dev1") == ("machine", "ce-priority-dev1")
+    assert bobreport.BOBIVERSE_GONE.startswith("ERR !bobiverse gone")
+    assert "irc.ntsa.uk" in bobreport.digest_url()
     help_lines = bobreport.format_digest_whisper_lines(tmp_path, "bob-flamingo", form="help")
     assert help_lines == bobreport.HELP_TEXT.splitlines()
     assert "no !report" in "\n".join(help_lines)
+    assert "irc.ntsa.uk" in "\n".join(help_lines)
     miss = bobreport.format_digest_whisper_lines(tmp_path, "bob-flamingo", form="machine", machine_id="nope")
     assert miss == [bobreport.NO_MACHINE]
     bobreport.start_worker(tmp_path, "flamingo", 4412, "agentic_irc shop-channel FR")
@@ -166,6 +192,44 @@ def test_bobiverse_forms(tmp_path):
     obj = json.loads("".join(pieces))
     assert "ionos" in obj["machines"]
     assert obj["machines"]["ionos"]["status"] == "I am offline"
+
+
+def test_cursor_pools_lesser_across_machines(tmp_path):
+    bobreport.apply_callback(
+        tmp_path,
+        {"op": "merge", "machine": "flamingo", "pcent": {"cursor-models": 80}},
+    )
+    bobreport.apply_callback(
+        tmp_path,
+        {"op": "merge", "machine": "ionos", "pcent": {"cursor-models": 12}},
+    )
+    obj = bobreport.build_digest_object(tmp_path, "Jeeves")
+    models = next(p for p in obj["cursor_pools"] if p.get("id") == "cursor-models")
+    assert models["remaining"] == 12
+    bobreport.apply_callback(
+        tmp_path,
+        {"op": "merge", "machine": "flamingo", "pcent": {"cursor-models": 99}, "weekly": 90},
+    )
+    bobreport.apply_callback(
+        tmp_path,
+        {"op": "merge", "machine": "flamingo", "weekly": 40},
+    )
+    ent = bobreport.load_digest(tmp_path)["machines"]["flamingo"]
+    assert ent["pcent"]["cursor-models"] == 80
+    assert ent["weekly"] == 40
+    obj2 = bobreport.build_digest_object(tmp_path, "Jeeves")
+    models2 = next(p for p in obj2["cursor_pools"] if p.get("id") == "cursor-models")
+    assert models2["remaining"] == 12
+
+
+def test_watch_metrics_script_present():
+    root = Path(__file__).resolve().parents[1]
+    script = root / "tools" / "Watch-BobDigestMetrics.ps1"
+    assert script.is_file()
+    text = script.read_text(encoding="utf-8")
+    assert "IntervalSeconds = 120" in text
+    assert "Get-BobWeeklyRemaining" in text
+    assert "bob/v1/report" in text
 
 
 def test_callback_merge_delete_shop_down(tmp_path):
@@ -309,7 +373,7 @@ def test_build_digest_tray_complete_shape(tmp_path):
     doc = bobreport.load_digest(tmp_path)
     doc["cursor_pools"] = [
         {
-            "id": "ionos",
+            "group": "cursor-models",
             "label": "Cursor Models",
             "remaining": 55,
             "period_end": "2026-09-28T00:00:00Z",
@@ -345,6 +409,51 @@ def test_build_digest_tray_complete_shape(tmp_path):
     raw = json.dumps(obj)
     assert "password=" not in raw.lower()
     assert "xai_api_key=" not in raw.lower()
+
+
+def test_digest_json_chunk_reassembly_round_trip(tmp_path, monkeypatch):
+    monkeypatch.setattr(bobreport, "MAX_DIGEST_LINE", 120)
+    bobreport.apply_callback(
+        tmp_path,
+        {
+            "op": "merge",
+            "machine": "ionos",
+            "weekly": 33,
+            "period_end": "2026-09-28T00:00:00Z",
+            "pcent": {"cursor-models": 44, "other-models": 22, "grok-weekly": 11},
+            "jobs": [
+                {
+                    "repo": "SimonBarnett/agentic_irc",
+                    "sha": "deadbeef",
+                    "model": "composer-2.5",
+                    "description": "chunk reassembly coverage",
+                    "state": "running",
+                    "run_time": "3m",
+                }
+            ],
+        },
+    )
+    bobstat.write_peer(
+        tmp_path,
+        {
+            "ok": True,
+            "id": "flamingo",
+            "weekly": 9,
+            "running": 1,
+            "queued": 0,
+            "lastSeen": "2026-09-21T12:00:00Z",
+            "jobs": [{"repo": "SimonBarnett/agentic_build", "state": "queued"}],
+        },
+    )
+    lines = bobreport.format_digest_whisper_lines(
+        tmp_path, "Jeeves", form="full", english=False
+    )
+    digest_lines = [ln for ln in lines if ln.startswith("BOB DIGEST v1 ")]
+    assert len(digest_lines) >= 2
+    obj = _digest_json_from_whisper(lines)
+    assert obj["chairNick"]
+    assert len(obj["cursor_pools"]) >= 1
+    assert obj["machines"]["ionos"]["jobs"][0]["run_time"] == "3m"
 
 
 def test_format_digest_whisper_tray_keys_and_chunks(tmp_path):
@@ -385,11 +494,12 @@ def test_cursor_pools_from_pcent_when_not_stored(tmp_path):
     obj = bobreport.build_digest_object(tmp_path, "bob-dev1")
     pools = obj["cursor_pools"]
     assert pools
-    dev1 = next(p for p in pools if p.get("seat") == "ce-priority-dev1")
-    assert dev1["remaining"] == 77
-    assert dev1["label"] == "Dev1 seat"
-    assert dev1["period_end"] is None
-    assert dev1["reset"] is None
+    models = next(p for p in pools if p.get("id") == "cursor-models")
+    assert models["remaining"] == 77
+    assert models["label"] == "Cursor Models"
+    assert models["seat"] == "cursor-models"
+    assert models["period_end"] is None
+    assert models["reset"] is None
 
 
 def test_cursor_pools_weekly_vs_cursor_period_and_peer_pcent(tmp_path):
@@ -429,16 +539,50 @@ def test_cursor_pools_weekly_vs_cursor_period_and_peer_pcent(tmp_path):
     ionos = obj["machines"]["ionos"]
     assert ionos["period_end"] == weekly_end
     assert ionos["cursor_period_end"] == cursor_end
-    ionos_pool = next(p for p in obj["cursor_pools"] if p.get("seat") == "ionos")
-    assert ionos_pool["period_end"] == cursor_end
-    assert ionos_pool["reset"] == cursor_end
-    assert ionos_pool["remaining"] == 55
-    assert ionos_pool.get("overage") is None
-
-    flamingo_pool = next(p for p in obj["cursor_pools"] if p.get("seat") == "flamingo")
-    assert flamingo_pool["remaining"] == 12
-    assert flamingo_pool["period_end"] == cursor_end
+    models_pool = next(p for p in obj["cursor_pools"] if p.get("id") == "cursor-models")
+    assert models_pool["period_end"] == cursor_end
+    assert models_pool["reset"] == cursor_end
+    assert models_pool["remaining"] == 12
+    assert models_pool.get("overage") is None
+    assert models_pool["seat"] == "cursor-models"
 
     flamingo = obj["machines"]["flamingo"]
     assert flamingo.get("cursor_period_end") == cursor_end
     assert flamingo.get("cur") == "12%"
+
+
+def test_cursor_pools_official_groups_reject_xai_seat_labels(tmp_path):
+    bobreport.apply_callback(
+        tmp_path,
+        {
+            "op": "merge",
+            "machine": "marchhare",
+            "pcent": {"cursor-models": 40, "other-models": 22, "grok-weekly": 88},
+            "cursor_label": "Smart Catalogue",
+        },
+    )
+    doc = bobreport.load_digest(tmp_path)
+    doc["cursor_pools"] = [
+        {"id": "ionos", "label": "Club Madeira", "remaining": 10},
+        {"id": "ntsa", "label": "ntsa", "remaining": 5},
+        {
+            "group": "cursor-models",
+            "label": "Smart Catalogue",
+            "remaining": 99,
+        },
+    ]
+    bobreport.save_digest(tmp_path, doc)
+    obj = bobreport.build_digest_object(tmp_path, "Jeeves")
+    pools = obj["cursor_pools"]
+    ids = {p["id"] for p in pools}
+    labels = {p["label"] for p in pools}
+    assert "ionos" not in ids
+    assert "ntsa" not in ids
+    assert "Smart Catalogue" not in labels
+    assert "Club Madeira" not in labels
+    assert "ntsa" not in labels
+    assert "cursor-models" in ids
+    assert labels.intersection({"Cursor Models", "Other Models", "Grok Weekly"})
+    models = next(p for p in pools if p["id"] == "cursor-models")
+    assert models["label"] == "Cursor Models"
+    assert models["remaining"] == 40

@@ -1,0 +1,8 @@
+﻿INFO probe at 2026-09-22T21:52:42.1887146+01:00
+:irc.ntsa.uk 353 names-probe-REDACTED = #bobiverse :ce-priority-dev1-16948 bob-ionos_l flamingo-REDACTED ce-priority-dev1-11904 marchhare-23624 flamingo-REDACTED
+:irc.ntsa.uk 366 names-probe-REDACTED #bobiverse :End of NAMES list
+:irc.ntsa.uk 353 names-probe-REDACTED = #flamingo :flamingo-REDACTED flamingo-REDACTED
+:irc.ntsa.uk 366 names-probe-REDACTED #flamingo :End of NAMES list
+:irc.ntsa.uk 353 names-probe-REDACTED = #agentic_irc :ce-priority-dev1-16948 marchhare-23624 flamingo-REDACTED ce-priority-dev1-11904 flamingo-REDACTED
+:irc.ntsa.uk 366 names-probe-REDACTED #agentic_irc :End of NAMES list
+

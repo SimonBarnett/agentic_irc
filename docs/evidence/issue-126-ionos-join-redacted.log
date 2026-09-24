@@ -1,0 +1,13 @@
+# Issue #126 evidence (hosts redacted; SHA recorded at commit)
+#
+# Offline:
+#   python -m py_compile scripts/start_worker_irc_agent.py scripts/irc_agent.py
+#   python -m pytest tests/test_ionos_must5_must2.py tests/test_bobreport.py -k ionos -q
+#
+# Live (C:\ai\agentic_irc scripts synced from this branch; AGENTIC_IRC_DEBUG=1):
+#   start_worker_irc_agent.py --machine-id ionos --pid <workerPid>
+#   irc_agent.py --nick bob-ionos --channel #bobiverse --once (fleet home; ionos seat uses bob-ionos)
+#
+:bob-ionos_l!~u@<redacted> JOIN #bobiverse
+:bob-ionos_l!~u@<redacted> JOIN #ionos
+:w-io-17256!~u@<redacted> JOIN #ionos

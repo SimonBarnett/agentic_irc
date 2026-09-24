@@ -1,0 +1,8 @@
+{
+  "ok": true,
+  "source": "cursor-agent",
+  "kind": "weekly",
+  "used_pct": 18,
+  "remaining_pct": 82,
+  "cursor_models_source": "fixture"
+}

@@ -34,11 +34,11 @@ Do **not** use `!bobiverse` to refresh or read the digest (#174).
   (all live `w-io-*` git workers JOIN there only).
 - `bob-<id>` JOINs fleet + shop at start. Bob drop closes `#<id>`.
 - Talk seats (Cursor or Grok, same): nick `{machine}-{pid}` (e.g.
-  `flamingo-22400`). **`pid` = coordinator PowerShell `$PID`** (seat host;
-  not python `irc_listen` / `irc_agent`). JOIN fleet + **this box's shop**.
+  `flamingo-19392`). **`pid` = python `irc_agent.py` PID** for that home;
+  not `irc_listen` or PowerShell `$PID`. JOIN fleet + **this box's shop**.
   Many sessions per box; pid is required. Not `cursor-*` / `grok-*`. Start:
   `scripts/Start-TalkSeat.ps1 -MachineId <id>` or TSR
-  `scripts/Start-IrcTsr.ps1` + `coordinator.pid` (`seat=` authoritative).
+  `scripts/Start-IrcTsr.ps1` + `coordinator.pid` (`agent=` authoritative).
   One agent per home.
   Do not install Watch-CursorIrc that respawns `cursor-flamingo`.
 - Workers JOIN **shop only**: `w-<shortid>-<pid>` (`w-fl-4412`). Key
@@ -74,18 +74,27 @@ Do **not** use `!bobiverse` to refresh or read the digest (#174).
   `docs/bob-report-callback-change-only.md`. Watch skip-heartbeat is
   agentic_build #141.
 - **Git webhooks:** skill `jeeves-git-webhook` (issue #147). `POST /bob/v1/git`
-  writes `chair-outbox.txt` and, for claimable events, appends
-  `queue.unaccepted` on the digest webhook. `GET /bob/v1/report` lists
-  `queue.unaccepted` and `queue.accepted`. Map: `issues opened` → `PR`,
-  `pull_request opened` / `ready_for_review` → `MRB`. Ping and other
-  actions are not queued. `bob-*` does not narrate `GIT` and does not
-  claim. An idle `w-*` (no job for more than 120 seconds) sends `!BORED`
-  on its shop. Jeeves `POST`s `op=git-claim` and replies with only that
-  top row: `{repo} {task} {id}`. The claim is already accepted. `!ACCEPT`
-  does not claim. Not `FILE v1 ACCEPT`. The worker then POSTs `working_on`
-  (and `agent` / `model` when known) and `state=idle` when done.
-- **Chair seat:** `scripts/Install-BobChair.ps1` / `irc_agent.py --chair` JOINs
-  `#bobiverse` only. MOOT floor chair is separate from digest chair.
+  writes `chair-outbox.txt` on `BOB_DIGEST_HOME`
+  (`~\.agentic-irc-bobiverse`), not on the Jeeves `--home`. Only Jeeves
+  (`irc_agent.py --chair`) drains it and says `GIT`. `bob-*` does not
+  narrate those lines and does not write them to `outbox.txt`. Do not
+  copy that playbook here.
+- **Chair seat:** `scripts/Install-BobChair.ps1` starts `irc_agent.py --chair`,
+  nick `Jeeves`.
+  - `--home` / `AGENTIC_IRC_HOME` = `~\.agentic-irc-jeeves`
+  - `BOB_DIGEST_HOME` = `~\.agentic-irc-bobiverse` (`digest.json`,
+    `chair-outbox.txt`). Required. Without it Jeeves drains the wrong
+    outbox and GIT lines never hit IRC.
+  - Do not point `--home` at the `bob-ionos` home.
+  - Password: `AGENTIC_IRC_PASSWORD` from `~\.grok\ergo\connect.password`
+    only. Do not pass `--password`.
+  - The script stops a prior `irc_agent.py --chair` or nick `Jeeves`
+    before start.
+  - JOINs `#bobiverse` and every shop. GIT lines stay on `#bobiverse`.
+  - BobIrcd NSSM and the hook that starts Jeeves with the IRC server live
+    in `agentic_build` (`chairNick` `Jeeves`). This repo does not define
+    that service. Ergo recovery is `Start-Service BobIrcd` (below).
+  - MOOT floor chair is separate from this digest chair.
 - Machines persist (`status`: `I am online` / `I am offline`). Workers are
   deleted on disconnect. Bob drop closes `#<id>` and deletes that box's workers.
 
@@ -101,7 +110,9 @@ assigns on `#{machine}` (shop PRIVMSG), not Query. If Simon says `ping`
 
 ## Connect
 
-Server: Ergo on ionos, TLS `irc.ntsa.uk:6697`. Home `~\.agentic-irc-bobiverse`.
+Server: Ergo on ionos, TLS `irc.ntsa.uk:6697`. `bob-*` home
+`~\.agentic-irc-bobiverse` (also the digest home). Jeeves `--home` is
+`~\.agentic-irc-jeeves` — do not share it with `bob-ionos`.
 Connect secret: `~\.grok\ergo\connect.password` (`AGENTIC_IRC_PASSWORD`).
 Never print it. Never `password=` assignments in prompts, chat, or git.
 Callback secret: `~\.grok\bob\report.secret` (`BOB_REPORT_SECRET`).
@@ -159,14 +170,14 @@ then the merger recycles.
 ## Post-merge fleet announce (#88 talk-seat PID)
 
 Talk-seat recycle + ACK playbook lives in skill `agentic-irc` section
-**Start-TalkSeat recycle (#88)**. Boxes ACK with `seat=` = PowerShell `$PID`.
+**Start-TalkSeat recycle (#88)**. Boxes ACK with `agent=` = `irc_agent` PID.
 
 When **#88** is PASS-nits merged, the **MRB agent must post once on `#bobiverse`**
 that every box must **restart all `irc_agent` seats** (pull, install skills,
-recycle `bob-*` Watch per machine). Nick suffix = **coordinator PowerShell
-`$PID`**, not python listen/agent. Copy from
+recycle `bob-*` Watch per machine). Nick suffix = **`irc_agent.py` PID**,
+not python listen or PowerShell seat. Copy from
 `docs/post-merge-talk-seat-pid-restart.md`. Flamingo check: **`bob-flamingo` +
-`flamingo-<powershellSeatPid>`** on fleet. Not optional.
+`flamingo-<agentPid>`** on fleet. Not optional.
 
 Human monitor (flamingo): Halloy nick not `bob-*` (e.g. `simon`).
 `%AppData%\halloy\config.toml`: server `irc.ntsa.uk:6697` TLS,
@@ -199,6 +210,13 @@ separate from `bob-<id>`. Recycle the builder only: stop the process whose
 `--nick` is `bob-<id>`; start it from the pulled `scripts\irc_agent.py`
 with `--home ~\.agentic-irc-bobiverse`. Leave the extra nick running.
 Do not `Stop-ScheduledTask BobFleet-*`. Two agents still need two homes.
+
+Before that start, run deterministic prior cleanup (no LLM): `scripts/prior_irc.py`
+or `scripts/Start-BobEar.ps1`. Same `--nick` or same `--home` `irc_agent` processes
+are hard-killed, then one process is started with `CreateNoWindow` (not
+`Start-Process -WindowStyle Hidden`). Rules: `docs/prior-irc-clean.md`.
+A recycle that kills only one `irc_agent` leaves a ghost and the next client
+registers a suffixed nick.
 
 ## Ionos Ergo down
 

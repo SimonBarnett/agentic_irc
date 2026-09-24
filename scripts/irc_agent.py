@@ -669,12 +669,15 @@ class Client:
         return True
 
     def request_shutdown(self, reason: str = ":bye", *, reconnect: bool = False) -> None:
-        """Send QUIT when joined; stop reader/outbox. Default: do not reconnect."""
+        """PART every channel, then QUIT. Default: do not reconnect."""
         if not reconnect:
             self._no_reconnect = True
         try:
             if self.sock is not None and self.joined.is_set():
                 msg = reason if reason.startswith(":") else ":" + reason
+                why = msg.lstrip(":")
+                for ch in self.channels:
+                    self.send("PART " + ch + " :" + why)
                 self.send("QUIT " + msg)
         except OSError:
             pass
@@ -1317,6 +1320,32 @@ class Client:
             backoff = min(60.0, backoff * 2)
 
 
+def clean_crashed_priors(nick: str, home: str, *, once: bool) -> None:
+    """Hard-kill hung same-nick / same-home priors before the first connect.
+
+    Once per process, not on reconnect, so a listen started afterwards stays.
+    --once and AGENTIC_IRC_SKIP_PRIOR_CLEAN=1 skip (tests). No command lines logged.
+    """
+    if once:
+        return
+    flag = (os.environ.get("AGENTIC_IRC_SKIP_PRIOR_CLEAN") or "").strip().lower()
+    if flag in {"1", "true", "yes"}:
+        return
+    import prior_irc
+
+    # Talk-seat / worker listens are started by the launcher after this process.
+    # Only a bob-* builder sweeps irc_listen here (no listen is spawned after it).
+    result = prior_irc.clean_priors(
+        nick,
+        home,
+        self_pid=os.getpid(),
+        include_listens=prior_irc.is_bob_builder_nick(nick),
+    )
+    if not result.scanned:
+        info("INFO prior-clean aborted connect")
+        raise SystemExit(1)
+
+
 def main() -> None:
     import signal
 
@@ -1340,27 +1369,30 @@ def main() -> None:
     p.add_argument(
         "--auto-nick",
         action="store_true",
-        help="talk seat: set --nick suffix to coordinator seat PID (env or coordinator.pid)",
+        help="talk seat: set --nick suffix to irc_agent PID (env self/agent= or coordinator.pid)",
     )
     args = p.parse_args()
     home = (args.home or os.environ.get("AGENTIC_IRC_HOME") or "").strip()
-    seat_pid = talk_seat_pid.resolve_seat_pid(home or None)
+    seat_pid = talk_seat_pid.resolve_seat_pid(home or None, self_pid=os.getpid())
     if args.auto_nick:
         if seat_pid is None:
-            info("INFO --auto-nick requires AGENTIC_IRC_SEAT_PID or coordinator.pid seat=")
+            info(
+                "INFO --auto-nick requires AGENTIC_IRC_SEAT_PID (or self) or coordinator.pid agent="
+            )
             sys.exit(2)
         args.nick = talk_seat_pid.auto_talk_seat_nick(args.nick, seat_pid)
     err = None
     if talk_seat_pid.parse_talk_seat_nick(args.nick):
         if seat_pid is None:
             err = (
-                "INFO talk-seat nick requires AGENTIC_IRC_SEAT_PID or coordinator.pid seat="
+                "INFO talk-seat nick requires AGENTIC_IRC_SEAT_PID (or self) or coordinator.pid agent="
             )
         else:
             err = talk_seat_pid.check_nick_seat_pid(args.nick, seat_pid)
     if err:
         info(err)
         sys.exit(2)
+    clean_crashed_priors(args.nick, home, once=bool(args.once))
     c = Client(args)
 
     def _stop(*_a: object) -> None:

@@ -42,21 +42,19 @@ See agentic_build #124 — `Write-BobIrcStatus` should hash the peer blob and sk
 
 ## GitHub (`POST /bob/v1/git`)
 
-GitHub (or compatible) delivery to the digest chair home. Does **not** use
-`X-Bob-Secret`. It does append claimable jobs onto the webhook queue.
+GitHub (or compatible) delivery. Does **not** merge `digest.json` and does
+**not** use `X-Bob-Secret`.
 
 - Same IP allowlist as fleet (`BOB_REPORT_ALLOW`, default loopback).
 - Header `X-GitHub-Event` (GitHub delivery) is required.
-- JSON body per GitHub webhook shape. Digest chair (**Jeeves**) announces on
-  `#bobiverse` via `chair-outbox.txt` (`GIT …` prefix). Talk seats do not
-  narrate these events.
-- Claimable events also append `queue.unaccepted` (FIFO). `GET /bob/v1/report`
-  returns `queue.unaccepted` and `queue.accepted`. That list is the source
-  of truth. `queue.json` beside `digest.json` is the crash mirror.
-- Map: `issues` `opened` → task `PR`; `pull_request` `opened` or
-  `ready_for_review` → task `MRB`. `ping`, `push`, and other actions are
-  not queued. Task names that may appear on a row: `PR`, `BUILD`, `MRB`,
-  `FIX`, `UAT`.
+- JSON body per GitHub webhook shape. The listener appends
+  `PRIVMSG #bobiverse :GIT …` to `chair-outbox.txt` on
+  `BOB_DIGEST_HOME` (`~\.agentic-irc-bobiverse`).
+- Jeeves (`irc_agent.py --chair`) is the only nick that drains that file.
+  `--home` / `AGENTIC_IRC_HOME` is `~\.agentic-irc-jeeves`.
+  `scripts/Install-BobChair.ps1` sets both. Do not point `--home` at the
+  `bob-ionos` home. Without `BOB_DIGEST_HOME`, GIT lines stay stuck.
+- Talk seats do not narrate these events.
 
 Returns **204** when the announce is queued. **400** on missing event, bad
 JSON, or a queue write failure. No HMAC verification in-tree (operator

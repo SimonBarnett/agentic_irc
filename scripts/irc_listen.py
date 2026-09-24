@@ -90,12 +90,24 @@ def follow(path: Path, from_start: bool = False) -> None:
         time.sleep(0.4)
 
 
-def main() -> int:
+def _bind_log(path: str, stream_name: str) -> None:
+    """Child-owned log file. Parent can exit; no redirected pipe to fill."""
+    handle = open(path, "a", encoding="utf-8", buffering=1)
+    setattr(sys, stream_name, handle)
+
+
+def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser()
     p.add_argument("--home", required=True)
     p.add_argument("--from-start", action="store_true")
     p.add_argument("--once", action="store_true", help="print existing talk lines and exit")
-    args = p.parse_args()
+    p.add_argument("--stdout-log", default="", help="append talk lines here instead of the console")
+    p.add_argument("--stderr-log", default="", help="append tracebacks here instead of the console")
+    args = p.parse_args(argv)
+    if args.stdout_log:
+        _bind_log(args.stdout_log, "stdout")
+    if args.stderr_log:
+        _bind_log(args.stderr_log, "stderr")
     home = Path(args.home).expanduser()
     log = home / "irc.log"
     if args.once:

@@ -362,3 +362,124 @@ def test_start_scripts_document_the_rules():
     assert ".agentic-irc-cursor" in doc
     assert "bob-flamingo_1" in doc or "suffixed nick" in doc
     assert "--dry-run" in doc
+
+def test_nick_match_is_case_insensitive():
+    """Rules say --nick equals N exact, case-insensitive. pid<=1 is never a victim."""
+    home = "/tmp/h"
+    procs = [
+        (10, _agent("Bob-Flamingo", "/tmp/other")),
+        (20, _agent("BOB-FLAMINGO", home)),
+        (30, _agent("bob-flamingo2", "/tmp/x")),
+    ]
+    victims = prior_irc.select_victims(procs, "bob-flamingo", home, keep_pids=set())
+    assert [pid for pid, _ in victims] == [10, 20]
+
+
+def test_wait_runs_only_after_a_kill():
+    slept: list[float] = []
+    home = "/tmp/h"
+    nick = "bob-flamingo"
+    state = [(10, _agent(nick, home)), (99, _agent(nick, home))]
+
+    def lister():
+        return list(state)
+
+    def killer(pid: int) -> bool:
+        state[:] = [(p, c) for p, c in state if p != pid]
+        return True
+
+    result = prior_irc.clean_priors(
+        nick,
+        home,
+        self_pid=99,
+        wait_s=3,
+        list_processes=lister,
+        killer=killer,
+        sleeper=slept.append,
+    )
+    assert [pid for pid, _ in result.killed] == [10]
+    assert slept == [3.0]
+    assert result.wait_s == 3.0
+
+
+def test_include_listens_false_skips_cursor_and_home_listens():
+    home = "/var/ear/.agentic-irc-bobiverse"
+    cursor = "/var/ear/.agentic-irc-cursor"
+    procs = [
+        (1, _listen(cursor)),
+        (2, _listen(home)),
+        (3, _agent("bob-flamingo", home)),
+        (4, _agent("bob", "/tmp/ghost")),
+    ]
+    victims = dict(
+        prior_irc.select_victims(
+            procs, "bob-flamingo", home, keep_pids={99}, include_listens=False
+        )
+    )
+    assert 1 not in victims
+    assert 2 not in victims
+    assert victims[3] == "irc_agent"
+    assert victims[4] == "irc_agent"
+
+
+def test_env_wait_is_clamped(monkeypatch):
+    monkeypatch.setenv("AGENTIC_IRC_PRIOR_WAIT_S", "1")
+    assert prior_irc.resolve_wait_s(None) == 2.0
+    monkeypatch.setenv("AGENTIC_IRC_PRIOR_WAIT_S", "99")
+    assert prior_irc.resolve_wait_s(None) == 5.0
+    monkeypatch.setenv("AGENTIC_IRC_PRIOR_WAIT_S", "not-a-number")
+    assert prior_irc.resolve_wait_s(None) == prior_irc.WAIT_DEFAULT_S
+    monkeypatch.delenv("AGENTIC_IRC_PRIOR_WAIT_S", raising=False)
+    assert prior_irc.resolve_wait_s(None) == prior_irc.WAIT_DEFAULT_S
+
+
+def test_keep_pids_survive_clean_priors():
+    home = "/tmp/h"
+    nick = "bob-marchhare"
+    state = [
+        (10, _agent(nick, home)),
+        (11, _agent(nick, home)),
+        (12, _agent(nick, home)),
+    ]
+    killed: list[int] = []
+
+    def killer(pid: int) -> bool:
+        killed.append(pid)
+        state[:] = [(p, c) for p, c in state if p != pid]
+        return True
+
+    result = prior_irc.clean_priors(
+        nick,
+        home,
+        self_pid=12,
+        keep_pids={11},
+        wait_s=0,
+        list_processes=lambda: list(state),
+        killer=killer,
+        sleeper=lambda _s: None,
+    )
+    assert killed == [10]
+    assert [pid for pid, _ in state] == [11, 12]
+    assert result.killed == [(10, "irc_agent")]
+
+
+def test_bob_alone_is_not_a_builder_nick():
+    assert prior_irc.is_bob_builder_nick("bob-flamingo")
+    assert prior_irc.is_bob_builder_nick("bob-ionos")
+    assert not prior_irc.is_bob_builder_nick("bob")
+    assert not prior_irc.is_bob_builder_nick("flamingo")
+    assert not prior_irc.is_bob_builder_nick("bobflamingo")
+
+
+def test_start_talk_seat_avoids_windowstyle_hidden():
+    root = Path(__file__).resolve().parents[1]
+    talk = (root / "scripts" / "Start-TalkSeat.ps1").read_text(encoding="utf-8")
+    irc = (root / "scripts" / "IrcProcess.ps1").read_text(encoding="utf-8")
+    assert "Invoke-PriorIrcClean" in talk
+    assert "Start-HiddenPython" in talk
+    assert "CreateNoWindow" in irc
+    for path_text in (talk, irc):
+        for line in path_text.splitlines():
+            if line.lstrip().startswith("#"):
+                continue
+            assert "WindowStyle Hidden" not in line

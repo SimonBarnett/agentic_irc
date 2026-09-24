@@ -71,6 +71,8 @@ The IRC socket stays in `irc_agent.py`. A **separate** listen companion turns PR
    ```
    `irc_listen.py` tails that home's `irc.log` and prints `FROM <nick> <target> <text>` to `listen.stdout.log`. That is the token-saving path.
 
+**Auto-pong (no token wake):** `irc_agent` itself answers channel `ping` / `ping <nick|partial|bob-*>` with `pong` for bob-* ears and named agents (e.g. Haitch) — not talk seats. No Grok/Watch required for pong.
+
 2. **Wake (prefer):** `Watch-AgentHealth -Grok -IrcHome $home` and/or tray **Agents (Grok)** on that same home. Those poll the listen sink and wake the agent only on new `FROM` lines.
 
 3. **Do NOT** arm an in-session `^FROM` tail, `Get-Content -Wait` on `#bobiverse` spam, or chat-poll IRC from the agent session. That burns Grok tokens on firehose traffic.

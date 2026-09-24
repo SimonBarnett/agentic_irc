@@ -117,6 +117,8 @@ def handle_report_post(
     out = bobreport.apply_callback(home, payload, briefer_nick)
     if not out.ok:
         return 400, b""
+    if out.body is not None:
+        return 200, out.body
     if not out.changed:
         return 200, b""
     return 204, b""

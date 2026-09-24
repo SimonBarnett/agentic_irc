@@ -1,10 +1,15 @@
 #!/usr/bin/env python3
-"""Deterministic GIT claim queue for Jeeves. No model calls.
+"""GIT job queue owned by the digest webhook. No model calls.
 
-Webhook path appends claimable work to git-unaccepted.json on the digest
-home. A shop worker sends !BORED; Jeeves offers the oldest row as
-!TASK {repo} {task} {id}. !ACCEPT {repo} {task} {id} stamps git-accepted.jsonl
-and removes the row. FILE v1 ACCEPT is a different protocol.
+POST /bob/v1/git appends claimable work. GET /bob/v1/report lists
+queue.unaccepted and queue.accepted. POST /bob/v1/report op=git-claim
+pops the oldest unaccepted row and stamps it accepted in one step.
+
+Jeeves does that POST when a shop worker sends !BORED, then announces
+``{repo} {task} {id}``. !ACCEPT does not claim. FILE v1 ACCEPT is unrelated.
+
+On-disk queue.json is the listener's crash mirror of that webhook list.
+It is not a second source of truth.
 """
 from __future__ import annotations
 
@@ -12,6 +17,8 @@ import json
 import os
 import re
 import time
+import urllib.error
+import urllib.request
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -20,26 +27,29 @@ from pathlib import Path
 import bobreport
 
 IDLE_S = 120.0
-UNACCEPTED_NAME = "git-unaccepted.json"
-ACCEPTED_NAME = "git-accepted.jsonl"
+QUEUE_NAME = "queue.json"
+LEGACY_UNACCEPTED = "git-unaccepted.json"
+LEGACY_ACCEPTED = "git-accepted.jsonl"
 ACTIVITY_NAME = "git-worker-activity.json"
 LOCK_NAME = "git-claim.lock"
+ACCEPTED_CAP = 200
 
-# issues opened → PR (issue→implement pipeline). Not BUILD.
-# pull_request opened / ready_for_review → MRB.
+# Task vocabulary. The GIT allowlist below is unchanged: only PR and MRB
+# are produced from GitHub events. BUILD, FIX, and UAT are valid kinds if a
+# row is already on the queue; this map does not emit them.
+TASK_KINDS = frozenset({"PR", "BUILD", "MRB", "FIX", "UAT"})
 CLAIM_ACTIONS: dict[tuple[str, str], str] = {
     ("issues", "opened"): "PR",
     ("pull_request", "opened"): "MRB",
     ("pull_request", "ready_for_review"): "MRB",
 }
-TASKS = frozenset(CLAIM_ACTIONS.values())
 
 REPO_RE = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
 ID_RE = re.compile(r"^#\d+$")
 
 NAK_BORED_WAIT = "NAK !BORED wait"
 NAK_BORED_BUSY = "NAK !BORED busy"
-NAK_BORED_EMPTY = "NAK !BORED empty"
+NO_JOBS = "no jobs"
 
 
 @dataclass(frozen=True)
@@ -60,28 +70,17 @@ def _root(home: Path) -> Path:
     return bobreport.fleet_digest_home(Path(home))
 
 
-def unaccepted_path(home: Path) -> Path:
-    return _root(home) / UNACCEPTED_NAME
-
-
-def accepted_path(home: Path) -> Path:
-    return _root(home) / ACCEPTED_NAME
+def queue_path(home: Path) -> Path:
+    return _root(home) / QUEUE_NAME
 
 
 def activity_path(home: Path) -> Path:
     return _root(home) / ACTIVITY_NAME
 
 
-def format_task(repo: str, task: str, ident: str) -> str:
-    return f"!TASK {repo} {task} {ident}"
-
-
-def format_accept_ok(repo: str, task: str, ident: str) -> str:
-    return f"OK !ACCEPT {repo} {task} {ident}"
-
-
-def format_accept_nak(repo: str, task: str, ident: str) -> str:
-    return f"NAK !ACCEPT {repo} {task} {ident}"
+def format_claimed(job: dict) -> str:
+    """Shop line for the single claimed row. Webhook field order, no !TASK."""
+    return f"{job.get('repo') or ''} {job.get('task') or ''} {job.get('id') or ''}".strip()
 
 
 def is_bored_command(body: str) -> bool:
@@ -94,12 +93,12 @@ def is_accept_command(body: str) -> bool:
 
 
 def parse_accept(body: str) -> tuple[str, str, str] | None:
-    """Fixed shape: !ACCEPT {owner/repo} {PR|MRB} {#n}. Not FILE v1 ACCEPT."""
+    """Legacy line shape. Claiming ignores it. Not FILE v1 ACCEPT."""
     parts = (body or "").strip().split()
     if len(parts) != 4 or parts[0].lower() != "!accept":
         return None
     repo, task, ident = parts[1], parts[2], parts[3]
-    if task not in TASKS or not REPO_RE.fullmatch(repo) or not ID_RE.fullmatch(ident):
+    if task not in TASK_KINDS or not REPO_RE.fullmatch(repo) or not ID_RE.fullmatch(ident):
         return None
     return repo, task, ident
 
@@ -187,26 +186,6 @@ def worker_shop_channel(nick: str) -> str | None:
         return None
 
 
-def _bob_shop_channel(nick: str) -> str | None:
-    mid = bobreport.machine_from_nick(nick)
-    if not mid or not str(nick or "").strip().lower().startswith("bob-"):
-        return None
-    try:
-        return bobreport.shop_channel(mid).lower()
-    except ValueError:
-        return None
-
-
-def accept_allowed(nick: str, channel: str) -> bool:
-    """w-* or bob-* on their shop or on #bobiverse."""
-    ch = _channel(channel)
-    fleet = bobreport.FLEET_CHANNEL.lower()
-    shop = worker_shop_channel(nick) or _bob_shop_channel(nick)
-    if shop is None:
-        return False
-    return ch in (shop, fleet)
-
-
 def worker_working_on(home: Path, nick: str) -> str:
     """Digest working_on for this worker pid. Empty if the worker is absent."""
     parsed = bobreport.parse_worker_nick(nick)
@@ -254,34 +233,52 @@ def _lock(home: Path):
             pass
 
 
-def _read_items(path: Path) -> list[dict]:
-    if not path.exists():
-        return []
-    doc = json.loads(path.read_text(encoding="utf-8"))
-    if not isinstance(doc, dict):
-        raise ValueError("git-unaccepted")
-    items = doc.get("items")
-    if not isinstance(items, list):
-        raise ValueError("git-unaccepted items")
-    out: list[dict] = []
-    for row in items:
-        if isinstance(row, dict):
-            out.append(row)
+def _empty_queue() -> dict:
+    return {"v": 1, "unaccepted": [], "accepted": []}
+
+
+def _coerce_row(row: dict) -> dict | None:
+    repo = str(row.get("repo") or "").strip()
+    task = str(row.get("task") or "").strip()
+    ident = str(row.get("id") or "").strip()
+    if not repo or task not in TASK_KINDS or not ID_RE.fullmatch(ident):
+        return None
+    out = {
+        "repo": repo,
+        "task": task,
+        "id": ident,
+        "ts": str(row.get("ts") or ""),
+        "line": str(row.get("line") or ""),
+        "event": str(row.get("event") or ""),
+        "action": str(row.get("action") or ""),
+    }
+    try:
+        out["seq"] = int(row.get("seq") or 0)
+    except (TypeError, ValueError):
+        out["seq"] = 0
+    for key in ("nick", "channel", "accepted_ts"):
+        if row.get(key):
+            out[key] = str(row.get(key))
     return out
 
 
-def _write_items(path: Path, items: list[dict]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_name(path.name + ".tmp")
-    tmp.write_text(json.dumps({"v": 1, "items": items}, indent=2) + "\n", encoding="utf-8")
-    tmp.replace(path)
+def _read_legacy_unaccepted(path: Path) -> list[dict]:
+    if not path.exists():
+        return []
+    doc = json.loads(path.read_text(encoding="utf-8"))
+    items = doc.get("items") if isinstance(doc, dict) else None
+    if not isinstance(items, list):
+        return []
+    out: list[dict] = []
+    for row in items:
+        if isinstance(row, dict):
+            coerced = _coerce_row(row)
+            if coerced:
+                out.append(coerced)
+    return out
 
 
-def _same(row: dict, repo: str, task: str, ident: str) -> bool:
-    return row.get("repo") == repo and row.get("task") == task and row.get("id") == ident
-
-
-def _read_accepted(path: Path) -> list[dict]:
+def _read_legacy_accepted(path: Path) -> list[dict]:
     if not path.exists():
         return []
     rows: list[dict] = []
@@ -294,36 +291,86 @@ def _read_accepted(path: Path) -> list[dict]:
         except json.JSONDecodeError:
             continue
         if isinstance(row, dict):
-            rows.append(row)
+            coerced = _coerce_row(row)
+            if coerced:
+                rows.append(coerced)
     return rows
 
 
-def _already(items: list[dict], accepted: list[dict], repo: str, task: str, ident: str) -> bool:
-    return any(_same(row, repo, task, ident) for row in items) or any(
-        _same(row, repo, task, ident) for row in accepted
+def _read_queue_file(path: Path) -> dict:
+    doc = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(doc, dict):
+        raise ValueError("queue")
+    unaccepted = doc.get("unaccepted")
+    accepted = doc.get("accepted")
+    if not isinstance(unaccepted, list) or not isinstance(accepted, list):
+        raise ValueError("queue lists")
+    return {
+        "v": 1,
+        "unaccepted": [row for row in (_coerce_row(r) for r in unaccepted if isinstance(r, dict)) if row],
+        "accepted": [row for row in (_coerce_row(r) for r in accepted if isinstance(r, dict)) if row],
+    }
+
+
+def _write_queue(path: Path, doc: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_text(json.dumps(doc, indent=2) + "\n", encoding="utf-8")
+    tmp.replace(path)
+
+
+def _load_queue_unlocked(home: Path) -> dict:
+    path = queue_path(home)
+    if path.exists():
+        return _read_queue_file(path)
+    root = _root(home)
+    legacy_u = _read_legacy_unaccepted(root / LEGACY_UNACCEPTED)
+    legacy_a = _read_legacy_accepted(root / LEGACY_ACCEPTED)
+    if legacy_u or legacy_a:
+        doc = {"v": 1, "unaccepted": legacy_u, "accepted": legacy_a[-ACCEPTED_CAP:]}
+        _write_queue(path, doc)
+        return doc
+    return _empty_queue()
+
+
+def load_queue(home: Path) -> dict:
+    """Webhook mirror. Empty lists when nothing has been queued."""
+    try:
+        with _lock(home):
+            return _load_queue_unlocked(home)
+    except (OSError, json.JSONDecodeError, ValueError, TimeoutError):
+        return _empty_queue()
+
+
+def _same(row: dict, repo: str, task: str, ident: str) -> bool:
+    return row.get("repo") == repo and row.get("task") == task and row.get("id") == ident
+
+
+def _already(doc: dict, repo: str, task: str, ident: str) -> bool:
+    return any(_same(row, repo, task, ident) for row in doc["unaccepted"]) or any(
+        _same(row, repo, task, ident) for row in doc["accepted"]
     )
 
 
 def enqueue_unaccepted(home: Path, claim: GitClaim) -> str:
-    """Append FIFO. Returns added, duplicate, or error."""
+    """Append FIFO on the webhook mirror. Returns added, duplicate, or error."""
+    if claim.task not in TASK_KINDS:
+        return "error"
     try:
         with _lock(home):
-            path = unaccepted_path(home)
-            done = accepted_path(home)
             try:
-                items = _read_items(path)
-                accepted = _read_accepted(done)
+                doc = _load_queue_unlocked(home)
             except (OSError, json.JSONDecodeError, ValueError):
                 return "error"
-            if _already(items, accepted, claim.repo, claim.task, claim.id):
+            if _already(doc, claim.repo, claim.task, claim.id):
                 return "duplicate"
             seq = 1
-            for row in items:
+            for row in doc["unaccepted"]:
                 try:
                     seq = max(seq, int(row.get("seq") or 0) + 1)
                 except (TypeError, ValueError):
                     continue
-            items.append(
+            doc["unaccepted"].append(
                 {
                     "repo": claim.repo,
                     "task": claim.task,
@@ -336,7 +383,7 @@ def enqueue_unaccepted(home: Path, claim: GitClaim) -> str:
                 }
             )
             try:
-                _write_items(path, items)
+                _write_queue(queue_path(home), doc)
             except OSError:
                 return "error"
             return "added"
@@ -345,78 +392,97 @@ def enqueue_unaccepted(home: Path, claim: GitClaim) -> str:
 
 
 def load_unaccepted(home: Path) -> list[dict]:
-    with _lock(home):
-        return _read_items(unaccepted_path(home))
-
-
-def next_unaccepted(home: Path) -> dict | None:
-    """Oldest seq, then ts, repo, task, id. No ranking."""
-    try:
-        items = load_unaccepted(home)
-    except (OSError, json.JSONDecodeError, ValueError, TimeoutError):
-        return None
-    if not items:
-        return None
-
-    def _key(row: dict) -> tuple:
-        try:
-            seq = int(row.get("seq") or 0)
-        except (TypeError, ValueError):
-            seq = 0
-        return (seq, str(row.get("ts") or ""), str(row.get("repo") or ""), str(row.get("task") or ""), str(row.get("id") or ""))
-
-    return sorted(items, key=_key)[0]
-
-
-def mark_accepted(
-    home: Path,
-    repo: str,
-    task: str,
-    ident: str,
-    *,
-    nick: str,
-    channel: str,
-) -> str:
-    """Remove one unaccepted row and append a stamp. ok, duplicate, missing, or error."""
-    try:
-        with _lock(home):
-            path = unaccepted_path(home)
-            done = accepted_path(home)
-            try:
-                items = _read_items(path)
-                accepted = _read_accepted(done)
-            except (OSError, json.JSONDecodeError, ValueError):
-                return "error"
-            kept = [row for row in items if not _same(row, repo, task, ident)]
-            if len(kept) != len(items):
-                already = any(_same(row, repo, task, ident) for row in accepted)
-                try:
-                    if not already:
-                        stamp = {
-                            "repo": repo,
-                            "task": task,
-                            "id": ident,
-                            "nick": (nick or "").strip(),
-                            "channel": bobreport.normalize_channel(channel),
-                            "ts": _utc_now(),
-                        }
-                        done.parent.mkdir(parents=True, exist_ok=True)
-                        with done.open("a", encoding="utf-8") as fh:
-                            fh.write(json.dumps(stamp, separators=(",", ":")) + "\n")
-                    _write_items(path, kept)
-                except OSError:
-                    return "error"
-                return "duplicate" if already else "ok"
-            if any(_same(row, repo, task, ident) for row in accepted):
-                return "duplicate"
-            return "missing"
-    except (TimeoutError, OSError):
-        return "error"
+    return list(load_queue(home).get("unaccepted") or [])
 
 
 def load_accepted(home: Path) -> list[dict]:
-    with _lock(home):
-        return _read_accepted(accepted_path(home))
+    return list(load_queue(home).get("accepted") or [])
+
+
+def _sort_key(row: dict) -> tuple:
+    try:
+        seq = int(row.get("seq") or 0)
+    except (TypeError, ValueError):
+        seq = 0
+    return (
+        seq,
+        str(row.get("ts") or ""),
+        str(row.get("repo") or ""),
+        str(row.get("task") or ""),
+        str(row.get("id") or ""),
+    )
+
+
+def claim_top(home: Path, nick: str, channel: str) -> tuple[str, dict | None]:
+    """Atomically move the oldest unaccepted row to accepted.
+
+    Returns (\"ok\", job), (\"empty\", None), or (\"error\", None).
+    """
+    try:
+        with _lock(home):
+            try:
+                doc = _load_queue_unlocked(home)
+            except (OSError, json.JSONDecodeError, ValueError):
+                return "error", None
+            if not doc["unaccepted"]:
+                return "empty", None
+            doc["unaccepted"].sort(key=_sort_key)
+            job = dict(doc["unaccepted"].pop(0))
+            job["nick"] = (nick or "").strip()
+            job["channel"] = bobreport.normalize_channel(channel) if channel else ""
+            job["accepted_ts"] = _utc_now()
+            doc["accepted"].append(job)
+            if len(doc["accepted"]) > ACCEPTED_CAP:
+                doc["accepted"] = doc["accepted"][-ACCEPTED_CAP:]
+            try:
+                _write_queue(queue_path(home), doc)
+            except OSError:
+                return "error", None
+            return "ok", job
+    except (TimeoutError, OSError):
+        return "error", None
+
+
+def claim_top_http(nick: str, channel: str) -> tuple[str, dict | None]:
+    """POST op=git-claim to the digest webhook. Jeeves must not read queue.json."""
+    import bobcallback
+    import post_working_on
+
+    secret = bobcallback.load_secret()
+    url = post_working_on.report_url()
+    if not secret or not url:
+        return "error", None
+    body = json.dumps(
+        {"op": "git-claim", "nick": (nick or "").strip(), "channel": (channel or "").strip()}
+    ).encode("utf-8")
+    req = urllib.request.Request(
+        url,
+        data=body,
+        method="POST",
+        headers={"Content-Type": "application/json", "X-Bob-Secret": secret},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            status = int(resp.status)
+            raw = resp.read().decode("utf-8", "replace")
+    except urllib.error.HTTPError as exc:
+        return "error", None
+    except (urllib.error.URLError, TimeoutError, OSError, ValueError):
+        return "error", None
+    if status != 200:
+        return "error", None
+    try:
+        doc = json.loads(raw or "{}")
+    except json.JSONDecodeError:
+        return "error", None
+    if not isinstance(doc, dict) or not doc.get("ok"):
+        return "error", None
+    claimed = doc.get("claimed")
+    if claimed is None:
+        return "empty", None
+    if not isinstance(claimed, dict):
+        return "error", None
+    return "ok", claimed
 
 
 def _read_activity(path: Path) -> dict[str, float]:
@@ -474,9 +540,8 @@ def last_worker_activity(home: Path, nick: str) -> float | None:
 
 def bored_gate(home: Path, nick: str, channel: str, now: float) -> str:
     """ignore, wait, busy, or ok. wait is checked before busy so retries stay quiet."""
-    if worker_shop_channel(nick) is None:
-        return "ignore"
-    if _channel(channel) != worker_shop_channel(nick):
+    shop = worker_shop_channel(nick)
+    if shop is None or _channel(channel) != shop:
         return "ignore"
     last = last_worker_activity(home, nick)
     if last is not None and (float(now) - last) < IDLE_S:

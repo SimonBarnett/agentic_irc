@@ -922,7 +922,7 @@ class Client:
         time.sleep(FLOOD_S)
 
     def _maybe_git_claim(self, src: str, target: str, body: str) -> bool:
-        """Chair only. Queue offers and ACCEPT stamps. bob-* does not auto-claim."""
+        """Chair only. !BORED claims the webhook queue head. !ACCEPT does not."""
         if not getattr(self.args, "chair", False):
             return False
         if not self._joined_channel(target):
@@ -953,39 +953,24 @@ class Client:
             self._git_say(target, gitclaim.NAK_BORED_BUSY)
             info(f"INFO git-claim bored nak busy nick={src}")
             return
-        item = gitclaim.next_unaccepted(self.home)
-        if not item:
+        status, job = gitclaim.claim_top_http(src, bobreport.normalize_channel(target))
+        if status == "ok" and isinstance(job, dict):
             gitclaim.note_worker_activity(self.home, src, now)
-            self._git_say(target, gitclaim.NAK_BORED_EMPTY)
-            info(f"INFO git-claim bored nak empty nick={src}")
+            line = gitclaim.format_claimed(job)
+            self._git_say(target, line)
+            info(f"INFO git-claim bored claimed {line} nick={src}")
             return
-        gitclaim.note_worker_activity(self.home, src, now)
-        line = gitclaim.format_task(
-            str(item.get("repo") or ""),
-            str(item.get("task") or ""),
-            str(item.get("id") or ""),
-        )
-        self._git_say(target, line)
-        info(f"INFO git-claim offer {line} nick={src}")
+        if status == "empty":
+            gitclaim.note_worker_activity(self.home, src, now)
+            self._git_say(target, gitclaim.NO_JOBS)
+            info(f"INFO git-claim bored empty nick={src}")
+            return
+        info(f"INFO git-claim bored post failed nick={src}")
 
     def _git_accept(self, src: str, target: str, body: str) -> None:
-        parsed = gitclaim.parse_accept(body)
-        if parsed is None:
-            info(f"INFO git-claim accept bad nick={src}")
-            return
-        if not gitclaim.accept_allowed(src, target):
-            info(f"INFO git-claim accept ignore nick={src}")
-            return
-        repo, task, ident = parsed
-        result = gitclaim.mark_accepted(self.home, repo, task, ident, nick=src, channel=target)
-        if result == "ok":
-            if gitclaim.canonical_worker_nick(src):
-                gitclaim.note_worker_activity(self.home, src, time.time())
-            self._git_say(target, gitclaim.format_accept_ok(repo, task, ident))
-            info(f"INFO git-claim accept ok {repo} {task} {ident} nick={src}")
-            return
-        self._git_say(target, gitclaim.format_accept_nak(repo, task, ident))
-        info(f"INFO git-claim accept nak {result} {repo} {task} {ident} nick={src}")
+        """Transition no-op. !BORED already claimed. Do not pop the queue."""
+        del target, body
+        info(f"INFO git-claim accept noop nick={src}")
 
     def handle_privmsg(self, prefix: str, target: str, body: str) -> None:
         src = prefix.split("!", 1)[0].lstrip(":")

@@ -891,6 +891,28 @@ class Client:
             return
         info(f"INFO dumb job id={dl.msg_id} from={src}")
 
+    def _maybe_channel_pong(self, src: str, target: str, body: str) -> bool:
+        """Bare joined-channel 'ping' -> 'pong' on that channel. No Grok wake.
+
+        bob-* ears only. Exact body after trim, case-insensitive. Returns
+        before mention-ack / grok_talk enqueue.
+        """
+        if not bobtalk.is_fleet_bob_nick(self.original_nick):
+            return False
+        if not self._joined_channel(target):
+            return False
+        if (src or "").strip().lower() in self._mine_nicks():
+            return False
+        if (body or "").strip().lower() != "ping":
+            return False
+        dest = bobreport.normalize_channel(target)
+        if not dest or "|" in dest:
+            return False
+        self.send("PRIVMSG " + dest + " :pong")
+        time.sleep(FLOOD_S)
+        info("INFO auto-pong")
+        return True
+
     def handle_privmsg(self, prefix: str, target: str, body: str) -> None:
         src = prefix.split("!", 1)[0].lstrip(":")
         tgt_l = target.lower()
@@ -899,6 +921,8 @@ class Client:
         if to_channel:
             self._note_call_channel(target)
         if not to_channel and not to_me:
+            return
+        if to_channel and self._maybe_channel_pong(src, target, body):
             return
         if to_me:
             self._mark_pm_open(src)

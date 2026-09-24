@@ -15,6 +15,7 @@ def test_session_store_path_cursor_grok(tmp_path: Path, monkeypatch):
     p = ah.session_store_path("cursor")
     assert p == tmp_path / ".grok" / "bob-bridge" / "watch-agent-health-cursor.session"
     assert ah.session_store_path("grok").name.endswith("grok.session")
+    assert ah.session_store_path("aider").name.endswith("aider.session")
 
 
 def test_read_write_session_id(tmp_path: Path):
@@ -248,3 +249,25 @@ def test_commit_offset_cli():
         text=True,
     ).strip()
     assert out == "0"
+
+
+def test_format_aider_wake_payload():
+    body = ah.format_aider_wake_payload(["FROM simon #marchhare ping"], sink_name="listen.stdout.log")
+    assert "listen.stdout.log" in body
+    assert "FROM simon #marchhare ping" in body
+    assert "Do not exit the REPL" in body
+    assert not ah.wake_prompt_includes_boot_skills(body)
+
+
+def test_watch_script_aider_mode_injects_live_repl_not_message():
+    root = Path(__file__).resolve().parents[1]
+    ps1 = (root / "scripts" / "Watch-AgentHealth.ps1").read_text(encoding="utf-8")
+    assert "[switch]$Aider" in ps1 or "$Aider" in ps1
+    assert "WriteConsoleInput" in ps1
+    assert "Send-AiderConsoleText" in ps1
+    assert ".agentic-irc-aider" in ps1
+    assert "WriteConsoleInput" in ps1 and "SendKeys" in ps1
+    # Must not spawn aider --message one-shot; comments may mention --message as forbidden.
+    assert "Start-Process" in ps1  # grok/cursor still use Start-Process
+    assert "-ArgumentList @(" in ps1
+    assert "aider --message" not in ps1.lower().replace("never --message", "").replace("not --message", "")

@@ -1,17 +1,12 @@
 ﻿# Skill harvest log
 
-## 2026-09-24 — honesty-box foundation
+## 2026-09-24 — Jeeves home is not the bob-ionos home
 
-Added `.grok/skills/harvest-agent-skills/SKILL.md` (FOUNDATION). Frontmatter
-`github:` is `https://github.com/SimonBarnett/agentic_irc`. CAST IRON stays:
-report a repeatable playbook, a wrong or token-wasteful skill, a bug, or a
-workaround as a branch PR; if the PR cannot be opened, a GitHub issue titled
-`harvest:` with the intended title, branch, files, and full body. Empty
-harvest still means no commit. One Foundation line on each book skill
-(`agentic-irc`, `bob-irc`, `jeeves-git-webhook`, `agentic-moot`,
-`agentic-file`, `agentic-dumb`, `invite-airc`). Fleet harvest text in
-`agentic-irc` is unchanged. `install_skill.py` SKILLS left as-is (product
-code out of this harvest).
+`scripts/Install-BobChair.ps1`: `--home` / `AGENTIC_IRC_HOME` =
+`~\.agentic-irc-jeeves`, `BOB_DIGEST_HOME` = `~\.agentic-irc-bobiverse`.
+`fleet_digest_home()` reads `BOB_DIGEST_HOME` so Jeeves drains
+`chair-outbox.txt`. Skills `jeeves-git-webhook` and `bob-irc`. Do not
+share `--home` with `bob-ionos`. BobIrcd NSSM stays in agentic_build.
 
 ## 2026-09-23 — preferred IRC wake = Watch-AgentHealth
 
@@ -125,9 +120,15 @@ the live socket (login looks like it kicks the other). `Start-TalkSeat`
 refuses to kill a live `coordinator.pid` home that belongs to another nick.
 Skill `agentic-irc`.
 
-## 2026-09-22 â€” #88 seat PID = PowerShell `$PID` (NOT python)
+## 2026-09-22 — #88 seat PID = `irc_agent.py` (supersedes PowerShell seat)
 
-Simon correction: suffix must be **coordinator PowerShell process id**, not
+Issue #88: suffix is **python `irc_agent` PID** for the home (`coordinator.pid`
+`agent=` / `seat=`). Not `irc_listen`, not coordinator PowerShell `$PID`.
+`Start-TalkSeat` uses `--auto-nick` + `AGENTIC_IRC_SEAT_PID=self`.
+
+## 2026-09-22 â€” #88 seat PID = PowerShell `$PID` (NOT python) [superseded]
+
+Simon correction (later reversed by #88): suffix must be **coordinator PowerShell process id**, not
 python `irc_listen` (e.g. 17568) and not python `irc_agent`. FR #88, plan,
 runbook, skills updated. PR #89 must realign.
 

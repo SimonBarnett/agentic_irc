@@ -56,5 +56,24 @@ GitHub (or compatible) delivery. Does **not** merge `digest.json` and does
   `bob-ionos` home. Without `BOB_DIGEST_HOME`, GIT lines stay stuck.
 - Talk seats do not narrate these events.
 
-Returns **204** when the announce is queued. **400** on missing event or bad
-JSON. No HMAC verification in-tree (operator network posture only).
+Returns **204** when the announce is queued. **400** on missing event, bad
+JSON, or a queue write failure. No HMAC verification in-tree (operator
+network posture only).
+
+## GIT claim (`POST /bob/v1/report` `op=git-claim`)
+
+Secret required (`X-Bob-Secret`), same as other report writes.
+
+```json
+{"op":"git-claim","nick":"w-fl-4412","channel":"#flamingo"}
+```
+
+**200** body `{"ok":true,"claimed":{repo,task,id,…}}` moves the oldest
+unaccepted row to `accepted` in that same write. **200**
+`{"ok":true,"claimed":null}` means the queue was empty. Jeeves calls this
+when a shop `w-*` sends `!BORED` and then says `{repo} {task} {id}` once.
+`!ACCEPT` does not claim.
+
+After that line the worker POSTs `op=merge` with `working_on` (and `agent`
+/ `model` when known). `state=idle` clears `working_on`, `agent`, and
+`model`.

@@ -3,8 +3,8 @@ name: jeeves-git-webhook
 description: >
   Git webhooks on the ionos digest listener, announced by Jeeves only.
   Use when the user says git webhook, webhooks from git, Jeeves announce,
-  GIT pull_request, GIT push, chair-outbox, issue #147, or
-  /jeeves-git-webhook. Digest working_on posts stay bob-irc.
+  GIT pull_request, GIT push, chair-outbox, issue #147, !BORED, git-claim,
+  or /jeeves-git-webhook. Digest working_on posts stay bob-irc.
 ---
 
 # Git webhooks announced by Jeeves
@@ -45,3 +45,77 @@ Digest `POST /bob/v1/report` (change-only, `X-Bob-Secret`) stays
 - `pull_request` / `issues`: action, `#n`, title
 
 No fleet-status spam. No `!bobiverse` from a talk seat.
+
+## Claim queue (`!BORED`)
+
+The digest webhook is the list. `GET /bob/v1/report` (same body as
+`/bob/v1/digest`) includes:
+
+```text
+queue.unaccepted[]   FIFO, not yet claimed
+queue.accepted[]     claimed rows (nick, channel, accepted_ts)
+```
+
+`POST /bob/v1/git` appends a claimable event onto `queue.unaccepted` in
+the same step that queues the `GIT` line. `POST /bob/v1/report` with
+`X-Bob-Secret` and `{"op":"git-claim","nick":"…","channel":"…"}` returns
+`200` `{"ok":true,"claimed":{…}}` and moves that oldest row to
+`accepted` in the same write. Empty queue: `{"ok":true,"claimed":null}`.
+Jeeves calls that op. It does not decide the row by reading a side file.
+`queue.json` on the digest home is only the listener's crash mirror of
+this list. Old `git-unaccepted.json` / `git-accepted.jsonl` are imported
+once into that mirror and are not live.
+
+Jeeves is if-then only. No model call. `bob-*` does not auto-claim.
+
+Allowlist (anything else is skipped, including `ping`, `push`, `closed`,
+`edited`, `synchronize`, `labeled`):
+
+| GitHub event | action | `{task}` |
+|---|---|---|
+| `issues` | `opened` | `PR` |
+| `pull_request` | `opened` | `MRB` |
+| `pull_request` | `ready_for_review` | `MRB` |
+
+Task vocabulary is `PR`, `BUILD`, `MRB`, `FIX`, `UAT`. This GIT map emits
+only `PR` and `MRB`. `PR` is the issue→implement name.
+
+Breaking change from the first draft of this flow: `!BORED` both offers
+and accepts. A separate `!ACCEPT` is not required. If a worker still
+sends `!ACCEPT {repo} {task} {id}`, Jeeves ignores it (no second claim).
+`!TASK` is not used. `FILE v1 ACCEPT` is file transfer.
+
+Jeeves already JOINs every shop, so it hears `!BORED` itself.
+
+Worker, on **its** shop (`#flamingo`, `#ionos`, `#marchhare`,
+`#ce-priority-dev1`):
+
+1. Do not send `!BORED` until this worker has had no job for more than
+   120 seconds.
+2. Send exactly `!BORED`.
+3. Jeeves claims the oldest unaccepted row via `git-claim` and replies
+   with only that row: `{repo} {task} {id}` (three tokens).
+4. Start work. `POST /bob/v1/report` `op=merge` with `working_on` set to
+   that triple, plus `agent` and `model` when you know them
+   (`post_working_on.py --working-on '…' --agent … --model …`).
+5. When the job is done, POST `state=idle` ( `--idle` ). That clears
+   `working_on`, `agent`, and `model`.
+
+Chair gate before it calls `git-claim`:
+
+- Not a `w-*` nick, or not that worker's shop → silence.
+- Shop activity newer than 120 seconds → `NAK !BORED wait`.
+- Digest `working_on` for that worker pid is non-empty →
+  `NAK !BORED busy`.
+- Webhook returns no row → `no jobs`.
+- Webhook POST fails → silence (no invented job).
+
+`git-worker-activity.json` on the chair home is only that 120-second
+gate. It is not the job list. Shop chatter from the `w-*` updates it.
+`NAK !BORED wait` does not.
+
+After PASS-nits merge to `main`, ionos must recycle Jeeves and
+`bobcallback` (`!recycle ionos`). Until that recycle, new events are not
+queued and shop `!BORED` gets no answer. Also recycle `bob-*`
+Watch-Bobiverse so each ear runs the merged tree. Those ears do not
+emit a claim.

@@ -156,6 +156,13 @@ When the change needs it, **ionos** must **restart IRC altogether** (e.g.
 per issue #152). That is Bob/Simon on ionos — not an implementer worker on
 another machine.
 
+The GIT queue lives on the digest webhook. After a merge that touches
+it, ionos must restart Jeeves and `bobcallback` (`!recycle ionos` pulls,
+restarts the chair, restarts the listener). Until then, `GIT` may still
+be said but nothing is queued and shop `!BORED` is ignored. Recycle
+`bob-*` Watch-Bobiverse as well so the ear matches `main`. Those ears
+do not claim jobs.
+
 **Implementer PR workers do not live-recycle** flamingo, marchhare, or ionos
 from ce-priority-dev1 or any remote seat. Docs/skills/code only until merge;
 then the merger recycles.

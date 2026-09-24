@@ -435,7 +435,7 @@ def _coerce_worker(mid: str, pid: str, raw: object) -> dict:
             nick = worker_nick(mid, pid_s)
         except ValueError:
             nick = f"w-xx-{pid_s}"
-    return {
+    out = {
         "pid": pid_s,
         "key": str(ent.get("key") or worker_key(mid, pid_s) if normalize_machine_id(mid) else f"{mid}:{pid_s}"),
         "nick": nick,
@@ -443,6 +443,13 @@ def _coerce_worker(mid: str, pid: str, raw: object) -> dict:
         "state": str(ent.get("state") or "running"),
         "working_on": str(ent.get("working_on") or ""),
     }
+    agent = str(ent.get("agent") or "").strip()
+    model = str(ent.get("model") or "").strip()
+    if agent:
+        out["agent"] = agent
+    if model:
+        out["model"] = model
+    return out
 
 
 def _coerce_workers(mid: str, raw: object) -> dict:
@@ -600,6 +607,7 @@ class CallbackOutcome:
     err: str = ""
     actions: list[str] = field(default_factory=list)
     changed: bool = True
+    body: bytes | None = None
 
 
 @dataclass
@@ -742,6 +750,20 @@ def _apply_merge_payload(doc: dict, mid: str, payload: dict) -> list[str]:
             return []
         kind = str(payload.get("kind") or "grok")
         actions.extend(_merge_worker_on_ent(ent, mid, pid_s, str(payload.get("working_on") or ""), kind=kind))
+        workers = ent.setdefault("workers", {})
+        current = workers.get(pid_s)
+        if isinstance(current, dict):
+            if str(payload.get("state") or "").strip().lower() == "idle":
+                current["state"] = "idle"
+                current["working_on"] = ""
+                current.pop("agent", None)
+                current.pop("model", None)
+                _roll_working_on(ent)
+            else:
+                if str(payload.get("agent") or "").strip():
+                    current["agent"] = str(payload.get("agent")).strip()
+                if str(payload.get("model") or "").strip():
+                    current["model"] = str(payload.get("model")).strip()
     if "online" in payload:
         ent["online"] = bool(payload["online"])
         ent["status"] = "I am online" if ent["online"] else "I am offline"
@@ -762,17 +784,24 @@ def _apply_merge_payload(doc: dict, mid: str, payload: dict) -> list[str]:
                 return actions
             workers = ent.setdefault("workers", {})
             prev = workers.get(pid_s) or {}
-            workers[pid_s] = _coerce_worker(
-                mid,
-                pid_s,
-                {
-                    **prev,
-                    "kind": payload.get("kind", prev.get("kind") or ""),
-                    "state": payload.get("state", prev.get("state") or "running"),
-                    "working_on": prev.get("working_on") or "",
-                    "nick": payload.get("nick") or prev.get("nick") or worker_nick(mid, pid_s),
-                },
-            )
+            state = str(payload.get("state", prev.get("state") or "running") or "running")
+            idle = state.strip().lower() == "idle"
+            merged = {
+                **prev,
+                "kind": payload.get("kind", prev.get("kind") or ""),
+                "state": "idle" if idle else state,
+                "working_on": "" if idle else (prev.get("working_on") or ""),
+                "nick": payload.get("nick") or prev.get("nick") or worker_nick(mid, pid_s),
+            }
+            if idle:
+                merged["agent"] = ""
+                merged["model"] = ""
+            else:
+                if str(payload.get("agent") or "").strip():
+                    merged["agent"] = str(payload.get("agent")).strip()
+                if str(payload.get("model") or "").strip():
+                    merged["model"] = str(payload.get("model")).strip()
+            workers[pid_s] = _coerce_worker(mid, pid_s, merged)
             _roll_working_on(ent)
     elif "working_on" in payload and (pid_raw is None or str(pid_raw) == ""):
         ent["working_on"] = str(payload.get("working_on") or "")
@@ -1000,6 +1029,18 @@ def apply_callback(home: Path, payload: dict, briefer_nick: str = "") -> Callbac
     if looks_like_secret(blob):
         return CallbackOutcome(ok=False, err="secret")
     op = str(payload.get("op") or "").strip().lower()
+    if op == "git-claim":
+        import gitclaim
+
+        status, job = gitclaim.claim_top(
+            home,
+            str(payload.get("nick") or ""),
+            str(payload.get("channel") or ""),
+        )
+        if status == "error":
+            return CallbackOutcome(ok=False, err="queue")
+        body = json.dumps({"ok": True, "claimed": job}, separators=(",", ":")).encode("utf-8")
+        return CallbackOutcome(ok=True, changed=job is not None, body=body)
     mid = normalize_machine_id(str(payload.get("machine") or payload.get("id") or ""))
     actions: list[str] = []
     if op == "merge":
@@ -1012,7 +1053,8 @@ def apply_callback(home: Path, payload: dict, briefer_nick: str = "") -> Callbac
             except ValueError:
                 return CallbackOutcome(ok=False, err="bad pid")
             text = str(payload.get("working_on") or "").strip()
-            if not text:
+            idle = str(payload.get("state") or "").strip().lower() == "idle"
+            if not text and not idle:
                 return CallbackOutcome(ok=False, err="working_on required")
             if looks_like_secret(text):
                 return CallbackOutcome(ok=False, err="secret")
@@ -1158,6 +1200,13 @@ def apply_git_webhook(home: Path, event: str, payload: dict) -> GitWebhookOutcom
     line = format_github_webhook_announce(event, payload)
     if not line.startswith(GIT_ANNOUNCE_PREFIX) or looks_like_secret(line):
         return GitWebhookOutcome(ok=False, err="announce")
+    import gitclaim
+
+    claim = gitclaim.claim_from_payload(event, payload, line=line)
+    if claim is not None:
+        queued = gitclaim.enqueue_unaccepted(home, claim)
+        if queued == "error":
+            return GitWebhookOutcome(ok=False, err="queue")
     if not enqueue_chair_fleet_privmsg(home, line):
         return GitWebhookOutcome(ok=False, err="outbox")
     return GitWebhookOutcome(ok=True, announced=True)
@@ -1555,6 +1604,17 @@ def build_cursor_pools(doc: dict, machines: dict[str, dict]) -> list[dict]:
     return pools
 
 
+def _public_queue(home: Path) -> dict:
+    """Job list served on GET /bob/v1/report. Webhook mirror, not a side channel."""
+    import gitclaim
+
+    doc = gitclaim.load_queue(home)
+    return {
+        "unaccepted": list(doc.get("unaccepted") or []),
+        "accepted": list(doc.get("accepted") or []),
+    }
+
+
 def build_digest_object(home: Path, briefer_nick: str) -> dict:
     doc = load_digest(home)
     machines = doc.get("machines") if isinstance(doc.get("machines"), dict) else {}
@@ -1578,6 +1638,7 @@ def build_digest_object(home: Path, briefer_nick: str) -> dict:
         "chairNick": chair or briefer,
         "machines": exported,
         "cursor_pools": build_cursor_pools(doc, exported),
+        "queue": _public_queue(home),
     }
 
 

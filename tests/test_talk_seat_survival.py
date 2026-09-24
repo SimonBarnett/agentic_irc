@@ -81,6 +81,8 @@ def test_start_scripts_detach_listen_and_bind_guard():
     assert "UseShellExecute = $false" in hidden
     assert "talk_seat_pid.py" in talk
     assert "--bind-home" in talk
+    assert "--auto-nick" in talk
+    assert "AGENTIC_IRC_SEAT_PID = 'self'" in talk
     assert "Stop-CursorHomeAgents" in talk
     assert "prior_irc.py" in talk
     assert "Start-HiddenPython" in talk

@@ -182,7 +182,7 @@ def machine_from_nick(nick: str) -> str | None:
 
 
 def parse_talk_seat_nick(nick: str) -> str | None:
-    """{machine}-{PowerShellPid} talk seat → machine id. Not bob-* / w-*."""
+    """{machine}-{agentPid} talk seat → machine id. Not bob-* / w-*."""
     n = (nick or "").strip().lower()
     if not n or n.startswith("bob-") or parse_worker_nick(n):
         return None

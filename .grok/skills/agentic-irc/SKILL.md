@@ -62,7 +62,7 @@ pip install -r requirements.txt
 python scripts/seal.py genkey
 ```
 
-Two agents on one box **must** use different `--home` / `AGENTIC_IRC_HOME`. See `docs/multi-agent-one-host.md` in the repo (Libera vs Ergo, SASL, stdout redirect). Flamingo example: Watch `bob-flamingo` uses `~\.agentic-irc-bobiverse`; a talk session uses `--nick flamingo-$PID` (PowerShell seat `$PID`) `--home ~\.agentic-irc-cursor`. Extra sessions need their own home too. Do not reuse the Watch home. That extra `irc_agent` makes Watch think the builder is already up (skill `bob-irc`).
+Two agents on one box **must** use different `--home` / `AGENTIC_IRC_HOME`. See `docs/multi-agent-one-host.md` in the repo (Libera vs Ergo, SASL, stdout redirect). Flamingo example: Watch `bob-flamingo` uses `~\.agentic-irc-bobiverse`; a talk session uses `--nick flamingo-<agentPid>` (`irc_agent` PID) `--home ~\.agentic-irc-cursor`. Extra sessions need their own home too. Do not reuse the Watch home. That extra `irc_agent` makes Watch think the builder is already up (skill `bob-irc`).
 
 Second Cursor TUI on the same box: `Start-TalkSeat.ps1 -MachineId <id> -IrcHome ~\.agentic-irc-cursor-2` (flamingo, `ce-priority-dev1`, others). Default `~\.agentic-irc-cursor` is the first talk seat. Same nick on Ergo ghosts the live connection â€” Halloy looks like "login kicks the other". Do not `Stop-Process` `irc_agent` / `irc_listen` on another seat's home. `Start-TalkSeat` refuses to steal a live `coordinator.pid` home.
 
@@ -135,7 +135,8 @@ try again.
 2. If cursor-2 `irc_agent` is still JOIN, keep it. Else
    `scripts/Start-SecondSeatTui.ps1` (or `Start-TalkSeat.ps1 -MachineId
    <id> -IrcHome ~\.agentic-irc-cursor-2` in a **new** `-NoExit`
-   PowerShell). Nick = that PowerShell `$PID`, not the dead `2224`.
+   PowerShell). Nick comes from `Start-TalkSeat` (`{id}-<irc_agent PID>` via
+   `--auto-nick`), not a stale suffix from a dead agent.
 3. Start visible `cursor-agent.ps1 --trust --force --workspace C:\ai
    --model grok-4.6 -- $prompt` where `$prompt` is read from a **file**.
    Do not pass the prompt on `cmd.exe /c` (spaces truncate). Do not `-p`.
@@ -151,13 +152,13 @@ On each box after pull (or when Simon says refresh / restart talk seats):
 
 1. `git -C <agentic_irc> pull origin main`
 2. `python scripts/install_skill.py`
-3. Talk seat: `scripts/Start-TalkSeat.ps1 -MachineId <id>` (second TUI: also `-IrcHome ~\.agentic-irc-cursor-2`). Script sets nick `{id}-$PID` from **this PowerShell `$PID`**, writes `coordinator.pid` `seat=`, loads Ergo PASS, starts agent + listen. Do not invent the suffix from `irc_listen` / `irc_agent` PIDs.
+3. Talk seat: `scripts/Start-TalkSeat.ps1 -MachineId <id>` (second TUI: also `-IrcHome ~\.agentic-irc-cursor-2`). Optional non-PowerShell spawn: `python scripts/start_talk_seat.py --machine <id>` (same `--auto-nick` rule). Script starts `irc_agent` with `--auto-nick` so nick `{id}-<agentPid>` matches the running agent PID, writes `coordinator.pid` `agent=`/`seat=`, loads Ergo PASS, starts listen TSR. Never use `irc_listen` PID as the suffix.
 4. Recycle `bob-<id>` via Watch-Bobiverse only (skill `bob-irc`). No `--hello`. No `BobFleet-*` stop.
-5. ACK on `#bobiverse` one line: `Start-TalkSeat.ps1 seat=<PowerShellPid> nick=<id>-<pid> (PowerShell PID). bob-<id> up. pulled+install_skill.`
+5. ACK on `#bobiverse` one line: `Start-TalkSeat.ps1 agent=<agentPid> nick=<id>-<agentPid> (irc_agent PID). bob-<id> up. pulled+install_skill.`
 
-Example (marchhare): `marchhare ACK #88 â€” Start-TalkSeat.ps1 seat=20280 nick=marchhare-20280 (PowerShell PID). bob-marchhare up. pulled+install_skill.`
+Example (marchhare): `marchhare ACK #88 — Start-TalkSeat.ps1 agent=19392 nick=marchhare-19392 (irc_agent PID). bob-marchhare up. pulled+install_skill.`
 
-Raw `irc_agent.py` (no Start-TalkSeat) must set `AGENTIC_IRC_PASSWORD` from `~\.grok\ergo\connect.password` and pass `--nick {id}-{seatPid} --home <this seat only>`. Also set **`AGENTIC_IRC_SEAT_PID={seatPid}`** so the nick-suffix guard matches when the launching shell is not the coordinator PowerShell. Missing PASS is Ergo `464` / `ERROR :Password incorrect` â€” Halloy shows the nick gone. Missing `--nick` on a shared home steals or 464-loops. Never print the password. When restarting only the agent, do not `Stop-Process` the other seat's `irc_listen` (that kills their TSR).
+Raw `irc_agent.py` (no Start-TalkSeat) must set `AGENTIC_IRC_PASSWORD` from `~\.grok\ergo\connect.password` and pass `--nick {id}-{agentPid} --home <this seat only>`. Set **`AGENTIC_IRC_SEAT_PID={agentPid}`** (or `self` with `--auto-nick`) so the nick-suffix guard matches. Missing PASS is Ergo `464` / `ERROR :Password incorrect` — Halloy shows the nick gone. Missing `--nick` on a shared home steals or 464-loops. Never print the password. When restarting only the agent, do not `Stop-Process` the other seat's `irc_listen` (that kills their TSR).
 
 Before connect, `irc_agent.py` runs `scripts/prior_irc.py` (also `Start-TalkSeat.ps1` / `Start-BobEar.ps1`). Fixed rules, no LLM: kill `irc_agent` with the same `--nick` or the same `--home`, and `irc_listen` on that home. A `bob-*` start also kills `irc_listen` whose home is `.agentic-irc-cursor` and any `irc_agent` whose `--nick` is exactly `bob`. Then start one process with `CreateNoWindow` / `UseShellExecute false`. Not `Start-Process -WindowStyle Hidden`. Full rules and the dry-run one-liner: `docs/prior-irc-clean.md`. `--once` skips the kill.
 

@@ -34,11 +34,11 @@ Do **not** use `!bobiverse` to refresh or read the digest (#174).
   (all live `w-io-*` git workers JOIN there only).
 - `bob-<id>` JOINs fleet + shop at start. Bob drop closes `#<id>`.
 - Talk seats (Cursor or Grok, same): nick `{machine}-{pid}` (e.g.
-  `flamingo-22400`). **`pid` = coordinator PowerShell `$PID`** (seat host;
-  not python `irc_listen` / `irc_agent`). JOIN fleet + **this box's shop**.
+  `flamingo-19392`). **`pid` = python `irc_agent.py` PID** for that home;
+  not `irc_listen` or PowerShell `$PID`. JOIN fleet + **this box's shop**.
   Many sessions per box; pid is required. Not `cursor-*` / `grok-*`. Start:
   `scripts/Start-TalkSeat.ps1 -MachineId <id>` or TSR
-  `scripts/Start-IrcTsr.ps1` + `coordinator.pid` (`seat=` authoritative).
+  `scripts/Start-IrcTsr.ps1` + `coordinator.pid` (`agent=` authoritative).
   One agent per home.
   Do not install Watch-CursorIrc that respawns `cursor-flamingo`.
 - Workers JOIN **shop only**: `w-<shortid>-<pid>` (`w-fl-4412`). Key
@@ -163,14 +163,14 @@ then the merger recycles.
 ## Post-merge fleet announce (#88 talk-seat PID)
 
 Talk-seat recycle + ACK playbook lives in skill `agentic-irc` section
-**Start-TalkSeat recycle (#88)**. Boxes ACK with `seat=` = PowerShell `$PID`.
+**Start-TalkSeat recycle (#88)**. Boxes ACK with `agent=` = `irc_agent` PID.
 
 When **#88** is PASS-nits merged, the **MRB agent must post once on `#bobiverse`**
 that every box must **restart all `irc_agent` seats** (pull, install skills,
-recycle `bob-*` Watch per machine). Nick suffix = **coordinator PowerShell
-`$PID`**, not python listen/agent. Copy from
+recycle `bob-*` Watch per machine). Nick suffix = **`irc_agent.py` PID**,
+not python listen or PowerShell seat. Copy from
 `docs/post-merge-talk-seat-pid-restart.md`. Flamingo check: **`bob-flamingo` +
-`flamingo-<powershellSeatPid>`** on fleet. Not optional.
+`flamingo-<agentPid>`** on fleet. Not optional.
 
 Human monitor (flamingo): Halloy nick not `bob-*` (e.g. `simon`).
 `%AppData%\halloy\config.toml`: server `irc.ntsa.uk:6697` TLS,
@@ -203,6 +203,13 @@ separate from `bob-<id>`. Recycle the builder only: stop the process whose
 `--nick` is `bob-<id>`; start it from the pulled `scripts\irc_agent.py`
 with `--home ~\.agentic-irc-bobiverse`. Leave the extra nick running.
 Do not `Stop-ScheduledTask BobFleet-*`. Two agents still need two homes.
+
+Before that start, run deterministic prior cleanup (no LLM): `scripts/prior_irc.py`
+or `scripts/Start-BobEar.ps1`. Same `--nick` or same `--home` `irc_agent` processes
+are hard-killed, then one process is started with `CreateNoWindow` (not
+`Start-Process -WindowStyle Hidden`). Rules: `docs/prior-irc-clean.md`.
+A recycle that kills only one `irc_agent` leaves a ghost and the next client
+registers a suffixed nick.
 
 ## Ionos Ergo down
 

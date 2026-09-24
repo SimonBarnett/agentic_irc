@@ -10,6 +10,7 @@ from pathlib import Path
 SCRIPTS = (
     "seal.py",
     "irc_agent.py",
+    "prior_irc.py",
     "protect.py",
     "install_skill.py",
     "wire.py",

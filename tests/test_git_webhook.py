@@ -165,7 +165,12 @@ def test_report_path_unchanged_with_git_route(tmp_path):
     assert bobreport.load_digest(tmp_path)["machines"]["ionos"]["workers"]["1"]["working_on"] == "git-hook"
     for method, path, expect in (
         ("GET", "/bob/v1/git", 405),
-        ("GET", "/bob/v1/report", 405),
     ):
         c, p = bobcallback.handle_request(method, path, {}, b"", "127.0.0.1", tmp_path, secret, allow)
         assert c == expect and p == b""
+    code_g, body_g = bobcallback.handle_request(
+        "GET", "/bob/v1/report", {}, b"", "127.0.0.1", tmp_path, secret, allow
+    )
+    assert code_g == 200
+    assert b"git-hook" in body_g
+    assert json.loads(body_g.decode("utf-8"))["machines"]["ionos"]["workers"]["1"]["working_on"] == "git-hook"

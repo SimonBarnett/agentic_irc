@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Shop-channel digest + !bobiverse reader (issue #46). !report write path scrubbed."""
+"""Shop-channel digest + public HTTP digest reader (issue #174). !bobiverse removed."""
 from __future__ import annotations
 
 import copy
@@ -14,8 +14,11 @@ import bobstat
 import bobtalk
 
 REPORT_CMD = "!report"
-REPORT_GONE = "ERR report gone — use callback or !bobiverse"
+REPORT_GONE = "ERR report gone — use callback or GET /bob/v1/report"
 NO_MACHINE = "ERR no such machine"
+DEFAULT_DIGEST_URL = "https://irc.ntsa.uk/bob/v1/report"
+DIGEST_URL_ENV = "AGENTIC_IRC_DIGEST_URL"
+BOBIVERSE_GONE = "ERR !bobiverse gone — GET https://irc.ntsa.uk/bob/v1/report"
 DIGEST_PREFIX = "BOB DIGEST v1 "
 MAX_DIGEST_LINE = 350
 FLEET_CHANNEL = "#bobiverse"
@@ -122,10 +125,9 @@ _TRAY_MACHINE_EXPORT_KEYS = (
 WORKER_NICK_RE = re.compile(r"^w-([a-z0-9]+)-(\d+)_?$", re.I)
 
 HELP_TEXT = (
-    "!bobiverse          JSON digest (whisper)\n"
-    "!bobiverse <id>     one machine\n"
-    "!bobiverse ?        this text\n"
-    "write: POST reportUrl (no !report)"
+    "GET https://irc.ntsa.uk/bob/v1/report   fleet JSON digest\n"
+    "!recycle <id>       Jeeves only: fleet recycle\n"
+    "write: POST reportUrl (no !report; no !bobiverse)"
 )
 
 _SECRET_MARKERS = (
@@ -180,7 +182,7 @@ def machine_from_nick(nick: str) -> str | None:
 
 
 def parse_talk_seat_nick(nick: str) -> str | None:
-    """{machine}-{PowerShellPid} talk seat → machine id. Not bob-* / w-*."""
+    """{machine}-{agentPid} talk seat → machine id. Not bob-* / w-*."""
     n = (nick or "").strip().lower()
     if not n or n.startswith("bob-") or parse_worker_nick(n):
         return None
@@ -339,6 +341,7 @@ def parse_report_command(body: str) -> bool:
 
 
 def parse_bobiverse_query(body: str) -> tuple[str, str | None] | None:
+    """Detect legacy !bobiverse so callers can refuse it (#174)."""
     text = (body or "").strip()
     if not text:
         return None
@@ -352,6 +355,30 @@ def parse_bobiverse_query(body: str) -> tuple[str, str | None] | None:
         return ("help", None)
     mid = normalize_machine_id(rest)
     return ("machine", mid or rest.lower())
+
+
+def digest_url() -> str:
+    return (os.environ.get(DIGEST_URL_ENV) or os.environ.get("BOB_DIGEST_URL") or "").strip() or DEFAULT_DIGEST_URL
+
+
+def fetch_digest_http(url: str | None = None, timeout: float = 15.0) -> dict | None:
+    """GET public digest JSON. Returns None on any failure."""
+    import urllib.error
+    import urllib.request
+
+    target = (url or digest_url()).strip()
+    if not target:
+        return None
+    try:
+        req = urllib.request.Request(target, method="GET", headers={"Accept": "application/json"})
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            raw = resp.read().decode("utf-8", "replace")
+        doc = json.loads(raw or "{}")
+    except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, json.JSONDecodeError, OSError, ValueError):
+        return None
+    if not isinstance(doc, dict):
+        return None
+    return doc
 
 
 def digest_path(home: Path) -> Path:
@@ -714,7 +741,7 @@ def _apply_merge_payload(doc: dict, mid: str, payload: dict) -> list[str]:
     if payload.get("status"):
         ent["status"] = str(payload["status"])
     if "pcent" in payload and isinstance(payload["pcent"], dict):
-        ent["pcent"] = payload["pcent"]
+        ent["pcent"] = _merge_pcent_lesser(ent.get("pcent"), payload["pcent"])
     if payload.get("uptime_since"):
         ent["uptime_since"] = str(payload["uptime_since"])
     if pid_raw is not None and str(pid_raw) != "":
@@ -747,6 +774,11 @@ def _apply_merge_payload(doc: dict, mid: str, payload: dict) -> list[str]:
             continue
         val = payload[key]
         if key == "jobs" and not isinstance(val, list):
+            continue
+        if key == "pcent" and isinstance(val, dict):
+            continue
+        if key in ("weekly",) and val is not None:
+            ent[key] = _lesser_int(ent.get(key), val)
             continue
         ent[key] = val
     if "running" in ent:
@@ -1136,7 +1168,8 @@ def route_cc(kind: str, pm_open: bool) -> frozenset[str]:
             dest.add(CC_QUERY)
         return frozenset(dest)
     if k in ("working_on",):
-        return frozenset({CC_SHOP})
+        # Issue #167: status is webhook-only; never IRC shop or Query.
+        return frozenset()
     return frozenset()
 
 
@@ -1421,9 +1454,39 @@ def _pcent_remaining_for_pool(pcent: dict, pool_id: str) -> int | None:
     return None
 
 
-def _best_machine_pcent_for_pool(
+def _lesser_int(a: object, b: object) -> int | None:
+    """Lesser remaining % wins when the same account is reported from many boxes (#174)."""
+    vals: list[int] = []
+    for raw in (a, b):
+        if raw is None or raw == "":
+            continue
+        try:
+            vals.append(int(raw))
+        except (TypeError, ValueError):
+            continue
+    if not vals:
+        return None
+    return min(vals)
+
+
+def _merge_pcent_lesser(existing: object, incoming: dict) -> dict:
+    out: dict = {}
+    if isinstance(existing, dict):
+        out.update(existing)
+    for key, val in incoming.items():
+        if key in out:
+            lesser = _lesser_int(out.get(key), val)
+            if lesser is not None:
+                out[key] = lesser
+                continue
+        out[key] = val
+    return out
+
+
+def _lesser_machine_pcent_for_pool(
     machines: dict[str, dict], pool_id: str
 ) -> tuple[int | None, dict | None]:
+    """Pick the lesser remaining % across machines (shared account SoT, #174)."""
     best_rem: int | None = None
     best_ent: dict | None = None
     for mid in FLEET_MACHINE_IDS:
@@ -1432,7 +1495,7 @@ def _best_machine_pcent_for_pool(
         rem = _pcent_remaining_for_pool(pcent, pool_id)
         if rem is None:
             continue
-        if best_rem is None or rem > best_rem:
+        if best_rem is None or rem < best_rem:
             best_rem = rem
             best_ent = ent
     return best_rem, best_ent
@@ -1441,10 +1504,28 @@ def _best_machine_pcent_for_pool(
 def build_cursor_pools(doc: dict, machines: dict[str, dict]) -> list[dict]:
     stored = _coerce_cursor_pools(doc.get("cursor_pools"))
     if stored:
-        return stored
+        # Still force lesser across live machine pcent when both exist (#174).
+        rebuilt: list[dict] = []
+        for pool in stored:
+            if not isinstance(pool, dict):
+                continue
+            pid = str(pool.get("id") or "")
+            rem_m, ent = _lesser_machine_pcent_for_pool(machines, pid) if pid else (None, None)
+            row = dict(pool)
+            if rem_m is not None:
+                cur = row.get("remaining")
+                lesser = _lesser_int(cur, rem_m)
+                if lesser is not None:
+                    row["remaining"] = lesser
+                if ent and row.get("period_end") in (None, ""):
+                    pe, reset = _cursor_pool_period(ent)
+                    row["period_end"] = pe
+                    row["reset"] = reset
+            rebuilt.append(row)
+        return rebuilt
     pools: list[dict] = []
     for pool_id, label in CURSOR_SPENDING_POOLS:
-        remaining, ent = _best_machine_pcent_for_pool(machines, pool_id)
+        remaining, ent = _lesser_machine_pcent_for_pool(machines, pool_id)
         if remaining is None:
             continue
         period_end, reset = (None, None)

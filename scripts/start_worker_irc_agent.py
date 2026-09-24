@@ -13,6 +13,7 @@ import sys
 from pathlib import Path
 
 import bobreport
+import prior_irc
 
 SCRIPTS = Path(__file__).resolve().parent
 
@@ -57,6 +58,10 @@ def main(argv: list[str] | None = None) -> int:
     if args.dry_run:
         print(" ".join(cmd))
         return 0
+    cleaned = prior_irc.clean_priors(launch["nick"], launch["home"], self_pid=os.getpid())
+    if not cleaned.scanned:
+        print("INFO prior-clean aborted worker start")
+        return 1
     home.mkdir(parents=True, exist_ok=True)
     creationflags = 0
     if sys.platform == "win32":

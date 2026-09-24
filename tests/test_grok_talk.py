@@ -271,3 +271,34 @@ def test_grok_disabled_matches_ack_only_no_inbox(tmp_path, monkeypatch):
     c.handle_privmsg("cursor-flamingo!u@h", "#bobiverse", "@bob-ionos hello?")
     assert sent
     assert not grok_talk.inbox_path(tmp_path).exists()
+
+def test_reply_channel_follows_last_call_channel(tmp_path, monkeypatch):
+    monkeypatch.setenv("AGENTIC_IRC_HOME", str(tmp_path))
+    sent: list[str] = []
+
+    def _send(self, line: str) -> None:
+        sent.append(line)
+
+    monkeypatch.setattr(irc_agent.Client, "send", _send)
+    c = irc_agent.Client(_args(tmp_path, nick="bob-flamingo"))
+    c.channels = ["#bobiverse", "#flamingo"]
+    c.chan = "#bobiverse"
+    c._pending_joins = {x.lower() for x in c.channels}
+    assert c._reply_channel() == "#bobiverse"
+    c._note_call_channel("#flamingo")
+    assert c._reply_channel() == "#flamingo"
+    c.say("pong")
+    assert any(x.startswith("PRIVMSG #flamingo :pong") for x in sent)
+    # bare outbox drain uses say -> sticky channel
+    sent.clear()
+    out = tmp_path / "outbox.txt"
+    out.write_text("hello shop\n", encoding="utf-8")
+    c.outbox = out
+    c.sock = object()  # truthy for drain
+    c._drain_outbox_path(out)
+    assert any(x.startswith("PRIVMSG #flamingo :hello shop") for x in sent)
+
+
+def test_reply_target_for_same_channel():
+    assert grok_talk.reply_target_for("simon", "#agentic_irc", True) == "#agentic_irc"
+    assert grok_talk.reply_target_for("simon", "#agentic_irc", False) == "simon"

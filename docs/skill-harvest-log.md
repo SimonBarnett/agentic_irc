@@ -221,3 +221,4 @@ harvested into `.grok/skills/bob-irc`. Protocol leaflets stay `agentic-irc`
 `bob-irc` SKILL.md (no scripts dump).
 - 2026-09-24 — **connect-bobiverse**: Haitch/Grok Bot + any agent join recipe for Ergo #bobiverse (Si: agents should be able to connect to the bob). Cross-links agentic-irc / bob-irc.
 
+- 2026-09-24 — **connect-bobiverse**: aligned with Bob standing join (Start-TalkSeat, nick `<machine>-$PID`, home `.agentic-irc-haitch`; not bare Haitch; never Watch bobiverse home).

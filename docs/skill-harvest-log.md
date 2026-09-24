@@ -1,5 +1,13 @@
 ﻿# Skill harvest log
 
+## 2026-09-24 — Jeeves home is not the bob-ionos home
+
+`scripts/Install-BobChair.ps1`: `--home` / `AGENTIC_IRC_HOME` =
+`~\.agentic-irc-jeeves`, `BOB_DIGEST_HOME` = `~\.agentic-irc-bobiverse`.
+`fleet_digest_home()` reads `BOB_DIGEST_HOME` so Jeeves drains
+`chair-outbox.txt`. Skills `jeeves-git-webhook` and `bob-irc`. Do not
+share `--home` with `bob-ionos`. BobIrcd NSSM stays in agentic_build.
+
 ## 2026-09-23 — preferred IRC wake = Watch-AgentHealth
 
 Simon: do not arm in-session `listen.stdout.log` `^FROM ` TSR (burns

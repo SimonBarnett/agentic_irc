@@ -42,14 +42,19 @@ See agentic_build #124 — `Write-BobIrcStatus` should hash the peer blob and sk
 
 ## GitHub (`POST /bob/v1/git`)
 
-GitHub (or compatible) delivery to the digest chair home. Does **not** merge
-`digest.json` and does **not** use `X-Bob-Secret`.
+GitHub (or compatible) delivery. Does **not** merge `digest.json` and does
+**not** use `X-Bob-Secret`.
 
 - Same IP allowlist as fleet (`BOB_REPORT_ALLOW`, default loopback).
 - Header `X-GitHub-Event` (GitHub delivery) is required.
-- JSON body per GitHub webhook shape. Digest chair (**Jeeves**) announces on
-  `#bobiverse` via `outbox.txt` (`GIT …` prefix). Talk seats do not narrate
-  these events.
+- JSON body per GitHub webhook shape. The listener appends
+  `PRIVMSG #bobiverse :GIT …` to `chair-outbox.txt` on
+  `BOB_DIGEST_HOME` (`~\.agentic-irc-bobiverse`).
+- Jeeves (`irc_agent.py --chair`) is the only nick that drains that file.
+  `--home` / `AGENTIC_IRC_HOME` is `~\.agentic-irc-jeeves`.
+  `scripts/Install-BobChair.ps1` sets both. Do not point `--home` at the
+  `bob-ionos` home. Without `BOB_DIGEST_HOME`, GIT lines stay stuck.
+- Talk seats do not narrate these events.
 
 Returns **204** when the announce is queued. **400** on missing event or bad
 JSON. No HMAC verification in-tree (operator network posture only).

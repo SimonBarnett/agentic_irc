@@ -132,6 +132,43 @@ def test_non_chair_does_not_send_git(tmp_path, monkeypatch, recorder):
     assert any("GIT pull_request" in x for x in recorder)
 
 
+def test_fleet_digest_home_reads_bob_digest_home(tmp_path, monkeypatch):
+    digest = tmp_path / "bobiverse"
+    digest.mkdir()
+    identity = tmp_path / "jeeves"
+    worker = tmp_path / "workers" / "ionos" / "4412"
+    worker.mkdir(parents=True)
+    monkeypatch.delenv("BOB_DIGEST_HOME", raising=False)
+    assert bobreport.fleet_digest_home(worker) == worker.parent.parent.parent
+    assert bobreport.fleet_digest_home(identity) == identity
+    monkeypatch.setenv("BOB_DIGEST_HOME", str(digest))
+    assert bobreport.fleet_digest_home(identity) == digest
+    assert bobreport.fleet_digest_home(worker) == digest
+
+
+def test_chair_drains_git_from_bob_digest_home(tmp_path, monkeypatch, recorder):
+    """GIT lines land on the digest home; Jeeves --home is a different directory."""
+    identity = tmp_path / "jeeves"
+    digest = tmp_path / "bobiverse"
+    identity.mkdir()
+    digest.mkdir()
+    monkeypatch.delenv("BOB_DIGEST_HOME", raising=False)
+    bobreport.enqueue_chair_fleet_privmsg(
+        digest, "GIT push SimonBarnett/agentic_irc main by simon"
+    )
+    assert (digest / "chair-outbox.txt").is_file()
+    monkeypatch.setenv("BOB_DIGEST_HOME", str(digest))
+    monkeypatch.setenv("AGENTIC_IRC_CHAIR_NICK", "Jeeves")
+    chair = irc_agent.Client(_chair_args(identity))
+    assert chair.home == identity
+    chair.sock = object()
+    chair.joined.set()
+    drained = chair.drain_outbox_once()
+    assert any("GIT push" in x for x in drained)
+    assert any("GIT push" in x for x in recorder)
+    assert not (identity / "chair-outbox.txt").exists()
+
+
 def test_chair_sends_git_announce_not_spam(tmp_path, monkeypatch, recorder):
     monkeypatch.setenv("AGENTIC_IRC_HOME", str(tmp_path))
     chair = irc_agent.Client(_chair_args(tmp_path))

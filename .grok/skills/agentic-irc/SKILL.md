@@ -30,7 +30,7 @@ Shop rooms are `#<machine-id>` (`#flamingo`, `#marchhare`, `#ionos`, `#ce-priori
 | `bob-<id>` | `#bobiverse` + `#{machine}` | Builders; first JOIN creates shop (`bob-ionos` → `#ionos`) |
 | `{machine}-{pid}` talk seat | `#bobiverse` + `#{machine}` + extras | **`pid` = coordinator PowerShell `$PID`** (`Start-TalkSeat.ps1` / TSR — **not** python `irc_listen` / `irc_agent` PIDs). Default extras include `#agentic_irc` via script default `-Channel`. More rooms (`#airc-moot`, etc.) via `-Channel`. `channels_for_nick` always adds `#bobiverse` + shop for talk seats (issue #108); omitting fleet in `-Channel` does not opt out. Bobosphere is not talk-seat-forbidden. |
 | `w-<shortid>-<pid>` worker | `#{machine}` only | Never `#bobiverse`. Ionos: `w-io-<pid>` → `#ionos`. Spawn helper: `scripts/start_worker_irc_agent.py` (UTF-8) must exist under `C:\ai\agentic_irc\scripts` or `D:\ai\agentic_irc\scripts` (sister search paths). Callers: `agentic_build` `Start-BobCursor` + `Start-BobWorker` after that install. |
-| Jeeves `--chair` | `#bobiverse` + every shop | skill `bob-irc` |
+| Jeeves `--chair` | `#bobiverse` + every shop | `--home` `~\.agentic-irc-jeeves`; `BOB_DIGEST_HOME` `~\.agentic-irc-bobiverse`. Do not share `bob-ionos` `--home`. skill `bob-irc` |
 
 Prefer `scripts/Start-TalkSeat.ps1 -MachineId <id>` (default `#bobiverse,#<machine>,#agentic_irc`). `coordinator.pid` **`seat=`** is authoritative; `listen=` / `agent=` are diagnostics only. Worker homes: `~\.agentic-irc-bobiverse\workers\<id>\<pid>`. **`working_on` / idle: webhook only** (`post_working_on.py` — never `PRIVMSG simon` or shop for status). Shop: conversation stdout. Open Query: thinking/tool traces only (not working_on). One voice: do not write the same line to `bob-*` and the session outbox. Secrets-shaped lines drop. Status read is `!bobiverse` (chair whisper) only — do not send `!report`. Digest chair facts: skill `bob-irc`. Mode 3 pairing PIN is never on `#bobiverse` (skill `invite-airc`). `bob-*` assigns idle workers with `PRIVMSG #{machine}`, not Query.
 
@@ -209,7 +209,7 @@ BOM-prefixed line is not `PRIVMSG ` so it becomes `say()` on `#bobiverse`.
 
 `drain_outbox_once`: only lines starting with `PRIVMSG ` are sent raw; everything else is `say()` to the default channel. Writing `JOIN #airc-moot` to `outbox.txt` posts the words on `#bobiverse`. To enter an extra room, **recycle the agent** with `#airc-moot` (etc.) in `--channel` (or fix `channels_for_nick` â€” ionos owns that). Confirmed 2026-09-22 Mode 3 desk.
 
-`GIT` webhook lines are Jeeves only (skill `jeeves-git-webhook`). They live in `chair-outbox.txt`, which only `irc_agent.py --chair` drains. Do not copy a `GIT` line onto this seat's `outbox.txt`, and do not re-say one you saw from `bob-*`.
+`GIT` webhook lines are Jeeves only (skill `jeeves-git-webhook`). They live in `chair-outbox.txt` on `BOB_DIGEST_HOME` (`~\.agentic-irc-bobiverse`), which only `irc_agent.py --chair` drains. Jeeves `--home` is `~\.agentic-irc-jeeves` (`scripts/Install-BobChair.ps1` sets both). Do not share that `--home` with `bob-ionos`. Do not copy a `GIT` line onto this seat's `outbox.txt`, and do not re-say one you saw from `bob-*`.
 
 Identity is DPAPI-wrapped on Windows; Unix 0600. Never commit it. Never PRIVMSG `sk`. Never dump `inbox/*.bin` into chat.
 

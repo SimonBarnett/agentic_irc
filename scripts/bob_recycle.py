@@ -290,6 +290,21 @@ def _default_recycle_tray(build_root: Path) -> None:
     )
 
 
+def digest_home_native() -> str:
+    """digest.json / chair-outbox.txt root. Not the Jeeves identity home.
+
+    Use os.path, not pathlib.Path: tests fake os.name as ``nt`` and WindowsPath
+    cannot be constructed on this host.
+    """
+    env = (os.environ.get("BOB_DIGEST_HOME") or "").strip()
+    if env:
+        return _native_abspath(env)
+    profile = (os.environ.get("USERPROFILE") or os.environ.get("HOME") or "").strip()
+    if not profile:
+        profile = os.path.expanduser("~")
+    return _native_abspath(os.path.join(profile, ".agentic-irc-bobiverse"))
+
+
 def _default_restart_chair(irc_root: Path, home: Path) -> None:
     """Detach chair + bobcallback restart. Do not wait in this process."""
     if os.name != "nt":
@@ -298,6 +313,7 @@ def _default_restart_chair(irc_root: Path, home: Path) -> None:
     install = scripts / "Install-BobChair.ps1"
     callback = scripts / "bobcallback.py"
     home_s = _native_abspath(home)
+    digest_s = digest_home_native()
     helper_path = os.path.join(home_s, "recycle-chair-after-exit.ps1")
 
     def _ps_sq(s: Path | str) -> str:
@@ -309,16 +325,17 @@ def _default_restart_chair(irc_root: Path, home: Path) -> None:
             f"$install = {_ps_sq(install)}",
             f"$callback = {_ps_sq(callback)}",
             f"$agentHome = {_ps_sq(home_s)}",
+            f"$digestHome = {_ps_sq(digest_s)}",
             f"$scripts = {_ps_sq(scripts)}",
             "while (Get-Process -Id $waitPid -ErrorAction SilentlyContinue) { Start-Sleep -Seconds 1 }",
             "if (Test-Path -LiteralPath $install) {",
             "  Start-Process -FilePath powershell.exe -ArgumentList @('-NoProfile','-ExecutionPolicy','Bypass','-File',$install) -WorkingDirectory $scripts -WindowStyle Hidden | Out-Null",
             "}",
             "Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {",
-            "  $_.CommandLine -and $_.CommandLine -match 'bobcallback\\.py' -and $_.CommandLine.Contains($agentHome)",
+            "  $_.CommandLine -and $_.CommandLine -match 'bobcallback\\.py'",
             "} | ForEach-Object { Stop-Process -Id ([int]$_.ProcessId) -Force -ErrorAction SilentlyContinue }",
             "if (Test-Path -LiteralPath $callback) {",
-            "  Start-Process -FilePath python -ArgumentList @('-u',$callback,'--home',$agentHome) -WorkingDirectory $scripts -WindowStyle Hidden | Out-Null",
+            "  Start-Process -FilePath python -ArgumentList @('-u',$callback,'--home',$digestHome) -WorkingDirectory $scripts -WindowStyle Hidden | Out-Null",
             "}",
             "",
         ]
@@ -339,18 +356,18 @@ def _default_restart_chair(irc_root: Path, home: Path) -> None:
     )
 
 
-def _default_restart_callback(home: Path, irc_root: Path) -> None:
+def _default_restart_callback(_home: Path, irc_root: Path) -> None:
+    """Restart bobcallback on the digest home. `_home` is the Jeeves identity home."""
     if os.name != "nt":
         return
-    home_s = _native_abspath(home)
+    digest_s = digest_home_native()
     for pid, _cmd in _win_process_commandlines("bobcallback.py"):
-        if home_s.replace("\\", "\\\\") in _cmd or home_s in _cmd:
-            subprocess.run(["taskkill", "/F", "/PID", str(pid)], check=False, capture_output=True)
+        subprocess.run(["taskkill", "/F", "/PID", str(pid)], check=False, capture_output=True)
     cb = irc_root / "scripts" / "bobcallback.py"
     if not cb.is_file():
         return
     subprocess.Popen(
-        ["python", "-u", str(cb), "--home", home_s],
+        ["python", "-u", str(cb), "--home", digest_s],
         cwd=str(irc_root / "scripts"),
         creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, "CREATE_NO_WINDOW") else 0,
     )

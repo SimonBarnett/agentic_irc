@@ -44,8 +44,10 @@ nothing meaningful changed. Simon wants:
    payload is identical to last merged state for that machine id (server may
    compare canonical JSON; client must not POST heartbeat-only `lastSeen`).
 4. **Built-in chair user:** one registered Ergo identity (config:
-   `agentic_build/config/bobiverse.json` — e.g. `chairNick: bob-chair` or MOOT
-   chair nick) running a **slim seat** that:
+   `agentic_build/config/bobiverse.json` — `chairNick: Jeeves`; `--home`
+   `~\.agentic-irc-jeeves`; digest files on `BOB_DIGEST_HOME`
+   `~\.agentic-irc-bobiverse`; do not share the bob-ionos `--home`; MOOT
+   chair is a different seat) running a **slim seat** that:
    - JOINs `#bobiverse` (and does not narrate fleet status into channel)
    - Ingests webhook merges into `digest.json` (briefer role)
    - Answers `!bobiverse` / `!bobiverse ?` / `!bobiverse <id>` via **whisper**

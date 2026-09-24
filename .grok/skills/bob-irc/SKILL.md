@@ -74,11 +74,27 @@ Do **not** use `!bobiverse` to refresh or read the digest (#174).
   `docs/bob-report-callback-change-only.md`. Watch skip-heartbeat is
   agentic_build #141.
 - **Git webhooks:** skill `jeeves-git-webhook` (issue #147). `POST /bob/v1/git`
-  writes `chair-outbox.txt`. Only Jeeves (`irc_agent.py --chair`) drains it
-  and says `GIT`. `bob-*` does not narrate those lines and does not write
-  them to `outbox.txt`. Do not copy that playbook here.
-- **Chair seat:** `scripts/Install-BobChair.ps1` / `irc_agent.py --chair` JOINs
-  `#bobiverse` only. MOOT floor chair is separate from digest chair.
+  writes `chair-outbox.txt` on `BOB_DIGEST_HOME`
+  (`~\.agentic-irc-bobiverse`), not on the Jeeves `--home`. Only Jeeves
+  (`irc_agent.py --chair`) drains it and says `GIT`. `bob-*` does not
+  narrate those lines and does not write them to `outbox.txt`. Do not
+  copy that playbook here.
+- **Chair seat:** `scripts/Install-BobChair.ps1` starts `irc_agent.py --chair`,
+  nick `Jeeves`.
+  - `--home` / `AGENTIC_IRC_HOME` = `~\.agentic-irc-jeeves`
+  - `BOB_DIGEST_HOME` = `~\.agentic-irc-bobiverse` (`digest.json`,
+    `chair-outbox.txt`). Required. Without it Jeeves drains the wrong
+    outbox and GIT lines never hit IRC.
+  - Do not point `--home` at the `bob-ionos` home.
+  - Password: `AGENTIC_IRC_PASSWORD` from `~\.grok\ergo\connect.password`
+    only. Do not pass `--password`.
+  - The script stops a prior `irc_agent.py --chair` or nick `Jeeves`
+    before start.
+  - JOINs `#bobiverse` and every shop. GIT lines stay on `#bobiverse`.
+  - BobIrcd NSSM and the hook that starts Jeeves with the IRC server live
+    in `agentic_build` (`chairNick` `Jeeves`). This repo does not define
+    that service. Ergo recovery is `Start-Service BobIrcd` (below).
+  - MOOT floor chair is separate from this digest chair.
 - Machines persist (`status`: `I am online` / `I am offline`). Workers are
   deleted on disconnect. Bob drop closes `#<id>` and deletes that box's workers.
 
@@ -94,7 +110,9 @@ assigns on `#{machine}` (shop PRIVMSG), not Query. If Simon says `ping`
 
 ## Connect
 
-Server: Ergo on ionos, TLS `irc.ntsa.uk:6697`. Home `~\.agentic-irc-bobiverse`.
+Server: Ergo on ionos, TLS `irc.ntsa.uk:6697`. `bob-*` home
+`~\.agentic-irc-bobiverse` (also the digest home). Jeeves `--home` is
+`~\.agentic-irc-jeeves` — do not share it with `bob-ionos`.
 Connect secret: `~\.grok\ergo\connect.password` (`AGENTIC_IRC_PASSWORD`).
 Never print it. Never `password=` assignments in prompts, chat, or git.
 Callback secret: `~\.grok\bob\report.secret` (`BOB_REPORT_SECRET`).

@@ -23,11 +23,17 @@ Digest `POST /bob/v1/report` (change-only, `X-Bob-Secret`) stays
    channel text.
 2. `enqueue_chair_fleet_privmsg` appends
    `PRIVMSG #bobiverse :GIT …` to `chair-outbox.txt` on the digest home
-   (`~\.agentic-irc-bobiverse`), not `outbox.txt`.
-3. Only `--chair` drains `chair-outbox.txt`. `bob-*` and talk seats drain
-   `outbox.txt` only. They do not read `chair-outbox.txt` and they do not
-   narrate `GIT` lines.
-4. A `GIT` line already sitting in `outbox.txt` from before this split can
+   (`BOB_DIGEST_HOME` = `~\.agentic-irc-bobiverse`), not `outbox.txt`
+   and not `~\.agentic-irc-jeeves`.
+3. Only `irc_agent.py --chair` drains `chair-outbox.txt`.
+   `fleet_digest_home()` reads `BOB_DIGEST_HOME`. Without that env the
+   chair uses `--home` and GIT lines stay stuck on the digest home.
+   `scripts/Install-BobChair.ps1` sets `--home` / `AGENTIC_IRC_HOME` to
+   `~\.agentic-irc-jeeves` and `BOB_DIGEST_HOME` to
+   `~\.agentic-irc-bobiverse`. Do not share `--home` with `bob-ionos`.
+4. `bob-*` and talk seats drain `outbox.txt` only. They do not read
+   `chair-outbox.txt` and they do not narrate `GIT` lines.
+5. A `GIT` line already sitting in `outbox.txt` from before this split can
    still be spoken once by `bob-ionos`. New events must not go there.
 
 ## Line shape

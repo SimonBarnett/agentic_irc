@@ -256,7 +256,12 @@ def test_start_worker_irc_agent_utf8_py_compile_and_dry_run(tmp_path):
 
 def test_start_worker_irc_agent_spawns_irc_agent(tmp_path):
     popen = MagicMock(return_value=MagicMock(pid=4412))
-    with patch.object(start_worker_irc_agent.subprocess, "Popen", popen):
+    cleaned = MagicMock()
+    cleaned.scanned = True
+    with (
+        patch.object(start_worker_irc_agent.subprocess, "Popen", popen),
+        patch.object(start_worker_irc_agent.prior_irc, "clean_priors", return_value=cleaned),
+    ):
         rc = start_worker_irc_agent.main(
             [
                 "--fleet-home",

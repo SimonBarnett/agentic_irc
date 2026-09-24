@@ -73,12 +73,23 @@ def test_start_scripts_detach_listen_and_bind_guard():
     root = Path(__file__).resolve().parents[1]
     tsr = (root / "scripts" / "Start-IrcTsr.ps1").read_text(encoding="utf-8")
     talk = (root / "scripts" / "Start-TalkSeat.ps1").read_text(encoding="utf-8")
-    assert "Start-Process" in tsr
+    hidden = (root / "scripts" / "IrcProcess.ps1").read_text(encoding="utf-8")
+    assert "Start-HiddenPython" in tsr
     assert "listen.stdout.log" in tsr
-    assert "RedirectStandardOutput" in tsr
+    assert "--stdout-log" in tsr
+    assert "CreateNoWindow" in hidden
+    assert "UseShellExecute = $false" in hidden
     assert "talk_seat_pid.py" in talk
     assert "--bind-home" in talk
     assert "Stop-CursorHomeAgents" in talk
+    assert "prior_irc.py" in talk
+    assert "Start-HiddenPython" in talk
+    for label, text in (("tsr", tsr), ("talk", talk), ("hidden", hidden)):
+        for line in text.splitlines():
+            if line.lstrip().startswith("#"):
+                continue
+            assert "WindowStyle Hidden" not in line, label
+            assert "Start-Process" not in line, label
     assert "$PSScriptRoot" in talk
     assert "$PSScriptRoot" in tsr
     assert "C:\\ai\\agentic_irc\\scripts" not in talk

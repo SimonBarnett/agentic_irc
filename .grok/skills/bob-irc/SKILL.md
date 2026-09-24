@@ -186,6 +186,13 @@ separate from `bob-<id>`. Recycle the builder only: stop the process whose
 with `--home ~\.agentic-irc-bobiverse`. Leave the extra nick running.
 Do not `Stop-ScheduledTask BobFleet-*`. Two agents still need two homes.
 
+Before that start, run deterministic prior cleanup (no LLM): `scripts/prior_irc.py`
+or `scripts/Start-BobEar.ps1`. Same `--nick` or same `--home` `irc_agent` processes
+are hard-killed, then one process is started with `CreateNoWindow` (not
+`Start-Process -WindowStyle Hidden`). Rules: `docs/prior-irc-clean.md`.
+A recycle that kills only one `irc_agent` leaves a ghost and the next client
+registers a suffixed nick.
+
 ## Ionos Ergo down
 
 Service `BobIrcd` runs `C:\ai\ergo\ergo.exe` via NSSM (Automatic, LocalSystem).

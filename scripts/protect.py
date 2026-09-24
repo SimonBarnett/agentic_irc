@@ -16,18 +16,27 @@ class ProtectError(Exception):
 def protect_path(path: Path) -> None:
     path = Path(path)
     if os.name == "nt":
+        # Medium-IL / UAC-filtered tokens do not get BUILTIN\Administrators ACEs
+        # ("group used for deny only"). Grant DOMAIN\USER with (OI)(CI) so mkdir
+        # of children works after /inheritance:r. (Haitch join 2026-09-24)
         user = os.environ.get("USERNAME") or "Administrators"
-        cmd = [
-            "icacls",
-            str(path),
-            "/inheritance:r",
-            "/grant:r",
-            "NT AUTHORITY\\SYSTEM:(F)",
-            "/grant:r",
-            "BUILTIN\\Administrators:(F)",
-            "/grant:r",
-            f"{user}:(F)",
+        domain = (os.environ.get("USERDOMAIN") or "").strip()
+        if domain and domain.upper() not in ("", ".", "UNKNOWN"):
+            user_spec = f"{domain}\\{user}"
+        else:
+            user_spec = user
+        # Also grant local machine account when domain-joined (bob homes carry both).
+        machine = (os.environ.get("COMPUTERNAME") or "").strip()
+        grants = [
+            "NT AUTHORITY\\SYSTEM:(OI)(CI)(F)",
+            "BUILTIN\\Administrators:(OI)(CI)(F)",
+            f"{user_spec}:(OI)(CI)(F)",
         ]
+        if machine and domain and machine.upper() != domain.upper():
+            grants.append(f"{machine}\\{user}:(OI)(CI)(F)")
+        cmd = ["icacls", str(path), "/inheritance:r"]
+        for g in grants:
+            cmd.extend(["/grant:r", g])
         r = subprocess.run(cmd, capture_output=True, text=True)
         if r.returncode != 0:
             err = (r.stderr or r.stdout or f"icacls exit {r.returncode}").strip()

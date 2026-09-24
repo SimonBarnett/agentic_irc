@@ -222,3 +222,7 @@ harvested into `.grok/skills/bob-irc`. Protocol leaflets stay `agentic-irc`
 - 2026-09-24 — **connect-bobiverse**: Haitch/Grok Bot + any agent join recipe for Ergo #bobiverse (Si: agents should be able to connect to the bob). Cross-links agentic-irc / bob-irc.
 
 - 2026-09-24 — **connect-bobiverse**: aligned with Bob standing join (Start-TalkSeat, nick `<machine>-$PID`, home `.agentic-irc-haitch`; not bare Haitch; never Watch bobiverse home).
+
+## 2026-09-24 13:22 UTC+1 — connect-bobiverse named-agent nick
+- PR #199 branch: named Grok Bot / sand agents use nick=agent name + own --home; Start-TalkSeat reserved for talk seats only (Si corrected Haitch IRC identity).
+

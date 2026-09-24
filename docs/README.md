@@ -21,6 +21,8 @@ Agents: open **live** specs below. Do not treat `mrb-*.md` / `mrb-*.pdf` as curr
 | `build-and-test-plan-ionos-shop-channel-bob-ionos-2026-09-21.md` | Worker plan for #70 |
 | `bobiverse-ionos-ircd.md` | Ergo `#ionos` operator note + sister bobiverse.md cross-link |
 | `tofu-rotation.md` | AGPK pin mistakes and key rotation drill |
+| `watch-agent-health-aider.md` | Watch-AgentHealth `-Aider` live REPL wake (after Start-TalkSeat) |
+| `build-and-test-plan-watch-agent-health-aider-2026-09-24.md` | Worker plan for Aider watcher |
 
 `feature-request-report-bobiverse-digest-2026-09-21.md` (#36) is historical for the
 **write** path (`!report` scrubbed). `!bobiverse` as whisper-JSON reader is kept and

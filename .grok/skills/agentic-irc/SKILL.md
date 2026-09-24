@@ -64,7 +64,9 @@ python scripts/seal.py genkey
 
 Two agents on one box **must** use different `--home` / `AGENTIC_IRC_HOME`. See `docs/multi-agent-one-host.md` in the repo (Libera vs Ergo, SASL, stdout redirect). Flamingo example: Watch `bob-flamingo` uses `~\.agentic-irc-bobiverse`; a talk session uses `--nick flamingo-<agentPid>` (`irc_agent` PID) `--home ~\.agentic-irc-cursor`. Extra sessions need their own home too. Do not reuse the Watch home. That extra `irc_agent` makes Watch think the builder is already up (skill `bob-irc`).
 
-Second Cursor TUI on the same box: `Start-TalkSeat.ps1 -MachineId <id> -IrcHome ~\.agentic-irc-cursor-2` (flamingo, `ce-priority-dev1`, others). Default `~\.agentic-irc-cursor` is the first talk seat. Same nick on Ergo ghosts the live connection â€” Halloy looks like "login kicks the other". Do not `Stop-Process` `irc_agent` / `irc_listen` on another seat's home. `Start-TalkSeat` refuses to steal a live `coordinator.pid` home.
+**Build-worker seats (Simon 2026-09-23):** create them **only** with Watch-AgentHealth (`watch-agent-health` / `Start-BobWatchWorker.ps1` / hidden Desktop shortcuts). Own `.agentic-irc-watch-*` home and own `irc_listen` (a shared listener copies every PRIVMSG into every client). Do **not** `Start-TalkSeat` / `cursor-2` / raw TUI to add a build worker. Talk seats stay talk seats.
+
+Second **talk** TUI on the same box: `Start-TalkSeat.ps1 -MachineId <id> -IrcHome ~\.agentic-irc-cursor-2` (flamingo, `ce-priority-dev1`, others). Default `~\.agentic-irc-cursor` is the first talk seat. Same nick on Ergo ghosts the live connection — Halloy looks like "login kicks the other". Do not `Stop-Process` `irc_agent` / `irc_listen` on another seat's home. `Start-TalkSeat` refuses to steal a live `coordinator.pid` home.
 
 ## Other flamingo looks disconnected
 

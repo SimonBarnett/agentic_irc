@@ -31,7 +31,7 @@ After a kill, wait `AGENTIC_IRC_PRIOR_WAIT_S` (default 3, clamped to 2–5) so E
 - `Start-TalkSeat.ps1` and `scripts/Start-BobEar.ps1` call it, then start **one** python via `ProcessStartInfo` `CreateNoWindow` / `UseShellExecute false`.
 - `start_worker_irc_agent.py` calls it before spawn (not on `--dry-run`).
 
-`Start-BobEar.ps1` is what `agentic_build` `tools/Watch-Bobiverse.ps1` and `tools/Install-BobIrc.ps1` call when the script is present (CreateNoWindow fallback if this tree is not pulled yet). If more than one process already has `--nick N`, they call it with no `--keep-pid` and it starts one. If exactly one live `N` is up, Watch does not call it every poll.
+`scripts/Start-BobEar.ps1` is the callable for `agentic_build` `tools/Watch-Bobiverse.ps1` and `tools/Install-BobIrc.ps1`. Those files live in the sister repo. Until they call this script, `irc_agent.py` still runs the same cleanup before the first connect once the process has started. Watch rule when it is wired up: if more than one process has `--nick N`, call `Start-BobEar.ps1` with no `--keep-pid` so it kills them and starts one; if exactly one live `N` is up, do not call it on every poll. Do not use `Start-Process -WindowStyle Hidden`.
 
 ## Verify
 

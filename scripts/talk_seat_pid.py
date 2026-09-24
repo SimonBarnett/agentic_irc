@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import os
 import re
+import sys
+from collections.abc import Callable
 from pathlib import Path
 
 from bobreport import FLEET_MACHINE_IDS, normalize_machine_id
@@ -180,6 +182,77 @@ def home_bind_refusal(
             "(e.g. ~/.agentic-irc-cursor-2). Do not steal the first talk-seat home."
         )
     return None
+
+
+def process_is_alive(pid: int) -> bool:
+    """True when OS process pid is still running."""
+    try:
+        n = int(pid)
+    except (TypeError, ValueError):
+        return False
+    if n <= 0:
+        return False
+    if sys.platform == "win32":
+        import ctypes
+
+        PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+        handle = ctypes.windll.kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, n)
+        if not handle:
+            return False
+        ctypes.windll.kernel32.CloseHandle(handle)
+        return True
+    try:
+        os.kill(n, 0)
+    except OSError:
+        return False
+    return True
+
+
+def seat_liveness_poll_s() -> float:
+    raw = (os.environ.get("AGENTIC_IRC_SEAT_LIVENESS_S") or "15").strip()
+    try:
+        n = float(raw)
+    except ValueError:
+        n = 15.0
+    return max(3.0, min(120.0, n))
+
+
+def seat_liveness_disabled() -> bool:
+    return (os.environ.get("AGENTIC_IRC_SEAT_LIVENESS") or "").strip().lower() in (
+        "0",
+        "off",
+        "false",
+        "no",
+    )
+
+
+def talk_seat_monitor_pid(nick: str, home: Path | str) -> int | None:
+    """PowerShell seat PID for a talk-seat nick (coordinator.pid when readable, else nick suffix)."""
+    parsed = parse_talk_seat_nick(nick)
+    if not parsed:
+        return None
+    try:
+        suffix_pid = int(parsed[1])
+    except (TypeError, ValueError):
+        return None
+    from_file = coordinator_seat_pid(home)
+    if from_file is not None:
+        return from_file
+    return suffix_pid
+
+
+def talk_seat_coordinator_gone(
+    nick: str,
+    home: Path | str,
+    *,
+    is_alive: Callable[[int], bool] | None = None,
+) -> bool:
+    """True when the talk-seat coordinator process is not running."""
+    alive = is_alive or process_is_alive
+    pid = talk_seat_monitor_pid(nick, home)
+    if pid is None:
+        return False
+    return not alive(pid)
 
 
 def check_home_bind(

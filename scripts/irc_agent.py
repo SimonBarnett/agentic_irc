@@ -18,6 +18,7 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import bob_recycle  # noqa: E402
 import bobreport  # noqa: E402
 import bobstat  # noqa: E402
 import bobtalk  # noqa: E402
@@ -26,6 +27,8 @@ import filexfer  # noqa: E402
 import moot  # noqa: E402
 import protect  # noqa: E402
 import seal  # noqa: E402
+import agent_control  # noqa: E402
+import talk_seat_ghost  # noqa: E402
 import talk_seat_pid  # noqa: E402
 import wire  # noqa: E402
 
@@ -152,6 +155,7 @@ class Client:
             self.channels = [chan]
         self.chan = self.channels[0]
         self._pending_joins: set[str] = {c.lower() for c in self.channels}
+        self._last_call_channel: str | None = None
         if args.home:
             os.environ["AGENTIC_IRC_HOME"] = str(Path(args.home).expanduser())
         self.home = seal.home()
@@ -182,11 +186,17 @@ class Client:
         self.sasl_fail = threading.Event()
         self._bobiverse_last_query: dict[str, float] = {}
         self._bobiverse_last_tray: dict[str, float] = {}
+        self._bobiverse_pull_last = 0.0
+        self._digest_asm = bobreport.DigestWhisperAssembler()
         self._report_gone_told: set[str] = set()
         self._pm_open: dict[str, float] = {}
         self._action_last: dict[tuple[str, str], float] = {}
         self._mention_last: dict[str, float] = {}
         self._grok_talk_dedup: dict[tuple[str, str], float] = {}
+        self._no_reconnect = False
+        self._last_server_rx = 0.0
+        self._pong_due_at = 0.0
+        self._ghost_prune_last = 0.0
 
     def send(self, line: str) -> None:
         assert self.sock is not None
@@ -194,8 +204,23 @@ class Client:
             self.sock.sendall((line + "\r\n").encode("utf-8"))
 
     def say(self, msg: str) -> None:
-        self.send("PRIVMSG " + self.chan + " :" + msg)
+        dest = self._reply_channel()
+        self.send("PRIVMSG " + dest + " :" + msg)
         time.sleep(FLOOD_S)
+
+    def _reply_channel(self) -> str:
+        """Prefer last inbound joined channel (call channel); else primary JOIN."""
+        last = (self._last_call_channel or "").strip()
+        if last and self._joined_channel(last):
+            return bobreport.normalize_channel(last) or self.chan
+        return self.chan
+
+    def _note_call_channel(self, target: str) -> None:
+        if not self._joined_channel(target):
+            return
+        ch = bobreport.normalize_channel(target)
+        if ch:
+            self._last_call_channel = ch
 
     def _joined_channel(self, target: str) -> bool:
         t = bobreport.normalize_channel(target).lower()
@@ -304,8 +329,13 @@ class Client:
             self._fleet_action(event_class, key, action)
 
     def handle_join(self, nick: str, channel: str) -> None:
+        expanded = bobreport.expand_join_channels(channel)
+        if len(expanded) > 1:
+            for ch in expanded:
+                self.handle_join(nick, ch)
+            return
         who = (nick or "").strip()
-        ch = bobreport.normalize_channel(channel)
+        ch = bobreport.normalize_channel(expanded[0] if expanded else channel)
         if who.lower() in self._mine_nicks():
             self._pending_joins.discard(ch.lower())
             if not self._pending_joins:
@@ -350,12 +380,7 @@ class Client:
                 self.whisper(nick, "shop closed")
             except Exception:
                 pass
-        try:
-            self.send("PART " + shop + " :shop closed")
-            self.send("QUIT :shop closed")
-        except Exception:
-            pass
-        self.stop.set()
+        self.request_shutdown(":shop closed")
 
     def _digest_home(self) -> Path:
         return bobreport.fleet_digest_home(self.home)
@@ -371,14 +396,17 @@ class Client:
         out = bobreport.merge_worker_working_on(self._digest_home(), mid, pid, raw)
         if not out.ok or not out.actions:
             return
-        shop = self._shop_channel()
-        if not shop or shop.lower() == bobreport.FLEET_CHANNEL:
-            return
         nick = self.live_nick or self.original_nick
-        line = bobreport.working_on_shop_line(nick, raw)
-        for piece in bobreport.split_irc_text(line):
-            self.send("PRIVMSG " + shop + " :" + piece)
-            time.sleep(FLOOD_S)
+        # Issue #167: webhook only — no shop PRIVMSG for working_on.
+        try:
+            import post_working_on as _pwo
+
+            payload = _pwo.base_payload(mid, int(pid), nick, "cursor", "running")
+            payload["working_on"] = raw
+            code = _pwo.post(payload)
+            info(f"INFO working_on webhook POST {code} machine={mid} pid={pid}")
+        except Exception as exc:  # noqa: BLE001 — never break IRC announce on webhook fail
+            info(f"INFO working_on webhook skip: {exc}")
 
     def apply_digest_callback(self, payload: dict) -> None:
         if not self._is_digest_operator():
@@ -419,6 +447,7 @@ class Client:
         self._pm_open[n.lower()] = time.time()
 
     def _answer_bobiverse(self, asker: str, body: str) -> bool:
+        """!bobiverse removed (#174). Whisper one-line pointer to public digest URL."""
         who = (asker or "").strip()
         if not who or who.lower() in self._mine_nicks():
             return True
@@ -427,23 +456,175 @@ class Client:
         parsed = bobreport.parse_bobiverse_query(body)
         if not parsed:
             return True
-        form, machine_id = parsed
         now = time.time()
         key = who.lower()
-        tray = bobtalk.is_tray_asker(who)
-        cooldown = bobtalk.BOBIVERSE_AGENT_COOLDOWN_S if tray else bobtalk.BOBIVERSE_COOLDOWN_S
-        last_map = self._bobiverse_last_tray if tray else self._bobiverse_last_query
-        last = last_map.get(key, 0.0)
-        if now - last < cooldown:
+        last = self._bobiverse_last_query.get(key, 0.0)
+        if now - last < bobtalk.BOBIVERSE_COOLDOWN_S:
             return True
-        last_map[key] = now
-        briefer = bobtalk.briefer_nick(self._fleet_moot_state()) or self.live_nick
-        lines = bobreport.format_digest_whisper_lines(
-            self.home, briefer, form=form, machine_id=machine_id, english=not tray
-        )
-        self._deliver_whispers(who, lines)
-        info(f"INFO bobiverse digest to={who} form={form} lines={len(lines)}")
+        self._bobiverse_last_query[key] = now
+        self._deliver_whispers(who, [bobreport.BOBIVERSE_GONE])
+        info(f"INFO bobiverse refused to={who} url={bobreport.digest_url()}")
         return True
+
+    def _handle_recycle_command(self, asker: str, body: str) -> None:
+        if not getattr(self.args, "chair", False):
+            return
+        parsed = bob_recycle.parse_recycle_query(body)
+        if not parsed:
+            return
+        kind, machine_id = parsed
+        who = (asker or "").strip()
+        if not who or who.lower() in self._mine_nicks():
+            return
+        if kind == "refuse":
+            if who:
+                self.whisper(who, bob_recycle.refuse_message(machine_id))
+            return
+        mid = machine_id or ""
+        if bob_recycle.chair_targets_local(mid):
+            bob_recycle.execute_local_recycle(
+                mid, self.home, ionos_chair=True, hooks=getattr(self, "_recycle_hooks", None)
+            )
+            if who:
+                self.whisper(who, bob_recycle.ack_message(mid, local=True))
+            info(f"INFO recycle local machine={mid}")
+            try:
+                import agent_control
+
+                agent_control.request_agent_quit(self.home, "recycle-chair")
+            except Exception:
+                pass
+            return
+        wire = bob_recycle.format_recycle_wire(mid)
+        dest = bobreport.FLEET_CHANNEL
+        self.send("PRIVMSG " + dest + " :" + wire)
+        time.sleep(FLOOD_S)
+        if who:
+            self.whisper(who, bob_recycle.ack_message(mid, local=False))
+        info(f"INFO recycle wire machine={mid}")
+
+    def _maybe_execute_recycle_wire(self, src: str, body: str) -> bool:
+        if getattr(self.args, "chair", False):
+            return False
+        if not bobtalk.is_fleet_bob_nick(self.original_nick):
+            return False
+        mid = bob_recycle.parse_recycle_wire(body)
+        if not mid:
+            return False
+        local = self._local_machine_id()
+        if not local or local != mid:
+            return False
+        chair = (bobreport.digest_chair_nick(self.home) or "").strip().lower()
+        if not chair or src.strip().lower() != chair:
+            return False
+        bob_recycle.execute_local_recycle(
+            mid, self.home, ionos_chair=False, hooks=getattr(self, "_recycle_hooks", None)
+        )
+        info(f"INFO recycle wire accepted machine={mid} from={src}")
+        return True
+
+    def _local_machine_id(self) -> str | None:
+        return bobreport.machine_from_nick(self.original_nick)
+
+    def _should_bobiverse_pull(self) -> bool:
+        return bobreport.should_periodic_bobiverse_pull(
+            self.original_nick, chair=bool(getattr(self.args, "chair", False))
+        )
+
+    def _maybe_prune_talk_seat_ghosts(self) -> None:
+        if not self.original_nick.lower().startswith("bob-"):
+            return
+        if not self.joined.is_set():
+            return
+        now = time.time()
+        if now - self._ghost_prune_last < 45.0:
+            return
+        pw = (self.args.password or os.environ.get("AGENTIC_IRC_PASSWORD") or "").strip()
+        if not pw:
+            return
+        mid = self.original_nick[4:]
+        pruned = talk_seat_ghost.maybe_prune_local_ghosts(
+            self.original_nick,
+            self.args.host,
+            int(self.args.port),
+            pw,
+        )
+        self._ghost_prune_last = now
+        if pruned:
+            info(f"INFO ghost-prune nicks={','.join(pruned)}")
+
+    def _maybe_bobiverse_pull(self) -> None:
+        """Refresh local digest via public HTTP GET (#174). No IRC !bobiverse."""
+        if not self._should_bobiverse_pull():
+            return
+        now = time.time()
+        if now - self._bobiverse_pull_last < bobtalk.BOBIVERSE_AGENT_COOLDOWN_S:
+            return
+        self._bobiverse_pull_last = now
+        doc = bobreport.fetch_digest_http()
+        if not isinstance(doc, dict):
+            info("INFO digest http pull failed")
+            return
+        self._on_digest_http(doc)
+        info(f"INFO digest http pull ok url={bobreport.digest_url()}")
+
+    def _on_digest_http(self, doc: dict) -> None:
+        if not isinstance(doc.get("machines"), dict):
+            return
+        if not self._should_bobiverse_pull():
+            return
+        mid = self._local_machine_id()
+        machines = doc.get("machines") if isinstance(doc.get("machines"), dict) else {}
+        chair_ent = machines.get(mid) if mid else None
+        payload = None
+        if mid and isinstance(chair_ent, dict):
+            payload = bobreport.merge_payload_local_peer_ahead_of_chair(self.home, mid, chair_ent)
+        bobreport.ingest_fleet_digest_pull(self.home, doc)
+        if not payload:
+            return
+        try:
+            import post_working_on as _pwo
+
+            _pwo.post(payload)
+        except Exception:
+            pass
+
+    def _on_digest_whisper(self, from_nick: str, doc: dict) -> None:
+        if not isinstance(doc.get("machines"), dict):
+            return
+        if not self._should_bobiverse_pull():
+            return
+        chair = (bobreport.digest_chair_nick(self.home) or "").strip().lower()
+        if chair and from_nick.strip().lower() != chair:
+            return
+        mid = self._local_machine_id()
+        machines = doc.get("machines") if isinstance(doc.get("machines"), dict) else {}
+        chair_ent = machines.get(mid) if mid else None
+        payload = None
+        if mid and isinstance(chair_ent, dict):
+            payload = bobreport.merge_payload_local_peer_ahead_of_chair(self.home, mid, chair_ent)
+        bobreport.ingest_fleet_digest_pull(self.home, doc)
+        if not payload:
+            return
+        try:
+            import post_working_on as _pwo
+
+            code = _pwo.post(payload)
+            info(f"INFO bobiverse webhook POST {code} machine={mid}")
+        except Exception as exc:  # noqa: BLE001
+            info(f"INFO bobiverse webhook skip: {exc}")
+
+    def _maybe_refresh_cursor_fuel(self, peer_id: str) -> None:
+        """Local seat only: merge Cursor usage when Watch/POINT lack remaining_* (#70 MUST 5)."""
+        local = self._local_machine_id()
+        if not local or str(peer_id or "") != local:
+            return
+        if not bobtalk.is_fleet_bob_nick(self.original_nick):
+            return
+        try:
+            bobstat.refresh_peer_cursor_remaining(self.home, local)
+        except OSError:
+            pass
 
     def _maybe_mention_reply(self, src: str, target: str, body: str, to_channel: bool, to_me: bool) -> bool:
         """ACK when a human/worker addresses this bob-* nick. No grok.exe."""
@@ -453,6 +634,7 @@ class Client:
             return False
         nicks = [self.live_nick, self.original_nick]
         mid = bobreport.machine_from_nick(self.original_nick) or self.original_nick
+        self._maybe_refresh_cursor_fuel(mid)
         line = bobtalk.mention_reply_line(self.home, mid, nicks, src, body, to_me=to_me)
         if not line:
             return False
@@ -465,7 +647,7 @@ class Client:
             return True
         self._mention_last[key] = now
         if to_channel:
-            dest = bobreport.normalize_channel(target) or self.chan
+            dest = bobreport.normalize_channel(target) or self._reply_channel()
             self.send("PRIVMSG " + dest + " :" + line)
             time.sleep(FLOOD_S)
         else:
@@ -484,6 +666,70 @@ class Client:
             dedupe_last=self._grok_talk_dedup,
         )
         return True
+
+    def request_shutdown(self, reason: str = ":bye", *, reconnect: bool = False) -> None:
+        """Send QUIT when joined; stop reader/outbox. Default: do not reconnect."""
+        if not reconnect:
+            self._no_reconnect = True
+        try:
+            if self.sock is not None and self.joined.is_set():
+                msg = reason if reason.startswith(":") else ":" + reason
+                self.send("QUIT " + msg)
+        except OSError:
+            pass
+        self.stop.set()
+
+    def _seat_liveness_enabled(self) -> bool:
+        if talk_seat_pid.parse_talk_seat_nick(self.original_nick) is None:
+            return False
+        if talk_seat_pid.seat_liveness_disabled():
+            return False
+        return True
+
+    def _consume_control_quit(self) -> bool:
+        reason = agent_control.consume_quit_request(self.home)
+        if reason is None:
+            return False
+        info(f"INFO agent quit request ({reason})")
+        self.request_shutdown(":control")
+        return True
+
+    def _seat_recv_stale(self) -> bool:
+        if not self.joined.is_set():
+            return False
+        last = self._last_server_rx
+        if last <= 0:
+            return False
+        idle_s = talk_seat_ghost.seat_recv_idle_s()
+        return (time.time() - last) > idle_s
+
+    def _seat_pong_overdue(self) -> bool:
+        due = self._pong_due_at
+        if due <= 0:
+            return False
+        return time.time() > due
+
+    def seat_liveness_loop(self) -> None:
+        interval = talk_seat_pid.seat_liveness_poll_s()
+        while not self.stop.is_set():
+            if self.stop.wait(timeout=interval):
+                return
+            if self._consume_control_quit():
+                return
+            if not self._seat_liveness_enabled():
+                continue
+            if self._seat_pong_overdue():
+                info("INFO seat PONG overdue; QUIT")
+                self.request_shutdown(":pong timeout")
+                return
+            if self._seat_recv_stale():
+                info("INFO seat server idle; QUIT")
+                self.request_shutdown(":recv idle")
+                return
+            if talk_seat_pid.talk_seat_coordinator_gone(self.original_nick, self.home):
+                info("INFO seat coordinator gone; QUIT")
+                self.request_shutdown(":seat ended")
+                return
 
     def connect(self) -> ssl.SSLSocket:
         ctx = ssl.create_default_context()
@@ -575,6 +821,7 @@ class Client:
             doc = bobstat.parse_bob_point(ml.text)
             if doc:
                 bobstat.write_peer(self.home, doc)
+                self._maybe_refresh_cursor_fuel(str(doc.get("id") or ""))
                 info(f"INFO bobstat id={doc['id']} from={src}")
 
     def handle_file(self, src: str, body: str) -> None:
@@ -644,15 +891,51 @@ class Client:
             return
         info(f"INFO dumb job id={dl.msg_id} from={src}")
 
+    def _maybe_channel_pong(self, src: str, target: str, body: str) -> bool:
+        """Bare joined-channel 'ping' -> 'pong' on that channel. No Grok wake.
+
+        bob-* ears only. Exact body after trim, case-insensitive. Returns
+        before mention-ack / grok_talk enqueue.
+        """
+        if not bobtalk.is_fleet_bob_nick(self.original_nick):
+            return False
+        if not self._joined_channel(target):
+            return False
+        if (src or "").strip().lower() in self._mine_nicks():
+            return False
+        if (body or "").strip().lower() != "ping":
+            return False
+        dest = bobreport.normalize_channel(target)
+        if not dest or "|" in dest:
+            return False
+        self.send("PRIVMSG " + dest + " :pong")
+        time.sleep(FLOOD_S)
+        info("INFO auto-pong")
+        return True
+
     def handle_privmsg(self, prefix: str, target: str, body: str) -> None:
         src = prefix.split("!", 1)[0].lstrip(":")
         tgt_l = target.lower()
         to_channel = self._joined_channel(target)
         to_me = tgt_l in self._mine_nicks()
+        if to_channel:
+            self._note_call_channel(target)
         if not to_channel and not to_me:
+            return
+        if to_channel and self._maybe_channel_pong(src, target, body):
             return
         if to_me:
             self._mark_pm_open(src)
+            if src.lower() not in self._mine_nicks():
+                pulled = self._digest_asm.feed(src, body)
+                if pulled is not None:
+                    self._on_digest_whisper(src, pulled)
+                    return
+        if bobtalk.parse_recycle_command(body):
+            self._handle_recycle_command(src, body)
+            return
+        if self._maybe_execute_recycle_wire(src, body):
+            return
         if bobtalk.parse_bobiverse_command(body):
             self._answer_bobiverse(src, body)
             return
@@ -776,9 +1059,15 @@ class Client:
                 while b"\n" in buf:
                     line, buf = buf.split(b"\n", 1)
                     t = line.decode("utf-8", "replace").rstrip("\r")
+                    self._last_server_rx = time.time()
                     debug_log(self.debug, t)
                     if t.startswith("PING "):
-                        self.send("PONG " + t[5:])
+                        self._pong_due_at = time.time() + talk_seat_ghost.pong_grace_s()
+                        try:
+                            self.send("PONG " + t[5:])
+                            self._pong_due_at = 0.0
+                        except OSError:
+                            pass
                         continue
                     prefix = ""
                     rest = t
@@ -795,10 +1084,11 @@ class Client:
                     if cmd == "JOIN":
                         ch = parts[1].lstrip(":") if len(parts) > 1 else ""
                         if not ch and trailing:
-                            ch = trailing
+                            ch = trailing.lstrip(":")
                         joiner = prefix.split("!", 1)[0].lstrip(":") if prefix else ""
                         if joiner:
-                            self.handle_join(joiner, ch)
+                            for one in bobreport.expand_join_channels(ch):
+                                self.handle_join(joiner, one)
                     if cmd == "PART":
                         ch = parts[1].lstrip(":") if len(parts) > 1 else ""
                         if not ch and trailing:
@@ -828,15 +1118,8 @@ class Client:
         finally:
             self.dead.set()
 
-    def drain_outbox_once(self) -> list[str]:
-        """Send complete unread outbox lines. Offset persisted; restart does not skip JOIN."""
-        if not getattr(self.args, "chair", False):
-            try:
-                grok_talk.drain_completions_to_outbox(self.home, outbox=self.outbox)
-            except OSError:
-                pass
-        path = self.outbox
-        if not path.exists() or self.sock is None:
+    def _drain_outbox_path(self, path: Path) -> list[str]:
+        if self.sock is None or not path.exists():
             return []
         last = load_outbox_pos(path)
         lines, new_last = take_outbox_lines(path, last)
@@ -855,6 +1138,21 @@ class Client:
             save_outbox_pos(path, new_last)
         return sent
 
+    def drain_outbox_once(self) -> list[str]:
+        """Send complete unread outbox lines. Offset persisted; restart does not skip JOIN."""
+        if not getattr(self.args, "chair", False):
+            try:
+                grok_talk.drain_completions_to_outbox(self.home, outbox=self.outbox)
+            except OSError:
+                pass
+        if self.sock is None:
+            return []
+        sent = self._drain_outbox_path(self.outbox)
+        if getattr(self.args, "chair", False):
+            chair_out = bobreport.fleet_digest_home(self.home) / "chair-outbox.txt"
+            sent.extend(self._drain_outbox_path(chair_out))
+        return sent
+
     def outbox_loop(self, gen: int | None = None) -> None:
         while not self.stop.is_set() and not self.dead.is_set():
             if gen is not None and gen != self._outbox_gen:
@@ -865,6 +1163,8 @@ class Client:
                 return
             try:
                 self.drain_outbox_once()
+                self._maybe_bobiverse_pull()
+                self._maybe_prune_talk_seat_ghosts()
             except OSError:
                 return
             time.sleep(1)
@@ -888,6 +1188,8 @@ class Client:
         self.sock = self.connect()
         threading.Thread(target=self.reader, daemon=True).start()
         threading.Thread(target=self.outbox_loop, args=(gen,), daemon=True).start()
+        if self._seat_liveness_enabled():
+            threading.Thread(target=self.seat_liveness_loop, daemon=True).start()
         pw = (self.args.password or os.environ.get("AGENTIC_IRC_PASSWORD") or "").strip()
         if pw:
             self.send("PASS " + pw)
@@ -898,9 +1200,17 @@ class Client:
         if not self.ready.wait(30):
             self._abort_gate("NO 001")
         time.sleep(1)
-        self.send("JOIN " + ",".join(self.channels))
+        # Ergo default-usermode is +i (LUSERS: "0 users and N invisible").
+        # Halloy nick lists that use WHO then omit flamingos even in-channel.
+        self.send("MODE " + self.live_nick + " -i")
+        # Per-channel JOIN (more reliable than comma-join on some paths / ionos shop).
+        for ch in self.channels:
+            self.send("JOIN " + ch)
         if not self.joined.wait(30):
             self._abort_gate("NO JOIN")
+        mid = self._local_machine_id()
+        if mid:
+            self._maybe_refresh_cursor_fuel(mid)
         if self.args.hello:
             self.say(self.args.hello)
         if self.args.announce_key:
@@ -908,9 +1218,11 @@ class Client:
                 info("INFO no identity; skip AGPK")
             else:
                 self.say("AGPK v1 " + self.ident["pk"])
-        info(f"INFO joined {self.chan} as {self.live_nick}")
+        info(f"INFO joined {','.join(self.channels)} as {self.live_nick}")
+        self._last_server_rx = time.time()
         while not self.stop.is_set() and not self.dead.wait(timeout=1):
-            pass
+            if self._consume_control_quit():
+                break
 
     def run_forever(self) -> None:
         backoff = 1.0
@@ -931,6 +1243,9 @@ class Client:
             except OSError:
                 pass
             self.sock = None
+            if self._no_reconnect:
+                info("INFO reconnect skipped (graceful quit)")
+                return
             attempt += 1
             if cap is not None and attempt >= cap:
                 info(f"INFO reconnect stopped (AGENTIC_IRC_RECONNECT_MAX={cap})")
@@ -939,6 +1254,32 @@ class Client:
             info(f"INFO reconnect attempt={attempt} in {delay:.1f}s (backoff cap 60s)")
             time.sleep(delay)
             backoff = min(60.0, backoff * 2)
+
+
+def clean_crashed_priors(nick: str, home: str, *, once: bool) -> None:
+    """Hard-kill hung same-nick / same-home priors before the first connect.
+
+    Once per process, not on reconnect, so a listen started afterwards stays.
+    --once and AGENTIC_IRC_SKIP_PRIOR_CLEAN=1 skip (tests). No command lines logged.
+    """
+    if once:
+        return
+    flag = (os.environ.get("AGENTIC_IRC_SKIP_PRIOR_CLEAN") or "").strip().lower()
+    if flag in {"1", "true", "yes"}:
+        return
+    import prior_irc
+
+    # Talk-seat / worker listens are started by the launcher after this process.
+    # Only a bob-* builder sweeps irc_listen here (no listen is spawned after it).
+    result = prior_irc.clean_priors(
+        nick,
+        home,
+        self_pid=os.getpid(),
+        include_listens=prior_irc.is_bob_builder_nick(nick),
+    )
+    if not result.scanned:
+        info("INFO prior-clean aborted connect")
+        raise SystemExit(1)
 
 
 def main() -> None:
@@ -959,7 +1300,7 @@ def main() -> None:
     p.add_argument(
         "--chair",
         action="store_true",
-        help="digest chair (Jeeves): JOIN #bobiverse + every #{machine}; !bobiverse + webhook digest",
+        help="digest chair (Jeeves): JOIN #bobiverse + every #{machine}; webhook digest + public GET",
     )
     p.add_argument(
         "--auto-nick",
@@ -985,10 +1326,11 @@ def main() -> None:
     if err:
         info(err)
         sys.exit(2)
+    clean_crashed_priors(args.nick, home, once=bool(args.once))
     c = Client(args)
 
     def _stop(*_a: object) -> None:
-        c.stop.set()
+        c.request_shutdown(":signal")
 
     signal.signal(signal.SIGINT, _stop)
     if hasattr(signal, "SIGTERM"):

@@ -10,6 +10,7 @@ from pathlib import Path
 SCRIPTS = (
     "seal.py",
     "irc_agent.py",
+    "prior_irc.py",
     "protect.py",
     "install_skill.py",
     "wire.py",
@@ -25,8 +26,11 @@ SCRIPTS = (
     "bobstat.py",
     "grok_talk.py",
     "grok_talk_drain.py",
+    "start_worker_irc_agent.py",
+    "write_bob_peer.py",
     "irc_listen.py",
     "post_working_on.py",
+    "talk_seat_pid.py",
 )
 SKILLS = (
     "agentic-irc",
@@ -35,6 +39,7 @@ SKILLS = (
     "agentic-dumb",
     "invite-airc",
     "bob-irc",
+    "jeeves-git-webhook",
 )
 COPY_SCRIPTS = (
     "agentic-irc",

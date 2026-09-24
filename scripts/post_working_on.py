@@ -8,6 +8,7 @@ import os
 import sys
 import urllib.error
 import urllib.request
+from pathlib import Path
 
 import bobcallback
 import talk_seat_pid
@@ -43,6 +44,11 @@ def post(payload: dict) -> int:
             return int(resp.status)
     except urllib.error.HTTPError as exc:
         return int(exc.code)
+
+
+def enqueue_shop_working_on(machine: str, nick: str, working_on: str, home: str | None = None) -> None:
+    """No-op (issue #167). working_on is webhook-only; bob-* ACTION comes from digest."""
+    return
 
 
 def base_payload(machine: str, pid: int, nick: str, kind: str, state: str) -> dict:
@@ -85,6 +91,17 @@ def main() -> int:
         )
         codes.append(code)
     if args.idle:
+        # Webhook description BEFORE idle (issue #105); no IRC shop line (#167).
+        desc = (args.working_on or "idle").strip() or "idle"
+        marked = base_payload(args.machine, args.pid, nick, args.kind, "running")
+        marked["working_on"] = desc
+        code = post(marked)
+        print(
+            "INFO report POST %s pre-idle working_on machine=%s pid=%s"
+            % (code, args.machine, args.pid),
+            flush=True,
+        )
+        codes.append(code)
         idle = base_payload(args.machine, args.pid, nick, args.kind, "idle")
         code = post(idle)
         print(

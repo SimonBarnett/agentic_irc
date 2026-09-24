@@ -1,7 +1,10 @@
 # POST /bob/v1/report — change-only merge (issue #73)
 
 Write-only callback on ionos (`scripts/bobcallback.py`). **No HTTP GET** of digest.
-Live URL: `http://irc.ntsa.uk:80/bob/v1/report`.
+Live URLs on the same listener:
+
+- Fleet digest: `http://irc.ntsa.uk:80/bob/v1/report`
+- GitHub webhooks: `http://irc.ntsa.uk:80/bob/v1/git`
 
 ## Auth
 
@@ -36,3 +39,17 @@ JSON object. Required for fleet merge:
 ## Producer
 
 See agentic_build #124 — `Write-BobIrcStatus` should hash the peer blob and skip POST when only `lastSeen` advances.
+
+## GitHub (`POST /bob/v1/git`)
+
+GitHub (or compatible) delivery to the digest chair home. Does **not** merge
+`digest.json` and does **not** use `X-Bob-Secret`.
+
+- Same IP allowlist as fleet (`BOB_REPORT_ALLOW`, default loopback).
+- Header `X-GitHub-Event` (GitHub delivery) is required.
+- JSON body per GitHub webhook shape. Digest chair (**Jeeves**) announces on
+  `#bobiverse` via `outbox.txt` (`GIT …` prefix). Talk seats do not narrate
+  these events.
+
+Returns **204** when the announce is queued. **400** on missing event or bad
+JSON. No HMAC verification in-tree (operator network posture only).

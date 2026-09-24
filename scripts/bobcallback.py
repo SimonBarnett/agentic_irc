@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Write-only ionos digest callback. POST /bob/v1/report only — no GET digest."""
+"""Digest callback: POST /bob/v1/report + /bob/v1/git; public GET digest (#174).
+
+GET/HEAD on /bob/v1/report returns the JSON digest (same body as /bob/v1/digest).
+IIS already proxies reportUrl; browsers must not keep seeing 405.
+"""
 from __future__ import annotations
 
 import json
@@ -9,8 +13,13 @@ from pathlib import Path
 import bobreport
 
 REPORT_PATH = "/bob/v1/report"
+GIT_WEBHOOK_PATH = "/bob/v1/git"
+DIGEST_PATH = "/bob/v1/digest"
+DIGEST_ALIAS = "/digest"
 SECRET_ENV = "BOB_REPORT_SECRET"
 ALLOW_ENV = "BOB_REPORT_ALLOW"
+# Public read paths (GET/HEAD). REPORT_PATH is also the write URL (POST).
+DIGEST_GET_PATHS = frozenset({DIGEST_PATH, DIGEST_ALIAS, REPORT_PATH})
 
 
 def secret_path() -> Path:
@@ -34,6 +43,85 @@ def load_allow_ips() -> set[str]:
     return {"127.0.0.1", "::1"}
 
 
+def _check_post_route(
+    verb: str, route: str, peer_ip: str, allow_ips: set[str] | None
+) -> tuple[int, set[str]] | tuple[int, bytes]:
+    """Return (0, allow_set) on success, or (http_code, body) on failure."""
+    allow = allow_ips if allow_ips is not None else load_allow_ips()
+    if route not in (REPORT_PATH, GIT_WEBHOOK_PATH):
+        return 404, b""
+    if verb != "POST":
+        return 405, b""
+    ip = (peer_ip or "").split("%", 1)[0]
+    if allow and ip not in allow:
+        return 403, b""
+    return 0, allow
+
+
+def handle_digest_get(home: Path, briefer_nick: str = "") -> tuple[int, bytes]:
+    """Public readable digest (#174). No secret; nothing in digest is secure."""
+    briefer = (briefer_nick or "").strip() or "digest"
+    doc = bobreport.build_digest_object(home, briefer)
+    body = json.dumps(doc, separators=(",", ":")).encode("utf-8")
+    return 200, body
+
+
+def _parse_json_body(body: bytes | str) -> dict | None:
+    if isinstance(body, bytes):
+        raw = body.decode("utf-8", "replace")
+    else:
+        raw = body or ""
+    if bobreport.looks_like_secret(raw):
+        return None
+    try:
+        payload = json.loads(raw or "{}")
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(payload, dict):
+        return None
+    return payload
+
+
+def handle_git_webhook(
+    headers: dict[str, str],
+    body: bytes | str,
+    home: Path,
+) -> tuple[int, bytes]:
+    hdrs = {str(k).lower(): str(v) for k, v in (headers or {}).items()}
+    event = (hdrs.get("x-github-event") or "").strip()
+    if not event:
+        return 400, b""
+    payload = _parse_json_body(body)
+    if payload is None:
+        return 400, b""
+    out = bobreport.apply_git_webhook(home, event, payload)
+    if not out.ok:
+        return 400, b""
+    return 204, b""
+
+
+def handle_report_post(
+    headers: dict[str, str],
+    body: bytes | str,
+    home: Path,
+    secret: str,
+    briefer_nick: str = "",
+) -> tuple[int, bytes]:
+    hdrs = {str(k).lower(): str(v) for k, v in (headers or {}).items()}
+    got = (hdrs.get("x-bob-secret") or "").strip()
+    if not secret or got != secret:
+        return 401, b""
+    payload = _parse_json_body(body)
+    if payload is None:
+        return 400, b""
+    out = bobreport.apply_callback(home, payload, briefer_nick)
+    if not out.ok:
+        return 400, b""
+    if not out.changed:
+        return 200, b""
+    return 204, b""
+
+
 def handle_request(
     method: str,
     path: str,
@@ -45,41 +133,24 @@ def handle_request(
     allow_ips: set[str] | None = None,
     briefer_nick: str = "",
 ) -> tuple[int, bytes]:
-    """Pure request handler. No sockets. GET/HEAD never return digest bytes."""
+    """Pure request handler. No sockets. Public GET digest; POST still gated."""
     verb = (method or "").upper()
     route = (path or "").split("?", 1)[0]
-    allow = allow_ips if allow_ips is not None else load_allow_ips()
-    if route != REPORT_PATH:
-        return 404, b""
-    if verb in ("GET", "HEAD"):
+    # GET/HEAD digest on /bob/v1/digest, /digest, and reportUrl (/bob/v1/report).
+    if verb in ("GET", "HEAD") and route in DIGEST_GET_PATHS:
+        code, payload = handle_digest_get(home, briefer_nick)
+        if verb == "HEAD":
+            return code, b""
+        return code, payload
+    # POST to digest-only aliases is not a write path.
+    if route in (DIGEST_PATH, DIGEST_ALIAS):
         return 405, b""
-    if verb != "POST":
-        return 405, b""
-    ip = (peer_ip or "").split("%", 1)[0]
-    if allow and ip not in allow:
-        return 403, b""
-    hdrs = {str(k).lower(): str(v) for k, v in (headers or {}).items()}
-    got = (hdrs.get("x-bob-secret") or "").strip()
-    if not secret or got != secret:
-        return 401, b""
-    if isinstance(body, bytes):
-        raw = body.decode("utf-8", "replace")
-    else:
-        raw = body or ""
-    if bobreport.looks_like_secret(raw):
-        return 400, b""
-    try:
-        payload = json.loads(raw or "{}")
-    except json.JSONDecodeError:
-        return 400, b""
-    if not isinstance(payload, dict):
-        return 400, b""
-    out = bobreport.apply_callback(home, payload, briefer_nick)
-    if not out.ok:
-        return 400, b""
-    if not out.changed:
-        return 200, b""
-    return 204, b""
+    gate = _check_post_route(verb, route, peer_ip, allow_ips)
+    if gate[0] != 0:
+        return gate[0], gate[1]
+    if route == GIT_WEBHOOK_PATH:
+        return handle_git_webhook(headers, body, home)
+    return handle_report_post(headers, body, home, secret, briefer_nick)
 
 
 class ReportHandler:
@@ -111,6 +182,8 @@ def make_handler(home: Path, secret: str, allow_ips: set[str], briefer_nick: str
                 briefer_nick,
             )
             self.send_response(code)
+            if payload:
+                self.send_header("Content-Type", "application/json; charset=utf-8")
             self.send_header("Content-Length", str(len(payload)))
             self.end_headers()
             if payload and method != "HEAD":
@@ -142,7 +215,7 @@ def serve(
     allow_ips: set[str] | None = None,
     briefer_nick: str = "",
 ):
-    """Blocking write-only listener. GET never returns digest.json."""
+    """Blocking listener: public GET digest + gated POST report/git (#174)."""
     from http.server import ThreadingHTTPServer
 
     handler = make_handler(home, secret if secret is not None else load_secret(), allow_ips or load_allow_ips(), briefer_nick)
@@ -153,7 +226,9 @@ def serve(
 def main() -> None:
     import argparse
 
-    p = argparse.ArgumentParser(description="write-only POST /bob/v1/report")
+    p = argparse.ArgumentParser(
+        description="POST /bob/v1/report + /bob/v1/git; GET digest on /bob/v1/report and /bob/v1/digest"
+    )
     p.add_argument("--home", default="", help="AGENTIC_IRC_HOME (digest.json)")
     p.add_argument("--bind", default="127.0.0.1")
     p.add_argument("--port", type=int, default=int(os.environ.get("BOB_REPORT_PORT") or "0"))
@@ -161,7 +236,10 @@ def main() -> None:
     home = Path(args.home).expanduser() if args.home else bobreport.digest_path(Path(".")).parent
     httpd = serve(home, host=args.bind, port=args.port)
     host, port = httpd.server_address[:2]
-    print(f"INFO report listen {host}:{port} POST {REPORT_PATH} only", flush=True)
+    print(
+        f"INFO report listen {host}:{port} GET {REPORT_PATH}|{DIGEST_PATH} POST {REPORT_PATH} POST {GIT_WEBHOOK_PATH}",
+        flush=True,
+    )
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:

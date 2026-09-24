@@ -10,6 +10,8 @@ description: >
 
 # Bobiverse IRC (private Ergo)
 
+Foundation: harvest-agent-skills (honesty box) -> report back to https://github.com/SimonBarnett/agentic_irc
+
 Canonical facts (do not duplicate the nick table here): `agentic_build/docs/bobiverse.md`,
 `agentic_build/config/bobiverse.json` (`host` `irc.ntsa.uk`, `port` 6697, `nicks`, `reportUrl`).
 Registry machine id for DEV1 is **`ce-priority-dev1`** → nick `bob-dev1` (alias `dev1`).

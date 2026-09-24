@@ -1,5 +1,18 @@
 ﻿# Skill harvest log
 
+## 2026-09-24 — honesty-box foundation
+
+Added `.grok/skills/harvest-agent-skills/SKILL.md` (FOUNDATION). Frontmatter
+`github:` is `https://github.com/SimonBarnett/agentic_irc`. CAST IRON stays:
+report a repeatable playbook, a wrong or token-wasteful skill, a bug, or a
+workaround as a branch PR; if the PR cannot be opened, a GitHub issue titled
+`harvest:` with the intended title, branch, files, and full body. Empty
+harvest still means no commit. One Foundation line on each book skill
+(`agentic-irc`, `bob-irc`, `jeeves-git-webhook`, `agentic-moot`,
+`agentic-file`, `agentic-dumb`, `invite-airc`). Fleet harvest text in
+`agentic-irc` is unchanged. `install_skill.py` SKILLS left as-is (product
+code out of this harvest).
+
 ## 2026-09-23 — preferred IRC wake = Watch-AgentHealth
 
 Simon: do not arm in-session `listen.stdout.log` `^FROM ` TSR (burns

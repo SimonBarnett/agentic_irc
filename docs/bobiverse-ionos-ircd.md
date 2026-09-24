@@ -29,3 +29,19 @@ JOIN #ionos
 
 Windows service **`BobIrcd`** (`Start-Service BobIrcd`). Do not use the removed
 `BobIrcd-ionos` scheduled task. See skill `bob-irc`.
+
+## Jeeves (digest chair)
+
+Nick `Jeeves`, `irc_agent.py --chair`.
+
+| | Path |
+|---|---|
+| `--home` / `AGENTIC_IRC_HOME` | `~\.agentic-irc-jeeves` |
+| `BOB_DIGEST_HOME` (`digest.json`, `chair-outbox.txt`) | `~\.agentic-irc-bobiverse` |
+
+`scripts/Install-BobChair.ps1` sets both and stops a prior `--chair` / nick
+`Jeeves` before start. Do not share `--home` with `bob-ionos`.
+
+BobIrcd NSSM and the hook that starts Jeeves when the IRC server starts live
+in **agentic_build** (`chairNick` `Jeeves`). This repo does not define that
+service.

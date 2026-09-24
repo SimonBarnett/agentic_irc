@@ -67,7 +67,9 @@ def test_request_shutdown_sends_quit_and_skips_reconnect(tmp_path: Path, monkeyp
     c.joined.set()
     c.sock = object()  # type: ignore[assignment]
     c.request_shutdown(":seat ended")
+    assert any(x.startswith("PART ") for x in sent)
     assert any(x.startswith("QUIT ") for x in sent)
+    assert "PART #bobiverse :seat ended" in sent or "PART #ops :seat ended" in sent
     assert c._no_reconnect
     assert c.stop.is_set()
 

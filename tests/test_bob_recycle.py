@@ -140,6 +140,7 @@ def test_default_chair_does_not_wait_on_self(monkeypatch, tmp_path):
     monkeypatch.setattr(bob_recycle, "find_agentic_irc_root", lambda: tmp_path)
     home = tmp_path / "home"
     home.mkdir()
+    monkeypatch.delenv("BOB_DIGEST_HOME", raising=False)
     bob_recycle._default_restart_chair(tmp_path, home)
     assert waited == []
     assert len(pops) == 1
@@ -148,10 +149,13 @@ def test_default_chair_does_not_wait_on_self(monkeypatch, tmp_path):
     with open(helper_path, encoding="utf-8") as fh:
         text = fh.read()
     assert "$agentHome =" in text
+    assert "$digestHome =" in text
+    assert ".agentic-irc-bobiverse" in text
     assert "Install-BobChair.ps1" in text
     assert "bobcallback.py" in text
     assert "Get-Process -Id $waitPid" in text
-    assert "--home',$agentHome" in text or "--home,$agentHome" in text
+    assert "--home',$digestHome" in text or "--home,$digestHome" in text
+    assert "--home',$agentHome" not in text and "--home,$agentHome" not in text
 
 
 def test_chair_helper_agent_home_executes_under_powershell(monkeypatch, tmp_path):
@@ -167,6 +171,7 @@ def test_chair_helper_agent_home_executes_under_powershell(monkeypatch, tmp_path
     (scripts / "bobcallback.py").write_text("# cb\n", encoding="utf-8")
     home = tmp_path / "agent-home"
     home.mkdir()
+    monkeypatch.delenv("BOB_DIGEST_HOME", raising=False)
     bob_recycle._default_restart_chair(tmp_path, home)
     helper_path = os.path.join(bob_recycle._native_abspath(home), "recycle-chair-after-exit.ps1")
     with open(helper_path, encoding="utf-8") as fh:
@@ -174,12 +179,17 @@ def test_chair_helper_agent_home_executes_under_powershell(monkeypatch, tmp_path
     assigns = [
         ln
         for ln in helper_lines
-        if ln.startswith("$agentHome") or ln.startswith("$install") or ln.startswith("$callback") or ln.startswith("$scripts")
+        if ln.startswith("$agentHome")
+        or ln.startswith("$digestHome")
+        or ln.startswith("$install")
+        or ln.startswith("$callback")
+        or ln.startswith("$scripts")
     ]
     probe = tmp_path / "probe-agent-home.ps1"
     probe.write_text(
         "\n".join(assigns)
-        + "\n$homeArg = (@('-u',$callback,'--home',$agentHome))[-1]\n"
+        + "\n$homeArg = (@('-u',$callback,'--home',$digestHome))[-1]\n"
+        + "Write-Output $agentHome\n"
         + "Write-Output $homeArg\n",
         encoding="utf-8",
     )
@@ -190,11 +200,15 @@ def test_chair_helper_agent_home_executes_under_powershell(monkeypatch, tmp_path
         pytest.skip("powershell.exe not on PATH")
     monkeypatch.setattr(bob_recycle.subprocess, "Popen", real_popen)
     out = subprocess.check_output([exe, "-NoProfile", "-File", str(probe)], text=True)
-    want = bob_recycle._native_abspath(home)
-    got = out.strip().splitlines()[-1].strip()
-    assert got == want
+    lines = [ln.strip() for ln in out.strip().splitlines() if ln.strip()]
+    got_agent, got_digest = lines[-2], lines[-1]
+    want_agent = bob_recycle._native_abspath(home)
+    want_digest = bob_recycle.digest_home_native()
+    assert got_agent == want_agent
+    assert got_digest == want_digest
+    assert got_digest != got_agent
     profile = os.path.normpath(os.path.expanduser("~"))
-    assert got != profile or want == profile
+    assert got_agent != profile or want_agent == profile
 
 
 def test_refuse_never_calls_kill_or_popen(monkeypatch):

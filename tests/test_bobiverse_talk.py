@@ -89,7 +89,7 @@ def _reassemble_digest(lines: list[str]) -> dict:
     return json.loads("".join(pieces))
 
 
-def test_bobiverse_human_gets_json_whisper(tmp_path, monkeypatch, recorder):
+def test_bobiverse_human_gets_gone_whisper(tmp_path, monkeypatch, recorder):
     monkeypatch.setenv("AGENTIC_IRC_HOME", str(tmp_path))
     _open_moot(tmp_path)
     bobreport.apply_callback(
@@ -102,12 +102,8 @@ def test_bobiverse_human_gets_json_whisper(tmp_path, monkeypatch, recorder):
     c.handle_privmsg("simon!u@h", "#bobiverse", "!bobiverse")
     assert any(x.startswith("PRIVMSG simon :") for x in recorder)
     assert not any(x.startswith("PRIVMSG #bobiverse :{") for x in recorder)
-    payloads = _json_whisper_payloads(recorder, "simon")
-    assert payloads
-    doc = _reassemble_digest(payloads)
-    assert doc["v"] == 1
-    assert "machines" in doc
-    assert "ionos" in doc["machines"]
+    assert any(bobreport.BOBIVERSE_GONE in x for x in recorder)
+    assert not _json_whisper_payloads(recorder, "simon")
 
 
 def test_bobiverse_non_briefer_silent(tmp_path, monkeypatch, recorder):
@@ -141,8 +137,8 @@ def test_chair_answers_bobiverse_builder_silent(tmp_path, monkeypatch, recorder)
         "#ce-priority-dev1",
     ]
     chair.handle_privmsg("simon!u@h", "#bobiverse", "!bobiverse")
-    assert any(x.startswith("PRIVMSG simon :") for x in recorder)
-    assert not any("BOB DIGEST" in x and "#bobiverse" in x for x in recorder)
+    assert any(bobreport.BOBIVERSE_GONE in x for x in recorder)
+    assert not any("BOB DIGEST" in x for x in recorder)
 
 
 def test_chair_mode_no_fleet_action_on_callback(tmp_path, monkeypatch, recorder):
@@ -194,7 +190,7 @@ def test_chair_drains_outbox_without_bobiverse_spam(tmp_path, monkeypatch, recor
     assert not any("#bobiverse" in x and bobtalk.TRAY_PREFIX.strip() in x for x in recorder)
 
 
-def test_bobiverse_tray_whisper_json(tmp_path, monkeypatch, recorder):
+def test_bobiverse_tray_whisper_gone(tmp_path, monkeypatch, recorder):
     monkeypatch.setenv("AGENTIC_IRC_HOME", str(tmp_path))
     _open_moot(tmp_path)
     bobreport.start_worker(tmp_path, "ionos", 99, "work 1m", kind="grok")
@@ -202,12 +198,9 @@ def test_bobiverse_tray_whisper_json(tmp_path, monkeypatch, recorder):
     c.handle_privmsg("bob-marchhare!u@h", "#bobiverse", "!bobiverse")
     assert recorder
     assert all(x.startswith("PRIVMSG bob-marchhare :") for x in recorder)
-    assert not any(x.startswith("PRIVMSG #bobiverse :") and "{" in x for x in recorder)
-    payloads = _json_whisper_payloads(recorder, "bob-marchhare")
-    assert payloads
-    doc = _reassemble_digest(payloads)
-    assert doc["v"] == 1
-    assert "BOB TRAY v1" not in "".join(payloads)
+    assert any(bobreport.BOBIVERSE_GONE in x for x in recorder)
+    assert not _json_whisper_payloads(recorder, "bob-marchhare")
+    assert "BOB TRAY v1" not in "".join(recorder)
 
 
 def test_bobiverse_cooldown_human(tmp_path, monkeypatch, recorder):
@@ -343,11 +336,11 @@ def test_bobiverse_help_and_machine(tmp_path, monkeypatch, recorder):
     c = irc_agent.Client(_args(tmp_path, "bob-flamingo"))
     c.handle_privmsg("simon!u@h", "#bobiverse", "!bobiverse ?")
     got = [line.split(" :", 1)[1] for line in recorder if line.startswith("PRIVMSG simon :")]
-    assert got == bobreport.HELP_TEXT.splitlines()
+    assert got == [bobreport.BOBIVERSE_GONE]
     recorder.clear()
     c._bobiverse_last_query.clear()
     c.handle_privmsg("simon!u@h", "#bobiverse", "!bobiverse nope")
-    assert any(bobreport.NO_MACHINE in x for x in recorder)
+    assert any(bobreport.BOBIVERSE_GONE in x for x in recorder)
 
 
 def test_working_on_shop_line_and_bob_action(tmp_path, monkeypatch, recorder):
@@ -355,13 +348,23 @@ def test_working_on_shop_line_and_bob_action(tmp_path, monkeypatch, recorder):
     _open_moot(tmp_path)
     job = "agentic_irc shop-channel FR (BUILD)"
     shop_line = bobreport.working_on_shop_line("w-fl-4412", job)
+    posted: list[dict] = []
+
+    def fake_post(payload: dict) -> int:
+        posted.append(dict(payload))
+        return 204
+
+    monkeypatch.setattr("post_working_on.post", fake_post)
     w = irc_agent.Client(_args(tmp_path, "w-fl-4412", channel="#flamingo"))
     w.cc_send("working_on", job)
     assert bobreport.load_digest(tmp_path)["machines"]["flamingo"]["workers"]["4412"]["working_on"] == job
-    assert recorder == [f"PRIVMSG #flamingo :{shop_line}"]
+    assert recorder == []
+    assert posted and posted[-1].get("working_on") == job
     recorder.clear()
+    posted.clear()
     w.cc_send("working_on", job)
     assert recorder == []
+    assert posted == []
     w.cc_send("assistant", "visible stdout")
     assert recorder == ["PRIVMSG #flamingo :visible stdout"]
     assert not any("#bobiverse" in x for x in recorder)

@@ -106,21 +106,25 @@ def _args(home: Path, nick: str = "bob-ionos") -> argparse.Namespace:
     )
 
 
-def test_bobiverse_pull_sends_command(tmp_path, monkeypatch):
+def test_bobiverse_pull_uses_http(tmp_path, monkeypatch):
     monkeypatch.setenv("AGENTIC_IRC_HOME", str(tmp_path))
     sent: list[str] = []
+    pull = {"v": 1, "machines": {"ionos": {"id": "ionos", "weekly": 44, "online": True}}}
 
     def _send(self, line: str) -> None:
         sent.append(line)
 
     monkeypatch.setattr(irc_agent.Client, "send", _send)
     monkeypatch.setattr(irc_agent.time, "sleep", lambda *_a, **_k: None)
+    monkeypatch.setattr(bobreport, "fetch_digest_http", lambda *a, **k: pull)
     c = irc_agent.Client(_args(tmp_path))
     c.joined.set()
     c.channels = ["#bobiverse", "#ionos"]
     c._bobiverse_pull_last = 0.0
     c._maybe_bobiverse_pull()
-    assert sent == ["PRIVMSG #bobiverse :!bobiverse"]
+    assert sent == []
+    peer = bobstat.read_peer(tmp_path, "ionos")
+    assert peer and peer.get("weekly") == 44
 
 
 def test_talk_seat_does_not_pull(tmp_path, monkeypatch):

@@ -1,7 +1,7 @@
-# Exit 0 when talk-seat nick suffix matches coordinator.pid seat= (PowerShell host PID).
+# Exit 0 when talk-seat nick suffix matches coordinator.pid agent= (irc_agent PID).
 param(
     [string]$IrcHome = $(Join-Path $env:USERPROFILE '.agentic-irc-cursor'),
-    [string]$Scripts = 'C:\ai\agentic_irc\scripts'
+    [string]$Scripts = $PSScriptRoot
 )
 $ErrorActionPreference = 'Stop'
 $resolved = [Environment]::ExpandEnvironmentVariables($IrcHome)
@@ -11,18 +11,19 @@ $guard = Join-Path $Scripts 'talk_seat_pid.py'
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 $coordPath = Join-Path $resolved 'coordinator.pid'
 if (-not (Test-Path -LiteralPath $coordPath)) { exit 0 }
-$seatRaw = ''
+$agentRaw = ''
 foreach ($line in Get-Content -LiteralPath $coordPath) {
-    if ($line -match '^seat=(\d+)$') { $seatRaw = $Matches[1] }
+    if ($line -match '^agent=(\d+)$') { $agentRaw = $Matches[1] }
+    elseif (-not $agentRaw -and $line -match '^seat=(\d+)$') { $agentRaw = $Matches[1] }
 }
-if (-not $seatRaw) { exit 0 }
-$seatProc = Get-Process -Id ([int]$seatRaw) -ErrorAction SilentlyContinue
-if (-not $seatProc) {
-    Write-Output "INFO seat PowerShell PID $seatRaw is not running"
+if (-not $agentRaw) { exit 0 }
+$agentProc = Get-Process -Id ([int]$agentRaw) -ErrorAction SilentlyContinue
+if (-not $agentProc) {
+    Write-Output "INFO irc_agent PID $agentRaw is not running"
     exit 2
 }
-if ($seatProc.ProcessName -notmatch '^(powershell|pwsh)$') {
-    Write-Output "INFO seat PID $seatRaw is $($seatProc.ProcessName), not PowerShell"
+if ($agentProc.ProcessName -notmatch '^python') {
+    Write-Output "INFO seat PID $agentRaw is $($agentProc.ProcessName), not python irc_agent"
     exit 2
 }
 exit 0

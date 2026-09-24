@@ -231,6 +231,8 @@ def peers_dir(home: Path) -> Path:
 
 def write_peer(home: Path, doc: dict) -> Path | None:
     parsed = doc if doc.get("ok") and doc.get("id") else parse_bob_point(str(doc.get("text") or ""))
+    if not parsed and doc.get("id"):
+        parsed = dict(doc)
     if not parsed:
         return None
     path = peers_dir(home) / (parsed["id"] + ".json")

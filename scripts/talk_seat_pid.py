@@ -1,8 +1,10 @@
-"""Talk-seat identity: IRC nick {machine-id}-{seatPid} uses coordinator PowerShell PID."""
+"""Talk-seat identity: IRC nick {machine-id}-{pid} uses python irc_agent PID (never irc_listen)."""
 from __future__ import annotations
 
 import os
 import re
+import sys
+from collections.abc import Callable
 from pathlib import Path
 
 from bobreport import FLEET_MACHINE_IDS, normalize_machine_id
@@ -62,8 +64,8 @@ def check_nick_seat_pid(nick: str, seat_pid: int | str) -> str | None:
         return "INFO talk-seat nick suffix is not a valid pid"
     if have != want:
         return (
-            f"INFO talk-seat nick suffix {have} != seat PowerShell PID {want} "
-            "(not python irc_listen or irc_agent PID)"
+            f"INFO talk-seat nick suffix {have} != irc_agent PID {want} "
+            "(must not use irc_listen PID or PowerShell seat host PID)"
         )
     return None
 
@@ -80,14 +82,19 @@ def parse_coordinator_pid(text: str) -> dict[str, str]:
     return out
 
 
-def _seat_pid_from_doc(doc: dict[str, str]) -> int | None:
-    raw = (doc.get("seat") or doc.get("host") or "").strip()
+def _agent_pid_from_doc(doc: dict[str, str]) -> int | None:
+    """Authoritative talk-seat PID: agent= then seat= (legacy alias)."""
+    raw = (doc.get("agent") or doc.get("seat") or doc.get("host") or "").strip()
     if not raw:
         return None
     try:
         return int(raw)
     except ValueError:
         return None
+
+
+def _seat_pid_from_doc(doc: dict[str, str]) -> int | None:
+    return _agent_pid_from_doc(doc)
 
 
 def coordinator_seat_pid(home: Path | str) -> int | None:
@@ -111,8 +118,15 @@ def seat_pid_from_env() -> int | None:
         return None
 
 
-def resolve_seat_pid(home: Path | str | None = None) -> int | None:
-    """Coordinator PowerShell PID: env AGENTIC_IRC_SEAT_PID, then coordinator.pid seat=."""
+def resolve_seat_pid(
+    home: Path | str | None = None, *, self_pid: int | None = None
+) -> int | None:
+    """irc_agent PID: env AGENTIC_IRC_SEAT_PID (or self), then coordinator.pid agent=."""
+    raw = (os.environ.get(_SEAT_ENV) or "").strip()
+    if raw.lower() == "self":
+        if self_pid is not None and self_pid > 0:
+            return int(self_pid)
+        return None
     pid = seat_pid_from_env()
     if pid is not None:
         return pid
@@ -122,7 +136,7 @@ def resolve_seat_pid(home: Path | str | None = None) -> int | None:
 
 
 def check_coordinator_nick(home: Path | str) -> str | None:
-    """Validate coordinator.pid nick suffix matches authoritative seat= line."""
+    """Validate coordinator.pid nick suffix matches authoritative agent= / seat= line."""
     path = Path(home) / "coordinator.pid"
     if not path.is_file():
         return None
@@ -180,6 +194,77 @@ def home_bind_refusal(
             "(e.g. ~/.agentic-irc-cursor-2). Do not steal the first talk-seat home."
         )
     return None
+
+
+def process_is_alive(pid: int) -> bool:
+    """True when OS process pid is still running."""
+    try:
+        n = int(pid)
+    except (TypeError, ValueError):
+        return False
+    if n <= 0:
+        return False
+    if sys.platform == "win32":
+        import ctypes
+
+        PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+        handle = ctypes.windll.kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, n)
+        if not handle:
+            return False
+        ctypes.windll.kernel32.CloseHandle(handle)
+        return True
+    try:
+        os.kill(n, 0)
+    except OSError:
+        return False
+    return True
+
+
+def seat_liveness_poll_s() -> float:
+    raw = (os.environ.get("AGENTIC_IRC_SEAT_LIVENESS_S") or "15").strip()
+    try:
+        n = float(raw)
+    except ValueError:
+        n = 15.0
+    return max(3.0, min(120.0, n))
+
+
+def seat_liveness_disabled() -> bool:
+    return (os.environ.get("AGENTIC_IRC_SEAT_LIVENESS") or "").strip().lower() in (
+        "0",
+        "off",
+        "false",
+        "no",
+    )
+
+
+def talk_seat_monitor_pid(nick: str, home: Path | str) -> int | None:
+    """PowerShell seat PID for a talk-seat nick (coordinator.pid when readable, else nick suffix)."""
+    parsed = parse_talk_seat_nick(nick)
+    if not parsed:
+        return None
+    try:
+        suffix_pid = int(parsed[1])
+    except (TypeError, ValueError):
+        return None
+    from_file = coordinator_seat_pid(home)
+    if from_file is not None:
+        return from_file
+    return suffix_pid
+
+
+def talk_seat_coordinator_gone(
+    nick: str,
+    home: Path | str,
+    *,
+    is_alive: Callable[[int], bool] | None = None,
+) -> bool:
+    """True when the talk-seat coordinator process is not running."""
+    alive = is_alive or process_is_alive
+    pid = talk_seat_monitor_pid(nick, home)
+    if pid is None:
+        return False
+    return not alive(pid)
 
 
 def check_home_bind(

@@ -41,3 +41,9 @@ def test_install_skill_scripts_include_irc_listen():
     root = Path(__file__).resolve().parents[1]
     assert "irc_listen.py" in inst.SCRIPTS
     assert (root / "scripts" / "irc_listen.py").is_file()
+
+
+def test_install_skill_scripts_include_talk_seat_pid():
+    root = Path(__file__).resolve().parents[1]
+    assert "talk_seat_pid.py" in inst.SCRIPTS
+    assert (root / "scripts" / "talk_seat_pid.py").is_file()

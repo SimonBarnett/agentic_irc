@@ -99,6 +99,6 @@ def test_double_click_story_local_file(tmp_path: Path):
     cfg = thin.merge_self_heal(None, None, exe_dir=str(tmp_path), hostname="WALRUS")
     beacon.apply_invite(cfg, inv)
     thin.validate_config(cfg)
-    assert cfg.nick == "walrus"
+    assert cfg.nick == "m3-walrus"
     assert cfg.home == str(tmp_path)
     assert cfg.pin == PIN

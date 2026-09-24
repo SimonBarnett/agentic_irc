@@ -13,6 +13,10 @@ python scripts/irc_agent.py --host irc.libera.chat --port 6697 --nick cm-tweet -
 
 Run `python scripts/seal.py genkey` once per home before first join.
 
+## Talk seats on one box
+
+Cursor/Grok talk nicks are `{machine-id}-{pid}` on Ergo (e.g. `flamingo-22400`). The **`pid` suffix is the coordinator PowerShell `$PID`** (`Start-TalkSeat.ps1` seat host), never python `irc_listen` or `irc_agent` child PIDs. Digest/webhook keys use the same pid (`post_working_on.py --pid` must match the nick suffix). Use `scripts/Start-TalkSeat.ps1 -MachineId <id>`. `coordinator.pid` lists **`seat=`** (authoritative), plus `listen=` / `agent=` for diagnostics.
+
 ## Ergo (fleet) vs Libera (legacy)
 
 | Network | Typical host | Multi-agent on one public IP |

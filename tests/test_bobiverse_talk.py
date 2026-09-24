@@ -18,7 +18,9 @@ import wire
 MID = bobtalk.FLEET_MOOT_ID
 
 
-def _args(home: Path, nick: str = "bob-flamingo", channel: str = "#bobiverse") -> argparse.Namespace:
+def _args(
+    home: Path, nick: str = "bob-flamingo", channel: str = "#bobiverse", chair: bool = False
+) -> argparse.Namespace:
     return argparse.Namespace(
         nick=nick,
         channel=channel,
@@ -31,6 +33,7 @@ def _args(home: Path, nick: str = "bob-flamingo", channel: str = "#bobiverse") -
         realname="test",
         once=True,
         password="",
+        chair=chair,
     )
 
 
@@ -86,7 +89,7 @@ def _reassemble_digest(lines: list[str]) -> dict:
     return json.loads("".join(pieces))
 
 
-def test_bobiverse_human_gets_json_whisper(tmp_path, monkeypatch, recorder):
+def test_bobiverse_human_gets_gone_whisper(tmp_path, monkeypatch, recorder):
     monkeypatch.setenv("AGENTIC_IRC_HOME", str(tmp_path))
     _open_moot(tmp_path)
     bobreport.apply_callback(
@@ -99,12 +102,8 @@ def test_bobiverse_human_gets_json_whisper(tmp_path, monkeypatch, recorder):
     c.handle_privmsg("simon!u@h", "#bobiverse", "!bobiverse")
     assert any(x.startswith("PRIVMSG simon :") for x in recorder)
     assert not any(x.startswith("PRIVMSG #bobiverse :{") for x in recorder)
-    payloads = _json_whisper_payloads(recorder, "simon")
-    assert payloads
-    doc = _reassemble_digest(payloads)
-    assert doc["v"] == 1
-    assert "machines" in doc
-    assert "ionos" in doc["machines"]
+    assert any(bobreport.BOBIVERSE_GONE in x for x in recorder)
+    assert not _json_whisper_payloads(recorder, "simon")
 
 
 def test_bobiverse_non_briefer_silent(tmp_path, monkeypatch, recorder):
@@ -116,7 +115,82 @@ def test_bobiverse_non_briefer_silent(tmp_path, monkeypatch, recorder):
     assert recorder == []
 
 
-def test_bobiverse_tray_whisper_json(tmp_path, monkeypatch, recorder):
+def test_chair_answers_bobiverse_builder_silent(tmp_path, monkeypatch, recorder):
+    monkeypatch.setenv("AGENTIC_IRC_HOME", str(tmp_path))
+    _open_moot(tmp_path, chair="bob-chair")
+    bobreport.persist_chair_nick(tmp_path, "bob-chair")
+    bobreport.apply_callback(
+        tmp_path,
+        {"op": "merge", "machine": "ionos", "pid": 12, "working_on": "meter", "kind": "cursor"},
+        "bob-chair",
+    )
+    builder = irc_agent.Client(_args(tmp_path, "bob-ionos"))
+    builder.handle_privmsg("simon!u@h", "#bobiverse", "!bobiverse")
+    assert recorder == []
+    chair = irc_agent.Client(_args(tmp_path, "bob-chair", chair=True))
+    assert bobreport.load_digest(tmp_path).get("chairNick") == "bob-chair"
+    assert chair.channels == [
+        "#bobiverse",
+        "#flamingo",
+        "#marchhare",
+        "#ionos",
+        "#ce-priority-dev1",
+    ]
+    chair.handle_privmsg("simon!u@h", "#bobiverse", "!bobiverse")
+    assert any(bobreport.BOBIVERSE_GONE in x for x in recorder)
+    assert not any("BOB DIGEST" in x for x in recorder)
+
+
+def test_chair_mode_no_fleet_action_on_callback(tmp_path, monkeypatch, recorder):
+    monkeypatch.setenv("AGENTIC_IRC_HOME", str(tmp_path))
+    bobreport.persist_chair_nick(tmp_path, "bob-chair")
+    _open_moot(tmp_path, chair="bob-chair")
+    chair = irc_agent.Client(_args(tmp_path, "bob-chair", chair=True))
+    chair.apply_digest_callback(
+        {"op": "merge", "machine": "flamingo", "pid": 4412, "working_on": "callback job", "kind": "cursor"}
+    )
+    assert bobreport.load_digest(tmp_path)["machines"]["flamingo"]["workers"]["4412"]["working_on"] == "callback job"
+    assert not any("#bobiverse" in x and "ACTION" in x for x in recorder)
+
+
+def test_chair_mention_silent_on_channel(tmp_path, monkeypatch, recorder):
+    monkeypatch.setenv("AGENTIC_IRC_HOME", str(tmp_path))
+    bobreport.persist_chair_nick(tmp_path, "bob-chair")
+    chair = irc_agent.Client(_args(tmp_path, "bob-chair", chair=True))
+    chair.handle_privmsg("simon!u@h", "#bobiverse", "bob-chair: are you there")
+    assert recorder == []
+
+
+def test_chair_drains_outbox_without_bobiverse_spam(tmp_path, monkeypatch, recorder):
+    monkeypatch.setenv("AGENTIC_IRC_HOME", str(tmp_path))
+    bobreport.persist_chair_nick(tmp_path, "bob-chair")
+    chair = irc_agent.Client(_args(tmp_path, "bob-chair", chair=True))
+    chair.sock = object()
+    chair.joined.set()
+    outbox = chair.outbox
+    outbox.write_text(
+        "\n".join(
+            [
+                "JOIN #bobiverse",
+                "BOB DIGEST v1 1/1 {}",
+                "flamingo: I am offline",
+                "PRIVMSG #bobiverse :BOB DIGEST v1 1/2 {}",
+                bobtalk.TRAY_PREFIX + "id=ionos weekly=3 running=0 queued=0 repo=- kind=- model=- lastSeen=- jobs=-",
+                "PRIVMSG #ionos :shop ok",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    sent = chair.drain_outbox_once()
+    assert "JOIN #bobiverse" in sent
+    assert any(x.startswith("PRIVMSG #ionos :") for x in recorder)
+    assert not any("#bobiverse" in x and "BOB DIGEST" in x for x in recorder)
+    assert not any("#bobiverse" in x and "I am offline" in x for x in recorder)
+    assert not any("#bobiverse" in x and bobtalk.TRAY_PREFIX.strip() in x for x in recorder)
+
+
+def test_bobiverse_tray_whisper_gone(tmp_path, monkeypatch, recorder):
     monkeypatch.setenv("AGENTIC_IRC_HOME", str(tmp_path))
     _open_moot(tmp_path)
     bobreport.start_worker(tmp_path, "ionos", 99, "work 1m", kind="grok")
@@ -124,12 +198,9 @@ def test_bobiverse_tray_whisper_json(tmp_path, monkeypatch, recorder):
     c.handle_privmsg("bob-marchhare!u@h", "#bobiverse", "!bobiverse")
     assert recorder
     assert all(x.startswith("PRIVMSG bob-marchhare :") for x in recorder)
-    assert not any(x.startswith("PRIVMSG #bobiverse :") and "{" in x for x in recorder)
-    payloads = _json_whisper_payloads(recorder, "bob-marchhare")
-    assert payloads
-    doc = _reassemble_digest(payloads)
-    assert doc["v"] == 1
-    assert "BOB TRAY v1" not in "".join(payloads)
+    assert any(bobreport.BOBIVERSE_GONE in x for x in recorder)
+    assert not _json_whisper_payloads(recorder, "bob-marchhare")
+    assert "BOB TRAY v1" not in "".join(recorder)
 
 
 def test_bobiverse_cooldown_human(tmp_path, monkeypatch, recorder):
@@ -265,11 +336,11 @@ def test_bobiverse_help_and_machine(tmp_path, monkeypatch, recorder):
     c = irc_agent.Client(_args(tmp_path, "bob-flamingo"))
     c.handle_privmsg("simon!u@h", "#bobiverse", "!bobiverse ?")
     got = [line.split(" :", 1)[1] for line in recorder if line.startswith("PRIVMSG simon :")]
-    assert got == bobreport.HELP_TEXT.splitlines()
+    assert got == [bobreport.BOBIVERSE_GONE]
     recorder.clear()
     c._bobiverse_last_query.clear()
     c.handle_privmsg("simon!u@h", "#bobiverse", "!bobiverse nope")
-    assert any(bobreport.NO_MACHINE in x for x in recorder)
+    assert any(bobreport.BOBIVERSE_GONE in x for x in recorder)
 
 
 def test_working_on_shop_line_and_bob_action(tmp_path, monkeypatch, recorder):
@@ -277,13 +348,23 @@ def test_working_on_shop_line_and_bob_action(tmp_path, monkeypatch, recorder):
     _open_moot(tmp_path)
     job = "agentic_irc shop-channel FR (BUILD)"
     shop_line = bobreport.working_on_shop_line("w-fl-4412", job)
+    posted: list[dict] = []
+
+    def fake_post(payload: dict) -> int:
+        posted.append(dict(payload))
+        return 204
+
+    monkeypatch.setattr("post_working_on.post", fake_post)
     w = irc_agent.Client(_args(tmp_path, "w-fl-4412", channel="#flamingo"))
     w.cc_send("working_on", job)
     assert bobreport.load_digest(tmp_path)["machines"]["flamingo"]["workers"]["4412"]["working_on"] == job
-    assert recorder == [f"PRIVMSG #flamingo :{shop_line}"]
+    assert recorder == []
+    assert posted and posted[-1].get("working_on") == job
     recorder.clear()
+    posted.clear()
     w.cc_send("working_on", job)
     assert recorder == []
+    assert posted == []
     w.cc_send("assistant", "visible stdout")
     assert recorder == ["PRIVMSG #flamingo :visible stdout"]
     assert not any("#bobiverse" in x for x in recorder)
@@ -371,6 +452,21 @@ def test_joined_waits_for_every_channel(tmp_path, monkeypatch, recorder):
     assert not c.joined.is_set()
     c.handle_join("bob-flamingo", "#flamingo")
     assert c.joined.is_set()
+
+
+def test_joined_waits_for_comma_join_echo_ionos(tmp_path, monkeypatch, recorder):
+    monkeypatch.setenv("AGENTIC_IRC_HOME", str(tmp_path))
+    c = irc_agent.Client(_args(tmp_path, "bob-ionos"))
+    assert c.channels == ["#bobiverse", "#ionos"]
+    c.handle_join("bob-ionos", "#bobiverse,#ionos")
+    assert c.joined.is_set()
+
+
+def test_irc_agent_sends_join_per_channel():
+    src = (Path(__file__).resolve().parents[1] / "scripts" / "irc_agent.py").read_text(encoding="utf-8")
+    assert 'for ch in self.channels:' in src
+    assert 'self.send("JOIN " + ch)' in src
+    assert '",".join(self.channels)' not in src
 
 
 def test_shop_closed_whispers_open_query(tmp_path, monkeypatch, recorder):

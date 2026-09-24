@@ -9,6 +9,8 @@ description: >
 
 Not an agent. **Not a git-task worker** — no Form Prep, no hostile MRB loop, no UAT stamp from this connector. Operators drive allowlisted exec on a box they administer (e.g. Server 2012); fleet build jobs stay on grok/Cursor workers.
 
+**Two chairs:** fleet digest **Jeeves** (`irc_agent.py --chair` on `#bobiverse`) is not the Mode 3 PIN chair. Elder pairing uses **`airc-moot-thin.exe --chair`** on a **private** channel (never `#bobiverse`). Mode 3/DUMB must not POST `/bob/v1/report`, answer `!bobiverse`, or impersonate fleet talk nicks (`bob-*`, `{machine}-{pid}`). Default thin nick is `m3-<hostname>`; default hello on JOIN is empty.
+
 Connectors share the same PSK DUMB v1 protocol:
 
 - **Python reference:** `scripts/dumb_agent.py` joins the channel (stdlib socket+ssl), announces CAPA on join and every 10 minutes, and runs **allowlisted** ping/sysinfo/exec/get/put from `--operators` only.

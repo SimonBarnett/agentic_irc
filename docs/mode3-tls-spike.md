@@ -1,8 +1,10 @@
 # Mode 3 TLS spike (U1) — 2026-09-19
 
-**Question:** Can Libera **TLS 1.2+** (with SNI) be spoken from Windows 95 without a modern Schannel?
+**Live floor (2026):** Mode 3 production IRC is private Ergo **`irc.ntsa.uk:6697`** (Let's Encrypt, Schannel TLS 1.2). **Libera is legacy only** for this kit; the TLS science below still describes that public service.
 
-**This ticket's decision:** **No claim that Win95 (or 98 / NT4 / XP) can join Libera.** Ship a **32-bit Win32 ANSI console PE** that uses **Schannel** on modern Windows. Document the floor honestly. Do not silently advertise Win95.
+**Question:** Can legacy public IRC **TLS 1.2+** (with SNI) be spoken from Windows 95 without a modern Schannel?
+
+**This ticket's decision:** **No claim that Win95 (or 98 / NT4 / XP) can complete a live TLS IRC handshake.** Ship a **32-bit Win32 ANSI console PE** that uses **Schannel** on modern Windows. Document the floor honestly. Do not silently advertise Win95.
 
 ## What Libera needs
 
@@ -31,7 +33,7 @@ These are protocol facts about the public service as of 2026, not a guess about 
 Two different floors:
 
 1. **PE load floor.** This artefact is compiled with `_WIN32_WINNT=0x0501` (XP) as a 32-bit ANSI console. It imports Winsock2, Schannel (`secur32`), CryptoAPI. It will **not** load on Win95/98/NT4. That is intentional for this ticket, not an accident to paper over.
-2. **Live Libera floor.** Schannel TLS 1.2 + SNI + current CA. **Windows 8 / Server 2012 or newer** is the expected-good row. Windows 7 SP1 with TLS 1.2 enabled is "possible, untested here." XP and older are **blocked on U1**.
+2. **Live Ergo / legacy Libera floor.** Schannel TLS 1.2 + SNI + current CA to `irc.ntsa.uk` (or legacy `irc.libera.chat`). **Windows 8 / Server 2012 or newer** is the expected-good row. Windows 7 SP1 with TLS 1.2 enabled is "possible, untested here." XP and older are **blocked on U1**.
 
 ## What we did **not** run
 
@@ -54,4 +56,4 @@ A later ticket may try OpenWatcom + mbedTLS 2.x + bundled ISRG Root X1 and recor
 
 ## Exit for U1
 
-**Closed for this ticket as: Win95 cannot be claimed.** Minimum OS for a live Libera join with *this* binary: **Windows 8 / Server 2012+** (Win7 SP1 + TLS 1.2 = untested possible). XP-or-newer is the compile/load story only.
+**Closed for this ticket as: Win95 cannot be claimed.** Minimum OS for a live Ergo join with *this* binary: **Windows 8 / Server 2012+** (Win7 SP1 + TLS 1.2 = untested possible). XP-or-newer is the compile/load story only.

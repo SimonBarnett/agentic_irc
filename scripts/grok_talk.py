@@ -59,24 +59,25 @@ def weekly_fuel_ok(home: Path, machine_id: str) -> bool:
         return False
 
 
-def cursor_fuel_ok(peer: dict) -> bool:
-    flag = (os.environ.get("AGENTIC_IRC_GROK_TALK_CURSOR") or "1").strip().lower()
-    if flag in ("0", "false", "no", "off"):
-        return False
-    label = str(peer.get("cursor_label") or "").strip()
-    return bool(label and label.lower() != "empty")
-
-
-def talk_fuel_ok(home: Path, machine_id: str) -> bool:
-    bypass = (os.environ.get("AGENTIC_IRC_GROK_TALK_BYPASS_FUEL") or "").strip().lower()
-    if bypass in ("1", "true", "yes", "on"):
-        return True
+def cursor_remaining_ok(home: Path, machine_id: str) -> bool:
+    """Cursor Models remaining % > 0. cursor_label is display-only (not fuel)."""
     peer = bobtalk.resolve_peer(home, machine_id)
     if not peer:
         return False
-    if weekly_fuel_ok(home, machine_id):
-        return True
-    return cursor_fuel_ok(peer)
+    for key in ("remaining_pct", "account_remaining_pct", "cursor_remaining_pct"):
+        raw = peer.get(key)
+        if raw is None or raw == "":
+            continue
+        try:
+            return float(raw) > 0
+        except (TypeError, ValueError):
+            continue
+    return False
+
+
+def fuel_ok(home: Path, machine_id: str) -> bool:
+    """Enqueue fuel: Grok weekly > 0 OR Cursor remaining_pct > 0 (#70 MUST 5)."""
+    return weekly_fuel_ok(home, machine_id) or cursor_remaining_ok(home, machine_id)
 
 
 def body_hash(body: str) -> str:
@@ -144,7 +145,7 @@ def should_enqueue(
 ) -> bool:
     if not grok_talk_enabled(home):
         return False
-    if not talk_fuel_ok(home, machine_id):
+    if not fuel_ok(home, machine_id):
         return False
     if not mention_eligible(machine_id, nicks, asker, body, to_me):
         return False

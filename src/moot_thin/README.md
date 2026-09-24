@@ -27,7 +27,9 @@ Optional: MinGW-w64 i686 (`make` / `gcc -m32`).
 | Character set | ANSI (`*A` APIs) | Not Unicode; intended 9x-era *feel*, but **not** a 9x binary |
 | Machine | x86 | 32-bit PE |
 
-**Windows 95/98/NT4 will not load this PE.** **Windows ME excluded.** Live Libera needs Schannel TLS 1.2: expected **Windows 8 / Server 2012+**. See `docs/mode3-tls-spike.md`. This README does **not** claim a Win95 pass.
+**Windows 95/98/NT4 will not load this PE.** **Windows ME excluded.** Live fleet IRC is private Ergo **`irc.ntsa.uk:6697`** (Schannel TLS 1.2, same class as legacy Libera). Expected floor: **Windows 8 / Server 2012+**. Libera is legacy only. See `docs/mode3-tls-spike.md`. This README does **not** claim a Win95 pass.
+
+Mode 3 is **not** a fleet talk seat: do not pair on `#bobiverse`, do not use `bob-*` or `{machine}-{pid}` nicks by default, and do not POST digest `/bob/v1/report` or answer `!bobiverse`. PIN chair is `airc-moot-thin.exe --chair` on a **private** pairing channel; digest chair **Jeeves** is `irc_agent.py --chair` on `#bobiverse` only.
 
 ## Task visibility (console)
 
@@ -35,7 +37,7 @@ When a chair sends a DUMB job and this box has a real console, the thin client p
 
 ## First run (zero-config)
 
-Click the exe, or run it with no flags. It fills `home` from the exe directory, `allow_path` from `{home}\jail`, `nick` from the hostname, and `hello` from `{nick}-online`. If `airc-moot-thin.ini` sits beside the exe it is loaded **without** wiping those values; CLI still wins.
+Click the exe, or run it with no flags. It fills `home` from the exe directory, `allow_path` from `{home}\jail`, and `nick` as `m3-<sanitized-hostname>` (unless ini/CLI set). Default `hello` is **empty** (no `{nick}-online` on JOIN); set `--hello` or `hello=` only if an operator explicitly wants a channel line. If `airc-moot-thin.ini` sits beside the exe it is loaded **without** wiping those values; CLI still wins.
 
 Chair (modern box):
 
@@ -43,7 +45,7 @@ Chair (modern box):
 airc-moot-thin.exe --chair
 -> PIN 482917   moot=<16hex>   channel=#airc-moot   expires 10m
 -> copy-paste thin (expires 10m):
-airc-moot-thin.exe --pin 482917 --channel "#airc-moot" --moot <16hex>
+airc-moot-thin.exe --pin 482917 --channel "#airc-moot" --moot <16hex> --host irc.ntsa.uk
 ```
 
 `482917` above is the **fixture** PIN from `--selftest`, not a live secret. Live `--chair` prints a fresh PIN.
@@ -52,7 +54,7 @@ Thin (field box): copy the `airc` folder and run **that one line**. Self-heal fi
 
 Air-gap fallback: copy a 32-byte key off-channel and use `--key` / `--operators` / `--moot` as before. Empty `--operators` is still refused for unattended installs.
 
-Default pairing channel is `#airc-moot` when none is set. Put `channel=#your-private-chan` in a sibling ini for a real room. See `docs/mode3-zero-config-2026-09-19.md`.
+Default pairing channel is `#airc-moot` when none is set (**never** `#bobiverse`). Put `channel=#your-private-chan` in a sibling ini for a real room. See `docs/mode3-zero-config-2026-09-19.md`.
 
 ## CLI (advanced / air-gap)
 

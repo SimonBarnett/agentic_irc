@@ -2,6 +2,8 @@
 
 Status of `airc-moot-thin.exe` as of the first Mode 3 ticket. **Not** ready for human UAT. **No IONOS live smoke in this ticket** (A5 is Phase 4).
 
+**Live IRC:** private Ergo `irc.ntsa.uk:6697` (TLS 1.2 via Schannel). Libera is legacy; the "TLS to Libera" column below is the same Schannel class as Ergo.
+
 Compile target: 32-bit Win32 **ANSI** console PE, `_WIN32_WINNT=0x0501`. TLS: Schannel. Jobs: DUMB v1 AES-256-GCM + moot JOIN. Exec: `--operators` allowlist.
 
 | OS | Load PE | TLS 1.2 to Libera | Offline `--selftest` | Live moot+exec | Row |
@@ -20,7 +22,7 @@ Compile target: 32-bit Win32 **ANSI** console PE, `_WIN32_WINNT=0x0501`. TLS: Sc
 
 ## How to run on XP+ today (offline / modern)
 
-XP **cannot** be told to open Libera with this binary. On a Win8+ box:
+XP **cannot** be told to open live TLS IRC (Ergo or legacy Libera) with this binary. On a Win8+ box:
 
 Zero-config (PIN): `airc-moot-thin.exe --chair` on the modern box prints PIN + moot + channel **and** a copy-paste thin line (`--pin`, `--channel`, `--moot`, expires 10m). On the field box, copy the `airc` folder and run that one command (or double-click and type the PIN). Nick/home/jail self-heal. Long-term PSK is not sent as cleartext. See `docs/mode3-zero-config-2026-09-19.md` and `.grok/skills/invite-airc/SKILL.md`. Zero-config is **not** a Win95 TLS claim and is **not** ready for human UAT until Bob re-MRBs it.
 

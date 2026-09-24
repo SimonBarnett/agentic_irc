@@ -14,9 +14,13 @@ Agents: open **live** specs below. Do not treat `mrb-*.md` / `mrb-*.pdf` as curr
 | `build-and-test-plan-shop-channel-worker-cc-webhook-2026-09-21.md` | Worker plan for #46 |
 | `feature-request-house-clean-irc-kit-2026-09-21.md` | Fleet canon alignment (issue #34) |
 | `multi-agent-one-host.md` | Two `--home` dirs; Ergo vs legacy Libera |
+| `prior-irc-clean.md` | Deterministic kill of crashed `irc_agent` / `irc_listen` priors before connect |
 | `beacon-v1-2026-09-19.md` | Mode 3 zero-config invite / `beacon.url` |
 | `mode3-dumb-ops.md` | DUMB exec jail, operators, paths |
 | `build-and-test-plan-house-clean-irc-kit-2026-09-21.md` | Worker plan for #34 |
+| `feature-request-ionos-shop-channel-bob-ionos-2026-09-21.md` | `#ionos` shop for `bob-ionos` + `w-io-*` (issue #70) |
+| `build-and-test-plan-ionos-shop-channel-bob-ionos-2026-09-21.md` | Worker plan for #70 |
+| `bobiverse-ionos-ircd.md` | Ergo `#ionos` operator note + sister bobiverse.md cross-link |
 | `tofu-rotation.md` | AGPK pin mistakes and key rotation drill |
 
 `feature-request-report-bobiverse-digest-2026-09-21.md` (#36) is historical for the

@@ -162,15 +162,27 @@ def sanitize_hostname(host: str) -> str:
     return s
 
 
+def default_nick_from_hostname(hostname: str) -> str:
+    hostpart = sanitize_hostname(hostname)
+    nick = f"m3-{hostpart}"
+    if len(nick) > 32:
+        nick = nick[:32]
+    if not seal.NICK_RE.match(nick):
+        return "m3-thin-box"
+    return nick
+
+
+def pairing_channel_forbidden(channel: str) -> bool:
+    return (channel or "").lower() == "#bobiverse"
+
+
 def self_heal(cfg: ThinConfig, exe_dir: str, hostname: str) -> ThinConfig:
     if not cfg.home and exe_dir:
         cfg.home = exe_dir
     if not cfg.allow_path and cfg.home:
         cfg.allow_path = str(Path(cfg.home) / "jail")
     if not cfg.nick and hostname:
-        cfg.nick = sanitize_hostname(hostname)
-    if not cfg.hello and cfg.nick:
-        cfg.hello = f"{cfg.nick}-online"
+        cfg.nick = default_nick_from_hostname(hostname)
     return cfg
 
 
@@ -190,6 +202,8 @@ def validate_config(cfg: ThinConfig) -> None:
     if not cfg.allow_path:
         raise ValueError("missing --allow-path")
     if cfg.chair or cfg.pairing:
+        if pairing_channel_forbidden(cfg.channel):
+            raise ValueError("pairing on #bobiverse is forbidden")
         if cfg.pin and not pin_ok(cfg.pin):
             raise ValueError("invalid --pin (6 digits)")
         return
@@ -209,9 +223,14 @@ def pair_offer_line(moot_id: str, pair_id: str, expires: int) -> str:
     return f"PAIR v1 OFFER {moot_id} {pair_id} {expires}"
 
 
-def chair_invite_line(pin: str, channel: str, moot_id: str) -> str:
+def chair_invite_line(
+    pin: str, channel: str, moot_id: str, host: str = "irc.ntsa.uk", port: int = 6697
+) -> str:
     """Copy-paste thin command printed by --chair. Channel quoted for PowerShell."""
-    return f'airc-moot-thin.exe --pin {pin} --channel "{channel}" --moot {moot_id}'
+    line = f'airc-moot-thin.exe --pin {pin} --channel "{channel}" --moot {moot_id} --host {host}'
+    if port != 6697:
+        line += f" --port {port}"
+    return line
 
 
 def pair_ack_line(moot_id: str, pair_id: str) -> str:

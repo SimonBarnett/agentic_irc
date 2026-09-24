@@ -12,7 +12,7 @@
 #include <time.h>
 
 /* Keep in sync with VERSION */
-#define AIRC_THIN_VERSION "0.3.1"
+#define AIRC_THIN_VERSION "0.3.2"
 
 static void usage(void)
 {
@@ -196,11 +196,11 @@ static int selftest(void)
             ThinConfig c;
             config_defaults(&c);
             config_self_heal_ex(&c, jailp, "WALRUS");
-            if (strcmp(c.nick, "walrus") != 0 || strcmp(c.hello, "walrus-online") != 0) {
-                info("FAIL self-heal hostname nick");
+            if (strcmp(c.nick, "m3-walrus") != 0 || c.hello[0] != 0) {
+                info("FAIL self-heal hostname nick=%s hello=%s", c.nick, c.hello);
                 fails++;
             } else
-                info("INFO self-heal nick=walrus home=%s jail=%s", c.home, c.allow_path);
+                info("INFO self-heal nick=m3-walrus home=%s jail=%s", c.home, c.allow_path);
         }
     }
 
@@ -292,15 +292,16 @@ static int selftest(void)
             const char *fix_pin = "482917";
             const char *fix_ch = "#ops";
             const char *fix_moot = "0123456789abcdef";
-            chair_invite_line(fix_pin, fix_ch, fix_moot, invite, sizeof(invite));
+            chair_invite_line(fix_pin, fix_ch, fix_moot, "irc.ntsa.uk", 6697, invite, sizeof(invite));
             if (!strstr(invite, "--pin") || !strstr(invite, "--channel") ||
-                !strstr(invite, "--moot") || !strstr(invite, fix_pin) ||
+                !strstr(invite, "--moot") || !strstr(invite, "--host") ||
+                !strstr(invite, "irc.ntsa.uk") || !strstr(invite, fix_pin) ||
                 !strstr(invite, fix_moot) || !strstr(invite, fix_ch) ||
                 strstr(invite, "psk") || strstr(invite, "connector.key")) {
                 info("FAIL chair invite banner %s", invite);
                 fails++;
             } else {
-                chair_print_banner(fix_pin, fix_ch, fix_moot);
+                chair_print_banner(fix_pin, fix_ch, fix_moot, "irc.ntsa.uk", 6697);
                 info("INFO chair invite banner ok");
             }
         }
@@ -709,6 +710,57 @@ static int session(ThinConfig *cfg, Jail *jail, uint8_t *key, int *have_key, Pai
         irc_free(irc);
         return -1;
     }
+    /* Ergo fleet gate: PASS from AGENTIC_IRC_PASSWORD, exe-dir ergo.password /
+     * connect.password, or ~/.grok/ergo/connect.password. Never log the secret. */
+    {
+        char pass[256];
+        char ppath[MAX_PATH];
+        const char *envp;
+        const char *home;
+        FILE *pf;
+        size_t n;
+        int i;
+        const char *sib[] = { "ergo.password", "connect.password", NULL };
+        pass[0] = 0;
+        envp = getenv("AGENTIC_IRC_PASSWORD");
+        if (envp && envp[0]) {
+            strncpy(pass, envp, sizeof(pass) - 1);
+            pass[sizeof(pass) - 1] = 0;
+        }
+        for (i = 0; !pass[0] && sib[i]; i++) {
+            _snprintf(ppath, sizeof(ppath), "%s\\%s", cfg->exe_dir, sib[i]);
+            pf = fopen(ppath, "rb");
+            if (!pf)
+                continue;
+            n = fread(pass, 1, sizeof(pass) - 1, pf);
+            fclose(pf);
+            pass[n] = 0;
+            while (n > 0 && (pass[n - 1] == '\n' || pass[n - 1] == '\r' || pass[n - 1] == ' '))
+                pass[--n] = 0;
+        }
+        home = getenv("USERPROFILE");
+        if (!pass[0] && home && home[0]) {
+            _snprintf(ppath, sizeof(ppath), "%s\\.grok\\ergo\\connect.password", home);
+            pf = fopen(ppath, "rb");
+            if (pf) {
+                n = fread(pass, 1, sizeof(pass) - 1, pf);
+                fclose(pf);
+                pass[n] = 0;
+                while (n > 0 && (pass[n - 1] == '\n' || pass[n - 1] == '\r' || pass[n - 1] == ' '))
+                    pass[--n] = 0;
+            }
+        }
+        if (pass[0]) {
+            char pline[300];
+            _snprintf(pline, sizeof(pline), "PASS %s", pass);
+            irc_send_line(irc, pline);
+            SecureZeroMemory(pass, sizeof(pass));
+            SecureZeroMemory(pline, sizeof(pline));
+            info("INFO PASS sent (Ergo)");
+        } else {
+            info("INFO no Ergo PASS (set AGENTIC_IRC_PASSWORD or ergo.password beside exe)");
+        }
+    }
     irc_send_line(irc, "CAP LS 302");
     {
         char n[80], u[160];
@@ -916,7 +968,11 @@ static int prepare_chair(ThinConfig *cfg, PairSess *ps, uint8_t *key, int *have_
     if (pair_wrap_key(ps->pin, ps->pair_id, cfg->channel, cfg->moot_id, ps->wrap) != 0)
         return -1;
     ps->have_wrap = 1;
-    chair_print_banner(ps->pin, cfg->channel, cfg->moot_id);
+    if (pairing_channel_forbidden(cfg->channel)) {
+        info("INFO pairing on #bobiverse is forbidden");
+        return -1;
+    }
+    chair_print_banner(ps->pin, cfg->channel, cfg->moot_id, cfg->host, cfg->port);
     {
         InviteDoc inv;
         memset(&inv, 0, sizeof(inv));

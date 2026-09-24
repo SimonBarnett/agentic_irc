@@ -895,19 +895,90 @@ class Client:
             return
         info(f"INFO dumb job id={dl.msg_id} from={src}")
 
-    def _maybe_channel_pong(self, src: str, target: str, body: str) -> bool:
-        """Bare joined-channel 'ping' -> 'pong' on that channel. No Grok wake.
+    def _may_channel_auto_pong(self) -> bool:
+        """bob-* ears and named sand agents (not talk seats / w-*)."""
+        nick = (self.original_nick or "").strip()
+        if not nick:
+            return False
+        if bobtalk.is_fleet_bob_nick(nick):
+            return True
+        low = nick.lower()
+        if low.startswith("w-"):
+            return False
+        if talk_seat_pid.parse_talk_seat_nick(nick) is not None:
+            return False
+        return True
 
-        bob-* ears only. Exact body after trim, case-insensitive. Returns
-        before mention-ack / grok_talk enqueue.
+    def _channel_ping_pattern(self, body: str) -> str | None:
+        """Return None (not a ping), '' (bare ping), or the selector after ping."""
+        raw = (body or "").strip()
+        if not raw:
+            return None
+        low = raw.lower()
+        if low == "ping":
+            return ""
+        if low.startswith("ping:") or low.startswith("ping "):
+            rest = raw.split(":", 1)[1].strip() if low.startswith("ping:") else raw.split(None, 1)[1].strip()
+            token = (rest.split(None, 1)[0] if rest else "").strip()
+            return token if token else None
+        return None
+
+    @staticmethod
+    def _nick_matches_ping_selector(nick: str, selector: str) -> bool:
+        """Exact, prefix, substring (unique-ish), or shell-style * ? wildcards."""
+        n = (nick or "").strip().lower()
+        sel = (selector or "").strip().lower().rstrip(",:;!?")
+        if not n or not sel:
+            return False
+        if sel == n:
+            return True
+        if any(ch in sel for ch in "*?"):
+            # shell-style: * -> .*  ? -> .
+            import re
+            parts = []
+            for ch in sel:
+                if ch == "*":
+                    parts.append(".*")
+                elif ch == "?":
+                    parts.append(".")
+                else:
+                    parts.append(re.escape(ch))
+            try:
+                return re.fullmatch("".join(parts), n) is not None
+            except re.error:
+                return False
+        # prefix always wins (ping bob -> bob-ionos, bob-dev1, ...)
+        if n.startswith(sel):
+            return True
+        # substring only when selector is reasonably specific (>=3 chars)
+        if len(sel) >= 3 and sel in n:
+            return True
+        return False
+
+    def _channel_ping_targets_me(self, body: str) -> bool:
+        """Bare ping, or ping selector that matches this seat nick."""
+        sel = self._channel_ping_pattern(body)
+        if sel is None:
+            return False
+        if sel == "":
+            return True
+        return any(self._nick_matches_ping_selector(n, sel) for n in self._mine_nicks())
+
+    def _maybe_channel_pong(self, src: str, target: str, body: str) -> bool:
+        """Joined-channel ping -> pong. No Grok wake.
+
+        bob-* ears and named agents (e.g. Haitch). Matches bare ping,
+        ping <nick>, ping <partial>, and ping bob-* wildcards when the
+        pattern matches this seat. Talk seats stay silent. Returns before
+        mention-ack / grok_talk enqueue.
         """
-        if not bobtalk.is_fleet_bob_nick(self.original_nick):
+        if not self._may_channel_auto_pong():
             return False
         if not self._joined_channel(target):
             return False
         if (src or "").strip().lower() in self._mine_nicks():
             return False
-        if (body or "").strip().lower() != "ping":
+        if not self._channel_ping_targets_me(body):
             return False
         dest = bobreport.normalize_channel(target)
         if not dest or "|" in dest:

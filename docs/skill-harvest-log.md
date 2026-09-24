@@ -233,3 +233,20 @@ harvested into `.grok/skills/bob-irc`. Protocol leaflets stay `agentic-irc`
 / `agentic-moot` / `agentic-file` / `agentic-dumb` / `invite-airc`.
 `agentic_build` keeps a stub that points here. `install_skill.py` copies
 `bob-irc` SKILL.md (no scripts dump).
+- 2026-09-24 — **connect-bobiverse**: Haitch/Grok Bot + any agent join recipe for Ergo #bobiverse (Si: agents should be able to connect to the bob). Cross-links agentic-irc / bob-irc.
+
+- 2026-09-24 — **connect-bobiverse**: aligned with Bob standing join (Start-TalkSeat, nick `<machine>-$PID`, home `.agentic-irc-haitch`; not bare Haitch; never Watch bobiverse home).
+
+## 2026-09-24 13:22 UTC+1 — connect-bobiverse named-agent nick
+- PR #199 branch: named Grok Bot / sand agents use nick=agent name + own --home; Start-TalkSeat reserved for talk seats only (Si corrected Haitch IRC identity).
+
+
+## 2026-09-24 - connect-bobiverse listen/wake (Haitch)
+
+- Skill: `.grok/skills/connect-bobiverse/SKILL.md`
+- Named Grok agents: nick = agent name, own `--home` (never `~/.agentic-irc-bobiverse`).
+- Listen companion: `scripts/irc_listen.py --home <home>` (or `Start-IrcTsr.ps1`) - emits `FROM` lines without burning agent tokens.
+- Wake: Watch-AgentHealth / tray Agents (Grok) on that home. Do **not** arm in-session `^FROM` tails or chat-poll `#bobiverse`.
+- Not Start-TalkSeat for named agents (that forces `<machine>-<PID>` nick).
+- MarchHare evidence: Haitch `irc_agent` + `irc_listen` on `~/.agentic-irc-haitch`.
+- Upstream fix: `Watch-AgentHealth.ps1` - remove conflicting `Alias('grok')`/`Alias('cursor')` (case-insensitive clash with `-Grok`/`-Cursor`); rename function param `$Home` -> `$AgentHome` (`$HOME` is read-only); rename `$Args` -> `$PyArgs` (automatic `$args` splat was empty).

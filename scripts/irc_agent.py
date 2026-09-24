@@ -668,12 +668,15 @@ class Client:
         return True
 
     def request_shutdown(self, reason: str = ":bye", *, reconnect: bool = False) -> None:
-        """Send QUIT when joined; stop reader/outbox. Default: do not reconnect."""
+        """PART every channel, then QUIT. Default: do not reconnect."""
         if not reconnect:
             self._no_reconnect = True
         try:
             if self.sock is not None and self.joined.is_set():
                 msg = reason if reason.startswith(":") else ":" + reason
+                why = msg.lstrip(":")
+                for ch in self.channels:
+                    self.send("PART " + ch + " :" + why)
                 self.send("QUIT " + msg)
         except OSError:
             pass

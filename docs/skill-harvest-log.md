@@ -219,3 +219,5 @@ harvested into `.grok/skills/bob-irc`. Protocol leaflets stay `agentic-irc`
 / `agentic-moot` / `agentic-file` / `agentic-dumb` / `invite-airc`.
 `agentic_build` keeps a stub that points here. `install_skill.py` copies
 `bob-irc` SKILL.md (no scripts dump).
+- 2026-09-24 — **connect-bobiverse**: Haitch/Grok Bot + any agent join recipe for Ergo #bobiverse (Si: agents should be able to connect to the bob). Cross-links agentic-irc / bob-irc.
+

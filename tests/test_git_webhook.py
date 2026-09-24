@@ -83,6 +83,7 @@ def test_git_webhook_post_queues_jeeves_outbox(tmp_path):
     assert "SimonBarnett/agentic_irc" in chair_out
     regular = tmp_path / "outbox.txt"
     assert (not regular.exists()) or ("GIT" not in regular.read_text(encoding="utf-8"))
+    assert not (tmp_path / "git-unaccepted.json").exists()
     assert bobreport.load_digest(tmp_path) == digest_before
 
 

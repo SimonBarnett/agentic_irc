@@ -1151,6 +1151,13 @@ def apply_git_webhook(home: Path, event: str, payload: dict) -> GitWebhookOutcom
     line = format_github_webhook_announce(event, payload)
     if not line.startswith(GIT_ANNOUNCE_PREFIX) or looks_like_secret(line):
         return GitWebhookOutcome(ok=False, err="announce")
+    import gitclaim
+
+    claim = gitclaim.claim_from_payload(event, payload, line=line)
+    if claim is not None:
+        queued = gitclaim.enqueue_unaccepted(home, claim)
+        if queued == "error":
+            return GitWebhookOutcome(ok=False, err="queue")
     if not enqueue_chair_fleet_privmsg(home, line):
         return GitWebhookOutcome(ok=False, err="outbox")
     return GitWebhookOutcome(ok=True, announced=True)

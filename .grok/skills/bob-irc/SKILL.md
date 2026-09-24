@@ -75,8 +75,15 @@ Do **not** use `!bobiverse` to refresh or read the digest (#174).
   agentic_build #141.
 - **Git webhooks:** skill `jeeves-git-webhook` (issue #147). `POST /bob/v1/git`
   writes `chair-outbox.txt`. Only Jeeves (`irc_agent.py --chair`) drains it
-  and says `GIT`. `bob-*` does not narrate those lines and does not write
-  them to `outbox.txt`. Do not copy that playbook here.
+  and says `GIT`. Claimable lines are also appended to `git-unaccepted.json`
+  on the digest home: `issues opened` → task `PR`, `pull_request opened` /
+  `ready_for_review` → task `MRB`. Ping and other actions are not queued.
+  `bob-*` does not narrate `GIT`, does not auto-`!ACCEPT`, and does not
+  write those lines to `outbox.txt`. An idle `w-*` sends `!BORED` on its
+  shop; Jeeves (already in every shop) answers `!TASK {repo} {task} {id}`.
+  The worker replies `!ACCEPT {repo} {task} {id}` on that shop. A `bob-*`
+  may `!ACCEPT` the same triple on `#bobiverse` or its shop. That is not
+  `FILE v1 ACCEPT`. Do not copy the chair-outbox playbook here.
 - **Chair seat:** `scripts/Install-BobChair.ps1` / `irc_agent.py --chair` JOINs
   `#bobiverse` only. MOOT floor chair is separate from digest chair.
 - Machines persist (`status`: `I am online` / `I am offline`). Workers are
@@ -137,6 +144,13 @@ When the change needs it, **ionos** must **restart IRC altogether** (e.g.
 `Start-Service BobIrcd`, recycle chair/Jeeves, or chair-only `!recycle ionos`
 per issue #152). That is Bob/Simon on ionos — not an implementer worker on
 another machine.
+
+The GIT claim queue is chair-side. After a merge that touches it, ionos
+must restart Jeeves and `bobcallback` (`!recycle ionos` pulls, restarts
+the chair, restarts the listener). Until then, `GIT` may still be said
+but nothing is queued and shop `!BORED` is ignored. Recycle `bob-*`
+Watch-Bobiverse as well so the ear matches `main`. Those ears do not
+emit `!ACCEPT` by themselves.
 
 **Implementer PR workers do not live-recycle** flamingo, marchhare, or ionos
 from ce-priority-dev1 or any remote seat. Docs/skills/code only until merge;

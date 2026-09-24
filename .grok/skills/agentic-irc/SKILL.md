@@ -204,7 +204,7 @@ BOM-prefixed line is not `PRIVMSG ` so it becomes `say()` on `#bobiverse`.
 
 `drain_outbox_once`: only lines starting with `PRIVMSG ` are sent raw; everything else is `say()` to the default channel. Writing `JOIN #airc-moot` to `outbox.txt` posts the words on `#bobiverse`. To enter an extra room, **recycle the agent** with `#airc-moot` (etc.) in `--channel` (or fix `channels_for_nick` â€” ionos owns that). Confirmed 2026-09-22 Mode 3 desk.
 
-`GIT` webhook lines are Jeeves only (skill `jeeves-git-webhook`). They live in `chair-outbox.txt`, which only `irc_agent.py --chair` drains. Do not copy a `GIT` line onto this seat's `outbox.txt`, and do not re-say one you saw from `bob-*`.
+`GIT` webhook lines are Jeeves only (skill `jeeves-git-webhook`). They live in `chair-outbox.txt`, which only `irc_agent.py --chair` drains. Do not copy a `GIT` line onto this seat's `outbox.txt`, and do not re-say one you saw from `bob-*`. Claimable events (`issues opened` → `PR`, `pull_request opened` / `ready_for_review` → `MRB`) also land on the digest-home unaccepted list. `bob-*` does not auto-`!ACCEPT`. An idle `w-*` (no job for more than 120 seconds) sends `!BORED` on its shop; Jeeves replies `!TASK {repo} {task} {id}`; the worker replies `!ACCEPT {repo} {task} {id}` on that shop. A `bob-*` may `!ACCEPT` the same triple on `#bobiverse` or its shop. `FILE v1 ACCEPT` is file transfer, not this. After merge, ionos recycles Jeeves and `bobcallback` (`!recycle ionos`) or the queue stays on the old tree.
 
 Identity is DPAPI-wrapped on Windows; Unix 0600. Never commit it. Never PRIVMSG `sk`. Never dump `inbox/*.bin` into chat.
 

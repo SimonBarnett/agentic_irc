@@ -20,6 +20,7 @@ SCRIPTS = (
     "beacon.py",
     "moot_thin_proto.py",
     "bobreport.py",
+    "gitclaim.py",
     "bobcallback.py",
     "bobtalk.py",
     "bobstat.py",

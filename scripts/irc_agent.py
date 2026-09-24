@@ -22,6 +22,7 @@ import bob_recycle  # noqa: E402
 import bobreport  # noqa: E402
 import bobstat  # noqa: E402
 import bobtalk  # noqa: E402
+import gitclaim  # noqa: E402
 import grok_talk  # noqa: E402
 import filexfer  # noqa: E402
 import moot  # noqa: E402
@@ -913,6 +914,79 @@ class Client:
         info("INFO auto-pong")
         return True
 
+    def _git_say(self, target: str, text: str) -> None:
+        dest = bobreport.normalize_channel(target)
+        if not dest or "|" in dest:
+            return
+        self.send("PRIVMSG " + dest + " :" + text)
+        time.sleep(FLOOD_S)
+
+    def _maybe_git_claim(self, src: str, target: str, body: str) -> bool:
+        """Chair only. Queue offers and ACCEPT stamps. bob-* does not auto-claim."""
+        if not getattr(self.args, "chair", False):
+            return False
+        if not self._joined_channel(target):
+            return False
+        now = time.time()
+        if gitclaim.is_bored_command(body):
+            self._git_bored(src, target, now)
+            return True
+        if gitclaim.is_accept_command(body):
+            self._git_accept(src, target, body)
+            return True
+        shop = gitclaim.worker_shop_channel(src)
+        if shop and bobreport.normalize_channel(target).lower() == shop:
+            gitclaim.note_worker_activity(self.home, src, now)
+        return False
+
+    def _git_bored(self, src: str, target: str, now: float) -> None:
+        gate = gitclaim.bored_gate(self.home, src, target, now)
+        if gate == "ignore":
+            info(f"INFO git-claim bored ignore nick={src}")
+            return
+        if gate == "wait":
+            self._git_say(target, gitclaim.NAK_BORED_WAIT)
+            info(f"INFO git-claim bored nak wait nick={src}")
+            return
+        if gate == "busy":
+            gitclaim.note_worker_activity(self.home, src, now)
+            self._git_say(target, gitclaim.NAK_BORED_BUSY)
+            info(f"INFO git-claim bored nak busy nick={src}")
+            return
+        item = gitclaim.next_unaccepted(self.home)
+        if not item:
+            gitclaim.note_worker_activity(self.home, src, now)
+            self._git_say(target, gitclaim.NAK_BORED_EMPTY)
+            info(f"INFO git-claim bored nak empty nick={src}")
+            return
+        gitclaim.note_worker_activity(self.home, src, now)
+        line = gitclaim.format_task(
+            str(item.get("repo") or ""),
+            str(item.get("task") or ""),
+            str(item.get("id") or ""),
+        )
+        self._git_say(target, line)
+        info(f"INFO git-claim offer {line} nick={src}")
+
+    def _git_accept(self, src: str, target: str, body: str) -> None:
+        parsed = gitclaim.parse_accept(body)
+        if parsed is None:
+            info(f"INFO git-claim accept bad nick={src}")
+            return
+        if not gitclaim.accept_allowed(src, target):
+            info(f"INFO git-claim accept ignore nick={src}")
+            return
+        repo, task, ident = parsed
+        result = gitclaim.mark_accepted(self.home, repo, task, ident, nick=src, channel=target)
+        if result == "ok":
+            if gitclaim.canonical_worker_nick(src):
+                gitclaim.note_worker_activity(self.home, src, time.time())
+            self._git_say(target, gitclaim.format_accept_ok(repo, task, ident))
+            info(f"INFO git-claim accept ok {repo} {task} {ident} nick={src}")
+            return
+        self._git_say(target, gitclaim.format_accept_nak(repo, task, ident))
+        info(f"INFO git-claim accept nak {result} {repo} {task} {ident} nick={src}")
+
     def handle_privmsg(self, prefix: str, target: str, body: str) -> None:
         src = prefix.split("!", 1)[0].lstrip(":")
         tgt_l = target.lower()
@@ -923,6 +997,8 @@ class Client:
         if not to_channel and not to_me:
             return
         if to_channel and self._maybe_channel_pong(src, target, body):
+            return
+        if to_channel and self._maybe_git_claim(src, target, body):
             return
         if to_me:
             self._mark_pm_open(src)

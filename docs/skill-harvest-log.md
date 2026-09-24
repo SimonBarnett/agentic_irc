@@ -226,3 +226,13 @@ harvested into `.grok/skills/bob-irc`. Protocol leaflets stay `agentic-irc`
 ## 2026-09-24 13:22 UTC+1 — connect-bobiverse named-agent nick
 - PR #199 branch: named Grok Bot / sand agents use nick=agent name + own --home; Start-TalkSeat reserved for talk seats only (Si corrected Haitch IRC identity).
 
+
+## 2026-09-24 - connect-bobiverse listen/wake (Haitch)
+
+- Skill: `.grok/skills/connect-bobiverse/SKILL.md`
+- Named Grok agents: nick = agent name, own `--home` (never `~/.agentic-irc-bobiverse`).
+- Listen companion: `scripts/irc_listen.py --home <home>` (or `Start-IrcTsr.ps1`) - emits `FROM` lines without burning agent tokens.
+- Wake: Watch-AgentHealth / tray Agents (Grok) on that home. Do **not** arm in-session `^FROM` tails or chat-poll `#bobiverse`.
+- Not Start-TalkSeat for named agents (that forces `<machine>-<PID>` nick).
+- MarchHare evidence: Haitch `irc_agent` + `irc_listen` on `~/.agentic-irc-haitch`.
+- Upstream fix: `Watch-AgentHealth.ps1` - remove conflicting `Alias('grok')`/`Alias('cursor')` (case-insensitive clash with `-Grok`/`-Cursor`); rename function param `$Home` -> `$AgentHome` (`$HOME` is read-only); rename `$Args` -> `$PyArgs` (automatic `$args` splat was empty).

@@ -3,9 +3,7 @@
 # Persist Cursor session_id from CLI JSON; resume on wake without full skill reload.
 [CmdletBinding()]
 param(
-    [Alias('grok')]
     [switch]$Grok,
-    [Alias('cursor')]
     [switch]$Cursor,
     [string]$Cwd = '',
     [string]$IrcHome = '',
@@ -41,8 +39,8 @@ function Write-AgentLog {
 }
 
 function Invoke-AgentHealthPy {
-    param([string[]]$Args)
-    $out = & $Py $AgentHealthPy @Args 2>&1
+    param([string[]]$PyArgs)
+    $out = & $Py $AgentHealthPy @PyArgs 2>&1
     if ($LASTEXITCODE -ne 0) {
         throw "agent_health.py failed ($LASTEXITCODE): $out"
     }
@@ -91,8 +89,8 @@ function Save-SessionId {
 }
 
 function Read-IrcCoordinator {
-    param([string]$Home)
-    $coord = Join-Path $Home 'coordinator.pid'
+    param([string]$AgentHome)
+    $coord = Join-Path $AgentHome 'coordinator.pid'
     $out = [ordered]@{ path = $coord; nick = ''; seat = ''; agentPid = 0; listenPid = 0 }
     if (-not (Test-Path -LiteralPath $coord)) { return [pscustomobject]$out }
     Get-Content -LiteralPath $coord -ErrorAction SilentlyContinue | ForEach-Object {
@@ -111,24 +109,24 @@ function Test-PidAlive {
 }
 
 function Get-ListenPollSink {
-    param([string]$Home)
-    $json = Invoke-AgentHealthPy -Args @('select-sink', '--home', $Home)
+    param([string]$AgentHome)
+    $json = Invoke-AgentHealthPy -PyArgs @('select-sink', '--home', $AgentHome)
     $doc = $json | ConvertFrom-Json
     return [pscustomobject]@{ Path = $doc.path; Kind = $doc.kind }
 }
 
 function Test-IrcTsrHealth {
-    param([string]$Home)
-    $c = Read-IrcCoordinator -Home $Home
+    param([string]$AgentHome)
+    $c = Read-IrcCoordinator -AgentHome $Home
     $agentOk = Test-PidAlive -ProcId $c.agentPid
     $listenOk = Test-PidAlive -ProcId $c.listenPid
-    $healthJson = Invoke-AgentHealthPy -Args @(
-        'listen-health', '--home', $Home, '--stale-seconds', "$IrcStaleSeconds"
+    $healthJson = Invoke-AgentHealthPy -PyArgs @(
+        'listen-health', '--home', $AgentHome, '--stale-seconds', "$IrcStaleSeconds"
     )
     $h = $healthJson | ConvertFrom-Json
     $logOk = [bool]$h.log_exists
     $stale = [bool]$h.log_stale
-    $listenLog = if ($h.listen_log_path) { $h.listen_log_path } else { (Join-Path $Home 'listen.stdout.log') }
+    $listenLog = if ($h.listen_log_path) { $h.listen_log_path } else { (Join-Path $AgentHome 'listen.stdout.log') }
     return [pscustomobject]@{
         Coordinator = $c
         AgentOk     = $agentOk
@@ -153,8 +151,8 @@ function Resolve-RepairScript {
 }
 
 function Ensure-IrcTsr {
-    param([string]$Home)
-    $irc = Test-IrcTsrHealth -Home $Home
+    param([string]$AgentHome)
+    $irc = Test-IrcTsrHealth -AgentHome $Home
     if ($irc.Healthy) {
         Write-AgentLog ("IRC TSR ok nick={0} agent={1} listen={2} log={3}" -f $irc.Coordinator.nick, $irc.Coordinator.agentPid, $irc.Coordinator.listenPid, $irc.ListenLog)
         return $irc
@@ -170,23 +168,23 @@ function Ensure-IrcTsr {
     $tsrScript = Join-Path $Scripts 'Start-IrcTsr.ps1'
     if ($irc.AgentOk -and -not $irc.ListenOk -and (Test-Path -LiteralPath $tsrScript)) {
         Write-AgentLog 'IRC repair: Start-IrcTsr (listen only)'
-        & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $tsrScript -IrcHome $Home -Nick $nick -Scripts $Scripts | Out-Null
-        return (Test-IrcTsrHealth -Home $Home)
+        & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $tsrScript -IrcHome $AgentHome -Nick $nick -Scripts $Scripts | Out-Null
+        return (Test-IrcTsrHealth -AgentHome $Home)
     }
     $roll = Resolve-RepairScript
     if (-not $roll) {
         Write-AgentLog 'IRC repair skipped: no Stop-HungAgent.ps1 and listen/agent still bad'
-        return (Test-IrcTsrHealth -Home $Home)
+        return (Test-IrcTsrHealth -AgentHome $Home)
     }
-    & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $roll -IrcHome $Home -Nick $nick -Roll
-    return (Test-IrcTsrHealth -Home $Home)
+    & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $roll -IrcHome $AgentHome -Nick $nick -Roll
+    return (Test-IrcTsrHealth -AgentHome $Home)
 }
 
 function Read-NewIrcFromLines {
-    param([string]$Home, [long]$Offset)
-    $sink = Get-ListenPollSink -Home $Home
-    $json = Invoke-AgentHealthPy -Args @(
-        'read-from', '--home', $Home, '--offset', "$Offset", '--sink-path', $sink.Path, '--sink-kind', $sink.Kind
+    param([string]$AgentHome, [long]$Offset)
+    $sink = Get-ListenPollSink -AgentHome $Home
+    $json = Invoke-AgentHealthPy -PyArgs @(
+        'read-from', '--home', $AgentHome, '--offset', "$Offset", '--sink-path', $sink.Path, '--sink-kind', $sink.Kind
     )
     $doc = $json | ConvertFrom-Json
     return [pscustomobject]@{
@@ -208,7 +206,7 @@ function Resolve-CursorAgentExe {
 function Parse-CursorSessionFromFile {
     param([string]$Path)
     if (-not (Test-Path -LiteralPath $Path)) { return $null }
-    $sid = Invoke-AgentHealthPy -Args @('parse-cursor-session', '--file', $Path)
+    $sid = Invoke-AgentHealthPy -PyArgs @('parse-cursor-session', '--file', $Path)
     if ($sid -eq 'null' -or -not $sid) { return $null }
     return $sid.Trim()
 }
@@ -217,7 +215,7 @@ function Ensure-AgentSession {
     param($AgentInfo, [string]$SessionPath, [string]$WorkDir)
     $id = Read-SavedSessionId -Path $SessionPath
     if ($AgentInfo.Engine -eq 'cursor') {
-        $bound = Invoke-AgentHealthPy -Args @('cursor-bound', '--session-path', $SessionPath)
+        $bound = Invoke-AgentHealthPy -PyArgs @('cursor-bound', '--session-path', $SessionPath)
         if ($bound -eq 'true') {
             Write-AgentLog ("session exists id={0}" -f $id)
             return $id
@@ -256,7 +254,7 @@ Do not stamp UAT. Do not push main.
         Write-AgentLog 'boot cursor failed: no session_id in CLI output'
         return $null
     }
-    Invoke-AgentHealthPy -Args @('mark-cursor-bound', '--session-path', $SessionPath, '--session-id', $sid) | Out-Null
+    Invoke-AgentHealthPy -PyArgs @('mark-cursor-bound', '--session-path', $SessionPath, '--session-id', $sid) | Out-Null
     Write-AgentLog ("boot cursor bound session_id={0}" -f $sid)
     return $sid
 }
@@ -267,7 +265,7 @@ function Invoke-AgentOnIrcTraffic {
         return [pscustomobject]@{ Started = $false; ExitCode = $null }
     }
     $sinkName = Split-Path -Leaf $SinkPath
-    $payload = Invoke-AgentHealthPy -Args @(
+    $payload = Invoke-AgentHealthPy -PyArgs @(
         'format-wake', '--sink-name', $sinkName, '--lines', ($FromLines -join "`n")
     )
     Write-AgentLog ("trigger Agent TSR lines={0} session={1}" -f $FromLines.Count, $SessionId)
@@ -310,7 +308,7 @@ function Commit-ListenOffsetAfterWake {
     param([bool]$AgentStarted, [Nullable[int]]$ExitCode, [long]$CurrentOffset, [long]$NextOffset)
     $codeArg = if ($null -eq $ExitCode) { '' } else { "$ExitCode" }
     $startedArg = if ($AgentStarted) { 'true' } else { 'false' }
-    $out = Invoke-AgentHealthPy -Args @(
+    $out = Invoke-AgentHealthPy -PyArgs @(
         'commit-offset', '--agent-started', $startedArg, '--exit-code', $codeArg,
         '--current-offset', "$CurrentOffset", '--next-offset', "$NextOffset"
     )
@@ -331,23 +329,23 @@ $agent = Resolve-AgentExe -Want $Engine
 $sessionPath = Get-SessionStorePath -Eng $Engine
 Write-AgentLog ("engine={0} path={1} cwd={2} ircHome={3} scripts={4}" -f $agent.Engine, $agent.Path, $Cwd, $IrcHome, $Scripts)
 
-[void](Ensure-IrcTsr -Home $IrcHome)
+[void](Ensure-IrcTsr -AgentHome $IrcHome)
 
 $sessionId = Ensure-AgentSession -AgentInfo $agent -SessionPath $sessionPath -WorkDir $Cwd
 
 $listenOffset = 0L
-$initialSink = Get-ListenPollSink -Home $IrcHome
+$initialSink = Get-ListenPollSink -AgentHome $IrcHome
 if (Test-Path -LiteralPath $initialSink.Path) { $listenOffset = (Get-Item $initialSink.Path).Length }
 
 Write-AgentLog 'caller loop: poll IRC; trigger agent on new FROM lines'
 while ($true) {
-    $irc = Test-IrcTsrHealth -Home $IrcHome
+    $irc = Test-IrcTsrHealth -AgentHome $IrcHome
     if (-not $irc.Healthy) {
         Write-AgentLog 'IRC TSR failed health check - repairing'
-        [void](Ensure-IrcTsr -Home $IrcHome)
+        [void](Ensure-IrcTsr -AgentHome $IrcHome)
     }
 
-    $read = Read-NewIrcFromLines -Home $IrcHome -Offset $listenOffset
+    $read = Read-NewIrcFromLines -AgentHome $IrcHome -Offset $listenOffset
     if ($read.Lines.Count -gt 0) {
         $wake = Invoke-AgentOnIrcTraffic -AgentInfo $agent -SessionId $sessionId -WorkDir $Cwd -FromLines $read.Lines -SinkPath $read.SinkPath
         $committed = Commit-ListenOffsetAfterWake -AgentStarted $wake.Started -ExitCode $wake.ExitCode -CurrentOffset $listenOffset -NextOffset $read.NextOffset

@@ -6,6 +6,15 @@
 
 Each concurrent nick needs its own `--home` (or `AGENTIC_IRC_HOME`). Sharing one home makes identity, inbox, outbox, and `peers.json` collide; SEAL and AGPK behaviour becomes undefined.
 
+Fleet on ionos:
+
+| Seat | Nick | `--home` |
+|---|---|---|
+| Jeeves | `Jeeves` | `~\.agentic-irc-jeeves` |
+| `bob-ionos` | `bob-ionos` | `~\.agentic-irc-bobiverse` |
+
+`BOB_DIGEST_HOME` stays `~\.agentic-irc-bobiverse` (`digest.json`, `chair-outbox.txt`). Jeeves must not use the bob-ionos home as `--home`. `scripts/Install-BobChair.ps1` sets both.
+
 ```powershell
 python scripts/irc_agent.py --host irc.ntsa.uk --port 6697 --nick cm-slab --channel '#cm-bob-oscar' --home $env:USERPROFILE\.agentic-irc-slab
 python scripts/irc_agent.py --host irc.libera.chat --port 6697 --nick cm-tweet --channel '#cm-bob-oscar' --home $env:USERPROFILE\.agentic-irc-tweet

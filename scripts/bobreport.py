@@ -386,7 +386,14 @@ def digest_path(home: Path) -> Path:
 
 
 def fleet_digest_home(home: Path) -> Path:
-    """Digest root when worker home is .../workers/<machine>/<pid>."""
+    """Digest root (digest.json, chair-outbox.txt).
+
+    BOB_DIGEST_HOME wins so Jeeves (--home ~/.agentic-irc-jeeves) drains
+    chair-outbox.txt on the bobiverse digest home. Do not point --home there.
+    """
+    env = (os.environ.get("BOB_DIGEST_HOME") or "").strip()
+    if env:
+        return Path(env)
     p = Path(home)
     if p.name.isdigit() and p.parent.parent.name == "workers":
         return p.parent.parent.parent

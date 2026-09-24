@@ -10,9 +10,9 @@
 
 ## Phase 2 — Chair seat
 
-- `bobiverse.json`: `chairNick`, `chairHome` (or reuse ionos briefer home).
-- Slim `irc_agent` flags or `bob-chair` entrypoint: JOIN `#bobiverse`, `!bobiverse` only.
-- `Install-BobChair.ps1` (agentic_build) one-shot + Watch does not start chair.
+- `bobiverse.json`: `chairNick` `Jeeves`. Chair `--home` is `~\.agentic-irc-jeeves`. Do not reuse the bob-ionos home.
+- `irc_agent.py --chair` nick `Jeeves`. `BOB_DIGEST_HOME` is `~\.agentic-irc-bobiverse` so `chair-outbox.txt` drains.
+- `scripts/Install-BobChair.ps1` sets both. BobIrcd NSSM auto-start lives in agentic_build. Watch does not start the chair.
 
 ## Phase 3 — Producer delta POST (with build #124)
 

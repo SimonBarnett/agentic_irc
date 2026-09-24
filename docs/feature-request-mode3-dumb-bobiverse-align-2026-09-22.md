@@ -72,7 +72,7 @@ Already correct (do not regress):
 
 - Point Mode 3 at Libera as the fleet path.
 - Default the thin onto `#bobiverse`.
-- Share Jeeves home / `--hello` with `bob-ionos` (already split; do not undo).
+- Share Jeeves `--home` (`~\.agentic-irc-jeeves`) / `--hello` with `bob-ionos` (`~\.agentic-irc-bobiverse`). Do not undo that split.
 - Enqueue Form Prep or `Start-BobBuild -Task git` onto a 2012/DUMB box.
 - Print PIN, PSK, `report.secret`, or connect.password.
 

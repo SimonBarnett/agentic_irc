@@ -1256,6 +1256,32 @@ class Client:
             backoff = min(60.0, backoff * 2)
 
 
+def clean_crashed_priors(nick: str, home: str, *, once: bool) -> None:
+    """Hard-kill hung same-nick / same-home priors before the first connect.
+
+    Once per process, not on reconnect, so a listen started afterwards stays.
+    --once and AGENTIC_IRC_SKIP_PRIOR_CLEAN=1 skip (tests). No command lines logged.
+    """
+    if once:
+        return
+    flag = (os.environ.get("AGENTIC_IRC_SKIP_PRIOR_CLEAN") or "").strip().lower()
+    if flag in {"1", "true", "yes"}:
+        return
+    import prior_irc
+
+    # Talk-seat / worker listens are started by the launcher after this process.
+    # Only a bob-* builder sweeps irc_listen here (no listen is spawned after it).
+    result = prior_irc.clean_priors(
+        nick,
+        home,
+        self_pid=os.getpid(),
+        include_listens=prior_irc.is_bob_builder_nick(nick),
+    )
+    if not result.scanned:
+        info("INFO prior-clean aborted connect")
+        raise SystemExit(1)
+
+
 def main() -> None:
     import signal
 
@@ -1300,6 +1326,7 @@ def main() -> None:
     if err:
         info(err)
         sys.exit(2)
+    clean_crashed_priors(args.nick, home, once=bool(args.once))
     c = Client(args)
 
     def _stop(*_a: object) -> None:

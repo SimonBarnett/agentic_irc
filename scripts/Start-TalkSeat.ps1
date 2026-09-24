@@ -12,6 +12,7 @@ param(
     [string]$Channel = ''
 )
 $ErrorActionPreference = 'Stop'
+. (Join-Path $Scripts 'IrcProcess.ps1')
 $SeatPid = $PID
 $mid = $MachineId.Trim().ToLower()
 if (-not $Channel) {
@@ -83,6 +84,19 @@ function Assert-HomeBind {
         Write-Error "talk_seat_pid.py --bind-home failed (exit $LASTEXITCODE): $out"
     }
 }
+function Start-OneSeatAgent {
+    param([string]$NickToStart)
+    $prior = Join-Path $Scripts 'prior_irc.py'
+    Invoke-PriorIrcClean -Python $py -ScriptPath $prior -Nick $NickToStart -Home $resolved
+    $null = Start-HiddenPython -Python $py -ArgumentList @(
+        '-u', $agentPath,
+        '--host', $IrcHost,
+        '--port', "$Port",
+        '--channel', $Channel,
+        '--home', $resolved,
+        '--nick', $NickToStart
+    ) -WorkingDirectory $Scripts
+}
 $agent, $listen = Get-HomePythonProcs -HomePath $resolved
 $needStart = $true
 $agentNick = ''
@@ -94,14 +108,7 @@ $hasListen = $null -ne $listen
 Assert-HomeBind -HomePath $resolved -ExpectedNick $expectedNick -LiveAgentNick $agentNick -LiveListen:$hasListen
 if ($needStart) {
     Stop-CursorHomeAgents -HomePath $resolved
-    Start-Process -FilePath $py -ArgumentList @(
-        '-u', $agentPath,
-        '--host', $IrcHost,
-        '--port', "$Port",
-        '--channel', $Channel,
-        '--home', $resolved,
-        '--nick', $expectedNick
-    ) -WindowStyle Hidden -PassThru | Out-Null
+    Start-OneSeatAgent -NickToStart $expectedNick
     Start-Sleep -Milliseconds 800
     $agent, $listen = Get-HomePythonProcs -HomePath $resolved
 }
@@ -117,14 +124,7 @@ if ($nick -and $nick -ne $expectedNick) {
     Assert-HomeBind -HomePath $resolved -ExpectedNick $expectedNick -LiveAgentNick $agentNick -LiveListen:$hasListen
     Write-Output "INFO talk-seat nick=$nick expected=$expectedNick - restarting agent"
     Stop-CursorHomeAgents -HomePath $resolved
-    Start-Process -FilePath $py -ArgumentList @(
-        '-u', $agentPath,
-        '--host', $IrcHost,
-        '--port', "$Port",
-        '--channel', $Channel,
-        '--home', $resolved,
-        '--nick', $expectedNick
-    ) -WindowStyle Hidden -PassThru | Out-Null
+    Start-OneSeatAgent -NickToStart $expectedNick
     Start-Sleep -Milliseconds 800
     $agent, $listen = Get-HomePythonProcs -HomePath $resolved
     $agentPid = if ($agent) { $agent.ProcessId } else { 0 }
@@ -134,6 +134,11 @@ if (-not $nick) {
     $nick = $expectedNick
 }
 $env:AGENTIC_IRC_DEBUG = '1'
+if (-not $needStart -and $agent) {
+    # Keep this seat's agent. Drop same-nick twins and hung listens on this home.
+    Invoke-PriorIrcClean -Python $py -ScriptPath (Join-Path $Scripts 'prior_irc.py') `
+        -Nick $expectedNick -Home $resolved -KeepPid ([int]$agent.ProcessId)
+}
 & (Join-Path $Scripts 'Start-IrcTsr.ps1') -IrcHome $resolved -Scripts $Scripts -SeatPid $SeatPid -Nick $nick | Out-Null
 $listenPid = ''
 $agent, $listen = Get-HomePythonProcs -HomePath $resolved

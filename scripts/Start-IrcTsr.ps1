@@ -2,7 +2,8 @@
 # Seat id: nick suffix and digest pid = seat= (coordinator PowerShell $PID), not listen=/agent=.
 # Prefer scripts/Start-TalkSeat.ps1 to start agent + listener with correct nick.
 # Do not use $Home (read-only). Does not start a second listener or irc_agent.
-# Listen is always Start-Process detached (survives Cursor agent shell exit).
+# Listen is one hidden python (CreateNoWindow). The child opens the log files
+# itself so this launcher can exit. Not Start-Process -WindowStyle Hidden.
 param(
     [string]$IrcHome = $(Join-Path $env:USERPROFILE '.agentic-irc-cursor'),
     [string]$Scripts = $PSScriptRoot,
@@ -10,6 +11,7 @@ param(
     [string]$Nick = ''
 )
 $ErrorActionPreference = 'Stop'
+. (Join-Path $Scripts 'IrcProcess.ps1')
 $resolved = [Environment]::ExpandEnvironmentVariables($IrcHome)
 if (-not (Test-Path -LiteralPath $resolved)) {
     New-Item -ItemType Directory -Force -Path $resolved | Out-Null
@@ -30,10 +32,10 @@ if (-not $listen) {
     $listenPath = Join-Path $Scripts 'irc_listen.py'
     $stdoutLog = Join-Path $resolved 'listen.stdout.log'
     $stderrLog = Join-Path $resolved 'listen.stderr.log'
-    $proc = Start-Process -FilePath $py -ArgumentList @('-u', $listenPath, '--home', $resolved) `
-        -WindowStyle Hidden -PassThru `
-        -RedirectStandardOutput $stdoutLog -RedirectStandardError $stderrLog
-    $listenPid = $proc.Id
+    $listenPid = Start-HiddenPython -Python $py -ArgumentList @(
+        '-u', $listenPath, '--home', $resolved,
+        '--stdout-log', $stdoutLog, '--stderr-log', $stderrLog
+    ) -WorkingDirectory $Scripts
 } else {
     $listenPid = $listen.ProcessId
 }

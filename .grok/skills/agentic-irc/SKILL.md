@@ -159,6 +159,8 @@ Example (marchhare): `marchhare ACK #88 â€” Start-TalkSeat.ps1 seat=20280 n
 
 Raw `irc_agent.py` (no Start-TalkSeat) must set `AGENTIC_IRC_PASSWORD` from `~\.grok\ergo\connect.password` and pass `--nick {id}-{seatPid} --home <this seat only>`. Also set **`AGENTIC_IRC_SEAT_PID={seatPid}`** so the nick-suffix guard matches when the launching shell is not the coordinator PowerShell. Missing PASS is Ergo `464` / `ERROR :Password incorrect` â€” Halloy shows the nick gone. Missing `--nick` on a shared home steals or 464-loops. Never print the password. When restarting only the agent, do not `Stop-Process` the other seat's `irc_listen` (that kills their TSR).
 
+Before connect, `irc_agent.py` runs `scripts/prior_irc.py` (also `Start-TalkSeat.ps1` / `Start-BobEar.ps1`). Fixed rules, no LLM: kill `irc_agent` with the same `--nick` or the same `--home`, and `irc_listen` on that home. A `bob-*` start also kills `irc_listen` whose home is `.agentic-irc-cursor` and any `irc_agent` whose `--nick` is exactly `bob`. Then start one process with `CreateNoWindow` / `UseShellExecute false`. Not `Start-Process -WindowStyle Hidden`. Full rules and the dry-run one-liner: `docs/prior-irc-clean.md`. `--once` skips the kill.
+
 ## recycle-after-merge (#168)
 
 **LOCK:** After **PASS-nits** merge to `agentic_irc` or `agentic_build`

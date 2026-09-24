@@ -9,6 +9,8 @@ description: >
 
 # Git webhooks announced by Jeeves
 
+Foundation: harvest-agent-skills (honesty box) -> report back to https://github.com/SimonBarnett/agentic_irc
+
 Issue #147. Route is live: `POST /bob/v1/git` on the same ionos listener
 as the digest. Jeeves (`irc_agent.py --chair`, nick `Jeeves`) is the only
 nick that says `GIT`.

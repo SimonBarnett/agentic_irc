@@ -10,6 +10,8 @@ description: >
 
 # Invite airc (elder machine) — double-click
 
+Foundation: harvest-agent-skills (honesty box) -> report back to https://github.com/SimonBarnett/agentic_irc
+
 ## Operator ritual (LOCKED)
 
 1. Agent on the modern box starts the chair and **publishes** the invite

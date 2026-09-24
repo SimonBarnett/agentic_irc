@@ -72,6 +72,8 @@ def main() -> int:
     p.add_argument("--nick", default="")
     p.add_argument("--kind", default="cursor")
     p.add_argument("--working-on", default="")
+    p.add_argument("--agent", default="", help="worker agent name when known")
+    p.add_argument("--model", default="", help="model name when known")
     p.add_argument("--create", action="store_true")
     p.add_argument("--idle", action="store_true")
     args = p.parse_args()
@@ -112,6 +114,10 @@ def main() -> int:
     elif wo:
         work = base_payload(args.machine, args.pid, nick, args.kind, "running")
         work["working_on"] = wo
+        if (args.agent or "").strip():
+            work["agent"] = args.agent.strip()
+        if (args.model or "").strip():
+            work["model"] = args.model.strip()
         code = post(work)
         print(
             "INFO report POST %s working_on machine=%s pid=%s" % (code, args.machine, args.pid),

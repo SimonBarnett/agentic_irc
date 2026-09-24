@@ -40,6 +40,9 @@ _PROTOCOL_HEADS = (
     "!bobiverse",
     "!recycle",
     "!report",
+    "!bored",
+    "!accept",
+    "!task",
 )
 
 _ID_ALIASES = {"dev1": "ce-priority-dev1", "ce-priority-dev1": "ce-priority-dev1"}

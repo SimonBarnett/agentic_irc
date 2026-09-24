@@ -22,6 +22,7 @@ import bob_recycle  # noqa: E402
 import bobreport  # noqa: E402
 import bobstat  # noqa: E402
 import bobtalk  # noqa: E402
+import gitclaim  # noqa: E402
 import grok_talk  # noqa: E402
 import filexfer  # noqa: E402
 import moot  # noqa: E402
@@ -668,12 +669,15 @@ class Client:
         return True
 
     def request_shutdown(self, reason: str = ":bye", *, reconnect: bool = False) -> None:
-        """Send QUIT when joined; stop reader/outbox. Default: do not reconnect."""
+        """PART every channel, then QUIT. Default: do not reconnect."""
         if not reconnect:
             self._no_reconnect = True
         try:
             if self.sock is not None and self.joined.is_set():
                 msg = reason if reason.startswith(":") else ":" + reason
+                why = msg.lstrip(":")
+                for ch in self.channels:
+                    self.send("PART " + ch + " :" + why)
                 self.send("QUIT " + msg)
         except OSError:
             pass
@@ -891,19 +895,90 @@ class Client:
             return
         info(f"INFO dumb job id={dl.msg_id} from={src}")
 
-    def _maybe_channel_pong(self, src: str, target: str, body: str) -> bool:
-        """Bare joined-channel 'ping' -> 'pong' on that channel. No Grok wake.
+    def _may_channel_auto_pong(self) -> bool:
+        """bob-* ears and named sand agents (not talk seats / w-*)."""
+        nick = (self.original_nick or "").strip()
+        if not nick:
+            return False
+        if bobtalk.is_fleet_bob_nick(nick):
+            return True
+        low = nick.lower()
+        if low.startswith("w-"):
+            return False
+        if talk_seat_pid.parse_talk_seat_nick(nick) is not None:
+            return False
+        return True
 
-        bob-* ears only. Exact body after trim, case-insensitive. Returns
-        before mention-ack / grok_talk enqueue.
+    def _channel_ping_pattern(self, body: str) -> str | None:
+        """Return None (not a ping), '' (bare ping), or the selector after ping."""
+        raw = (body or "").strip()
+        if not raw:
+            return None
+        low = raw.lower()
+        if low == "ping":
+            return ""
+        if low.startswith("ping:") or low.startswith("ping "):
+            rest = raw.split(":", 1)[1].strip() if low.startswith("ping:") else raw.split(None, 1)[1].strip()
+            token = (rest.split(None, 1)[0] if rest else "").strip()
+            return token if token else None
+        return None
+
+    @staticmethod
+    def _nick_matches_ping_selector(nick: str, selector: str) -> bool:
+        """Exact, prefix, substring (unique-ish), or shell-style * ? wildcards."""
+        n = (nick or "").strip().lower()
+        sel = (selector or "").strip().lower().rstrip(",:;!?")
+        if not n or not sel:
+            return False
+        if sel == n:
+            return True
+        if any(ch in sel for ch in "*?"):
+            # shell-style: * -> .*  ? -> .
+            import re
+            parts = []
+            for ch in sel:
+                if ch == "*":
+                    parts.append(".*")
+                elif ch == "?":
+                    parts.append(".")
+                else:
+                    parts.append(re.escape(ch))
+            try:
+                return re.fullmatch("".join(parts), n) is not None
+            except re.error:
+                return False
+        # prefix always wins (ping bob -> bob-ionos, bob-dev1, ...)
+        if n.startswith(sel):
+            return True
+        # substring only when selector is reasonably specific (>=3 chars)
+        if len(sel) >= 3 and sel in n:
+            return True
+        return False
+
+    def _channel_ping_targets_me(self, body: str) -> bool:
+        """Bare ping, or ping selector that matches this seat nick."""
+        sel = self._channel_ping_pattern(body)
+        if sel is None:
+            return False
+        if sel == "":
+            return True
+        return any(self._nick_matches_ping_selector(n, sel) for n in self._mine_nicks())
+
+    def _maybe_channel_pong(self, src: str, target: str, body: str) -> bool:
+        """Joined-channel ping -> pong. No Grok wake.
+
+        bob-* ears and named agents (e.g. Haitch). Matches bare ping,
+        ping <nick>, ping <partial>, and ping bob-* wildcards when the
+        pattern matches this seat. Talk seats stay silent. Returns before
+        mention-ack / grok_talk enqueue.
         """
-        if not bobtalk.is_fleet_bob_nick(self.original_nick):
+        if not self._may_channel_auto_pong():
             return False
         if not self._joined_channel(target):
             return False
         if (src or "").strip().lower() in self._mine_nicks():
             return False
-        if (body or "").strip().lower() != "ping":
+        if not self._channel_ping_targets_me(body):
             return False
         dest = bobreport.normalize_channel(target)
         if not dest or "|" in dest:
@@ -912,6 +987,64 @@ class Client:
         time.sleep(FLOOD_S)
         info("INFO auto-pong")
         return True
+
+    def _git_say(self, target: str, text: str) -> None:
+        dest = bobreport.normalize_channel(target)
+        if not dest or "|" in dest:
+            return
+        self.send("PRIVMSG " + dest + " :" + text)
+        time.sleep(FLOOD_S)
+
+    def _maybe_git_claim(self, src: str, target: str, body: str) -> bool:
+        """Chair only. !BORED claims the webhook queue head. !ACCEPT does not."""
+        if not getattr(self.args, "chair", False):
+            return False
+        if not self._joined_channel(target):
+            return False
+        now = time.time()
+        if gitclaim.is_bored_command(body):
+            self._git_bored(src, target, now)
+            return True
+        if gitclaim.is_accept_command(body):
+            self._git_accept(src, target, body)
+            return True
+        shop = gitclaim.worker_shop_channel(src)
+        if shop and bobreport.normalize_channel(target).lower() == shop:
+            gitclaim.note_worker_activity(self.home, src, now)
+        return False
+
+    def _git_bored(self, src: str, target: str, now: float) -> None:
+        gate = gitclaim.bored_gate(self.home, src, target, now)
+        if gate == "ignore":
+            info(f"INFO git-claim bored ignore nick={src}")
+            return
+        if gate == "wait":
+            self._git_say(target, gitclaim.NAK_BORED_WAIT)
+            info(f"INFO git-claim bored nak wait nick={src}")
+            return
+        if gate == "busy":
+            gitclaim.note_worker_activity(self.home, src, now)
+            self._git_say(target, gitclaim.NAK_BORED_BUSY)
+            info(f"INFO git-claim bored nak busy nick={src}")
+            return
+        status, job = gitclaim.claim_top_http(src, bobreport.normalize_channel(target))
+        if status == "ok" and isinstance(job, dict):
+            gitclaim.note_worker_activity(self.home, src, now)
+            line = gitclaim.format_claimed(job)
+            self._git_say(target, line)
+            info(f"INFO git-claim bored claimed {line} nick={src}")
+            return
+        if status == "empty":
+            gitclaim.note_worker_activity(self.home, src, now)
+            self._git_say(target, gitclaim.NO_JOBS)
+            info(f"INFO git-claim bored empty nick={src}")
+            return
+        info(f"INFO git-claim bored post failed nick={src}")
+
+    def _git_accept(self, src: str, target: str, body: str) -> None:
+        """Transition no-op. !BORED already claimed. Do not pop the queue."""
+        del target, body
+        info(f"INFO git-claim accept noop nick={src}")
 
     def handle_privmsg(self, prefix: str, target: str, body: str) -> None:
         src = prefix.split("!", 1)[0].lstrip(":")
@@ -923,6 +1056,8 @@ class Client:
         if not to_channel and not to_me:
             return
         if to_channel and self._maybe_channel_pong(src, target, body):
+            return
+        if to_channel and self._maybe_git_claim(src, target, body):
             return
         if to_me:
             self._mark_pm_open(src)
@@ -1256,6 +1391,32 @@ class Client:
             backoff = min(60.0, backoff * 2)
 
 
+def clean_crashed_priors(nick: str, home: str, *, once: bool) -> None:
+    """Hard-kill hung same-nick / same-home priors before the first connect.
+
+    Once per process, not on reconnect, so a listen started afterwards stays.
+    --once and AGENTIC_IRC_SKIP_PRIOR_CLEAN=1 skip (tests). No command lines logged.
+    """
+    if once:
+        return
+    flag = (os.environ.get("AGENTIC_IRC_SKIP_PRIOR_CLEAN") or "").strip().lower()
+    if flag in {"1", "true", "yes"}:
+        return
+    import prior_irc
+
+    # Talk-seat / worker listens are started by the launcher after this process.
+    # Only a bob-* builder sweeps irc_listen here (no listen is spawned after it).
+    result = prior_irc.clean_priors(
+        nick,
+        home,
+        self_pid=os.getpid(),
+        include_listens=prior_irc.is_bob_builder_nick(nick),
+    )
+    if not result.scanned:
+        info("INFO prior-clean aborted connect")
+        raise SystemExit(1)
+
+
 def main() -> None:
     import signal
 
@@ -1279,27 +1440,30 @@ def main() -> None:
     p.add_argument(
         "--auto-nick",
         action="store_true",
-        help="talk seat: set --nick suffix to coordinator seat PID (env or coordinator.pid)",
+        help="talk seat: set --nick suffix to irc_agent PID (env self/agent= or coordinator.pid)",
     )
     args = p.parse_args()
     home = (args.home or os.environ.get("AGENTIC_IRC_HOME") or "").strip()
-    seat_pid = talk_seat_pid.resolve_seat_pid(home or None)
+    seat_pid = talk_seat_pid.resolve_seat_pid(home or None, self_pid=os.getpid())
     if args.auto_nick:
         if seat_pid is None:
-            info("INFO --auto-nick requires AGENTIC_IRC_SEAT_PID or coordinator.pid seat=")
+            info(
+                "INFO --auto-nick requires AGENTIC_IRC_SEAT_PID (or self) or coordinator.pid agent="
+            )
             sys.exit(2)
         args.nick = talk_seat_pid.auto_talk_seat_nick(args.nick, seat_pid)
     err = None
     if talk_seat_pid.parse_talk_seat_nick(args.nick):
         if seat_pid is None:
             err = (
-                "INFO talk-seat nick requires AGENTIC_IRC_SEAT_PID or coordinator.pid seat="
+                "INFO talk-seat nick requires AGENTIC_IRC_SEAT_PID (or self) or coordinator.pid agent="
             )
         else:
             err = talk_seat_pid.check_nick_seat_pid(args.nick, seat_pid)
     if err:
         info(err)
         sys.exit(2)
+    clean_crashed_priors(args.nick, home, once=bool(args.once))
     c = Client(args)
 
     def _stop(*_a: object) -> None:

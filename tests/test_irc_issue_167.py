@@ -71,6 +71,24 @@ def test_worker_auto_parts_foreign_channel(tmp_path, monkeypatch):
     assert not any(s.startswith("PART") for s in s2)
 
 
+
+
+def test_mrb_worker_auto_parts_agentic_irc_and_keeps_shop(tmp_path, monkeypatch):
+    """Hostile: extras like #agentic_irc are PART'd; own shop is not."""
+    monkeypatch.setenv("AGENTIC_IRC_HOME", str(tmp_path))
+    c = irc_agent.Client(_args(tmp_path, "w-mh-41124", channel="#bobiverse,#marchhare,#agentic_irc"))
+    assert c.channels == ["#marchhare"]
+    sent: list[str] = []
+    c.send = lambda line: sent.append(line)  # type: ignore[method-assign]
+    c.handle_join("w-mh-41124", "#agentic_irc")
+    assert any(s.startswith("PART #agentic_irc :workers join") for s in sent)
+    sent.clear()
+    c.handle_join("w-mh-41124", "#marchhare")
+    assert sent == []
+    c.handle_join("w-mh-41124", "#flamingo")
+    assert any(s.startswith("PART #flamingo :") for s in sent)
+
+
 def test_start_talk_seat_refuses_steal_binding():
     src = (Path(__file__).resolve().parents[1] / "scripts" / "Start-TalkSeat.ps1").read_text(
         encoding="utf-8"

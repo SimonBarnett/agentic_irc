@@ -60,6 +60,13 @@ def test_channels_for_nick():
     assert bobreport.worker_channel_allowed("bob-marchhare", "#bobiverse")
     assert bobreport.worker_channel_allowed("simon", "#bobiverse")
     assert bobreport.worker_channel_allowed("Jeeves", "#bobiverse")
+    # MRB hostile: case / trailing underscore / wrong shop / comma list extras dropped
+    assert bobreport.channels_for_nick("MarchHare-34992", "#BOBIVERSE,#MarchHare") == ["#marchhare"]
+    assert bobreport.worker_channel_allowed("marchhare-34992_", "#marchhare")
+    assert not bobreport.worker_channel_allowed("marchhare-34992_", "#bobiverse")
+    assert bobreport.channels_for_nick("w-fl-1", "#bobiverse,#flamingo,#agentic_irc") == ["#flamingo"]
+    assert bobreport.channels_for_nick("ionos-99", "#agentic_irc") == ["#ionos"]
+    assert bobreport.worker_channel_allowed("bob-flamingo", "#flamingo")
     assert bobreport.chair_channels() == [
         "#bobiverse",
         "#flamingo",

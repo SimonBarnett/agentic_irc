@@ -350,7 +350,7 @@ def parse_channel_list(raw: str) -> list[str]:
 
 
 def channels_for_nick(nick: str, requested: str) -> list[str]:
-    """bob-* → fleet + shop; talk seats → fleet + shop (+ extras); w-* → shop only.
+    """bob-* → fleet + shop; talk seats / w-* → own #{machine} only.
 
     First JOIN creates #{machine} on Ergo. CAST IRON (Simon 2026-09-25): worker
     processes - talk seats ({machine}-{pid}) and w-* - JOIN their own #{machine}

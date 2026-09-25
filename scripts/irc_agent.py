@@ -30,6 +30,7 @@ import moot  # noqa: E402
 import protect  # noqa: E402
 import seal  # noqa: E402
 import shop_ops  # noqa: E402
+import shop_listen  # noqa: E402
 import agent_control  # noqa: E402
 import talk_seat_ghost  # noqa: E402
 import talk_seat_pid  # noqa: E402
@@ -537,6 +538,16 @@ class Client:
         if not self._is_digest_operator():
             return
         briefer = bobtalk.briefer_nick(self._fleet_moot_state()) or self.live_nick
+        # FR #211: worker QUIT mid-task → idle webhook + job back to unaccepted
+        try:
+            q = shop_listen.handle_shop_worker_quit(self.home, nick=who, briefer=briefer)
+            if q.get("handled"):
+                info(
+                    f"INFO shop-listen quit nick={who} returned={q.get('returned')} "
+                    f"webhook={q.get('webhook')}"
+                )
+        except Exception as exc:
+            info(f"INFO shop-listen quit error {type(exc).__name__}")
         out = bobreport.apply_quit(self.home, who, briefer)
         klass = "shop-down" if out.shop_closed else "drop"
         self._emit_presence(out, klass, who)
@@ -1284,6 +1295,38 @@ class Client:
         del target, body
         info(f"INFO git-claim accept noop nick={src}")
 
+    def _maybe_shop_listen(self, src: str, target: str, body: str) -> bool:
+        """FR #211: chair records ACK/DONE in #{machine}; fires activity webhook. No channel reply."""
+        if not getattr(self.args, "chair", False):
+            return False
+        if not shop_listen.parse_shop_job_line(body):
+            return False
+        if not shop_listen.is_shop_worker_nick(src, target):
+            return False
+        briefer = bobtalk.briefer_nick(self._fleet_moot_state()) or self.live_nick or "Jeeves"
+        try:
+            result = shop_listen.handle_shop_worker_line(
+                self.home,
+                nick=src,
+                channel=target,
+                body=body,
+                briefer=briefer,
+            )
+        except Exception as exc:
+            info(f"INFO shop-listen error {type(exc).__name__}")
+            return True
+        if not result.get("handled"):
+            return False
+        verb = result.get("verb") or ""
+        status = result.get("status") or ""
+        act = result.get("activity")
+        info(
+            f"INFO shop-listen {verb} status={status} nick={src} "
+            f"activity={act!r} webhook={result.get('webhook')}"
+        )
+        # Never PRIVMSG the shop channel (FR #211).
+        return True
+
     def handle_privmsg(self, prefix: str, target: str, body: str) -> None:
         src = prefix.split("!", 1)[0].lstrip(":")
         tgt_l = target.lower()
@@ -1296,6 +1339,8 @@ class Client:
         if to_channel and self._maybe_channel_pong(src, target, body):
             return
         if self._maybe_git_list(src, target, body, to_channel=to_channel):
+            return
+        if to_channel and self._maybe_shop_listen(src, target, body):
             return
         if to_channel and self._maybe_git_claim(src, target, body):
             return

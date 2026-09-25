@@ -1139,6 +1139,30 @@ class Client:
         self.send("PRIVMSG " + dest + " :" + text)
         time.sleep(FLOOD_S)
 
+    def _maybe_git_list(self, src: str, target: str, body: str, *, to_channel: bool) -> bool:
+        """Chair only (FR #208): !list → PM queue to requester; never channel noise."""
+        if not getattr(self.args, "chair", False):
+            return False
+        if not gitclaim.is_list_command(body):
+            return False
+        # Channel: only fleet channel (or any joined) — FR says #bobiverse and PM
+        if to_channel and not self._joined_channel(target):
+            return False
+        now = time.time()
+        if not gitclaim.list_rate_ok(src, now):
+            self.whisper(src, "NAK !list rate")
+            info(f"INFO git-list rate nick={src}")
+            return True
+        task_f, repo_f = gitclaim.parse_list_command(body)
+        lines = gitclaim.format_unaccepted_list(
+            self.home, task_filter=task_f, repo_filter=repo_f
+        )
+        for ln in lines:
+            self.whisper(src, ln)
+            time.sleep(FLOOD_S)
+        info(f"INFO git-list pm nick={src} lines={len(lines)}")
+        return True
+
     def _maybe_git_claim(self, src: str, target: str, body: str) -> bool:
         """Shop claim path (FR #207): chair or bob-* ear in #{machine}.
 
@@ -1226,6 +1250,8 @@ class Client:
         if not to_channel and not to_me:
             return
         if to_channel and self._maybe_channel_pong(src, target, body):
+            return
+        if self._maybe_git_list(src, target, body, to_channel=to_channel):
             return
         if to_channel and self._maybe_git_claim(src, target, body):
             return

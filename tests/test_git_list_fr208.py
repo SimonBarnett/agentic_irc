@@ -1,18 +1,15 @@
-"""FR #208: Jeeves !list PMs unaccepted queue; never channel."""
+"""FR #208 (updated): !list = one line per job, no flood (≤10 jobs, 30s rate)."""
 from __future__ import annotations
 
 import argparse
 import sys
-import threading
+import time
 from pathlib import Path
 from unittest import mock
-
-import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 import gitclaim
 import irc_agent
-import bobreport
 
 
 def _args(home: Path, nick: str = "Jeeves", chair: bool = True) -> argparse.Namespace:
@@ -40,16 +37,18 @@ def _enqueue(home: Path, n: int, task: str = "FR", repo: str = "SimonBarnett/age
     )
 
 
-def test_format_empty_and_order_and_truncation(tmp_path):
+def test_format_empty_and_one_line_per_job(tmp_path):
     assert gitclaim.format_unaccepted_list(tmp_path) == ["queue empty"]
     _enqueue(tmp_path, 2)
     _enqueue(tmp_path, 1)
     lines = gitclaim.format_unaccepted_list(tmp_path)
-    assert lines[0] == "unaccepted 2"
-    # claim order by seq (enqueue order)
-    assert "FR SimonBarnett/agentic_irc#2" in lines[1]
-    assert "FR SimonBarnett/agentic_irc#1" in lines[2]
-    assert "https://github.com/" in lines[1]
+    # summary + 2 job lines
+    assert lines[0] == "2 unaccepted (showing 2)"
+    assert lines[1].startswith("#1 FR SimonBarnett/agentic_irc#2")
+    assert lines[2].startswith("#2 FR SimonBarnett/agentic_irc#1")
+    assert "title for job" in lines[1]
+    # no URL spam on the line (title only)
+    assert "https://" not in lines[1]
     long_title = "x" * 500
     gitclaim.enqueue_unaccepted(
         tmp_path,
@@ -62,18 +61,26 @@ def test_format_empty_and_order_and_truncation(tmp_path):
             f"GIT pull_request SimonBarnett/x opened #9 {long_title} by s",
         ),
     )
-    one = gitclaim.format_list_line(1, 1, gitclaim.load_unaccepted(tmp_path)[-1], line_max=80)
-    assert len(one) <= 80
-    assert one.endswith("…") or len(one) <= 80
+    one = gitclaim.format_list_line(1, gitclaim.load_unaccepted(tmp_path)[-1], line_max=80)
+    assert len(one.encode("utf-8")) <= 80
+    assert one.startswith("#1 ")
 
 
-def test_list_cap_and_more_footer(tmp_path):
-    for i in range(1, 51):
+def test_cap_10_and_more_hint_for_30_jobs(tmp_path):
+    for i in range(1, 31):
         _enqueue(tmp_path, i)
-    lines = gitclaim.format_unaccepted_list(tmp_path, max_lines=30)
-    assert lines[0].startswith("unaccepted 30/50")
-    assert len([x for x in lines if x[:1].isdigit()]) == 30
-    assert lines[-1] == "... +20 more (see webhook report)"
+    lines = gitclaim.format_unaccepted_list(tmp_path)
+    # summary + 10 jobs + more <= 12
+    assert len(lines) <= 12
+    assert lines[0] == "30 unaccepted (showing 10)"
+    job_lines = [x for x in lines if x.startswith("#")]
+    assert len(job_lines) == 10
+    assert lines[-1] == "+20 more; !list all"
+    for jl in job_lines:
+        assert len(jl.encode("utf-8")) <= gitclaim.LIST_LINE_MAX
+    # !list all shows all
+    all_lines = gitclaim.format_unaccepted_list(tmp_path, list_all=True)
+    assert len([x for x in all_lines if x.startswith("#")]) == 30
 
 
 def test_list_filters_task_and_repo(tmp_path):
@@ -81,13 +88,17 @@ def test_list_filters_task_and_repo(tmp_path):
     gitclaim.enqueue_unaccepted(
         tmp_path,
         gitclaim.GitClaim(
-            "SimonBarnett/b", "MRB", "#2", "pull_request", "opened", "GIT pull_request SimonBarnett/b opened #2 t by s"
+            "SimonBarnett/b",
+            "MRB",
+            "#2",
+            "pull_request",
+            "opened",
+            "GIT pull_request SimonBarnett/b opened #2 t by s",
         ),
     )
     fr_only = gitclaim.format_unaccepted_list(tmp_path, task_filter="FR")
-    assert all(" FR " in x or x.startswith("unaccepted") for x in fr_only)
     assert any("#1" in x for x in fr_only)
-    assert not any("#2" in x for x in fr_only)
+    assert not any("MRB" in x and "#2" in x for x in fr_only if x.startswith("#"))
     repo_b = gitclaim.format_unaccepted_list(tmp_path, repo_filter="SimonBarnett/b")
     assert any("#2" in x for x in repo_b)
 
@@ -103,11 +114,10 @@ def test_channel_list_pms_only_not_channel(tmp_path, monkeypatch):
     c.sock = object()
     c.joined.set()
     c.handle_privmsg("simon!u@h", "#bobiverse", "!list")
-    assert sent, "expected PM lines"
+    assert sent
     assert all(x.startswith("PRIVMSG simon :") for x in sent)
     assert not any(x.startswith("PRIVMSG #bobiverse :") for x in sent)
-    assert any("unaccepted" in x for x in sent)
-    assert any("FR SimonBarnett/agentic_irc#5" in x for x in sent)
+    assert any("#1 FR SimonBarnett/agentic_irc#5" in x for x in sent)
 
 
 def test_pm_list_works_same(tmp_path, monkeypatch):
@@ -124,7 +134,7 @@ def test_pm_list_works_same(tmp_path, monkeypatch):
     assert any("queue empty" in x for x in sent)
 
 
-def test_rate_limit_second_list(tmp_path, monkeypatch):
+def test_rate_limit_30s_one_notice(tmp_path, monkeypatch):
     gitclaim.reset_list_rate()
     monkeypatch.setenv("AGENTIC_IRC_HOME", str(tmp_path))
     monkeypatch.setattr(irc_agent.time, "sleep", lambda *_a, **_k: None)
@@ -136,15 +146,20 @@ def test_rate_limit_second_list(tmp_path, monkeypatch):
     c.sock = object()
     c.joined.set()
     c.handle_privmsg("bob!u@h", "#bobiverse", "!list")
-    n1 = len(sent)
+    full = list(sent)
     sent.clear()
-    c.handle_privmsg("bob!u@h", "#bobiverse", "!list")
-    assert sent == ["PRIVMSG bob :NAK !list rate"]
+    # five rapid repeats → one short notice each (not full flood)
+    for _ in range(5):
+        c.handle_privmsg("bob!u@h", "#bobiverse", "!list")
+    assert len(sent) == 5
+    assert all("list sent" in x and "ago" in x for x in sent)
+    assert all(x.startswith("PRIVMSG bob :") for x in sent)
+    # after 30s window, full list again
     clock["t"] += gitclaim.LIST_RATE_S + 0.1
     sent.clear()
     c.handle_privmsg("bob!u@h", "#bobiverse", "!list")
     assert any("queue empty" in x for x in sent)
-    assert n1 >= 1
+    assert len(full) >= 1
 
 
 def test_non_chair_ignores_list(tmp_path, monkeypatch):
@@ -157,3 +172,9 @@ def test_non_chair_ignores_list(tmp_path, monkeypatch):
     bob.joined.set()
     bob.handle_privmsg("simon!u@h", "#bobiverse", "!list")
     assert sent == []
+
+
+def test_constants_match_updated_spec():
+    assert gitclaim.LIST_MAX_LINES == 10
+    assert gitclaim.LIST_RATE_S == 30.0
+    assert gitclaim.LIST_LINE_MAX <= 400

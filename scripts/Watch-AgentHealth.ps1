@@ -117,7 +117,7 @@ function Get-ListenPollSink {
 
 function Test-IrcTsrHealth {
     param([string]$AgentHome)
-    $c = Read-IrcCoordinator -AgentHome $Home
+    $c = Read-IrcCoordinator -AgentHome $AgentHome
     $agentOk = Test-PidAlive -ProcId $c.agentPid
     $listenOk = Test-PidAlive -ProcId $c.listenPid
     $healthJson = Invoke-AgentHealthPy -PyArgs @(
@@ -152,12 +152,28 @@ function Resolve-RepairScript {
 
 function Ensure-IrcTsr {
     param([string]$AgentHome)
-    $irc = Test-IrcTsrHealth -AgentHome $Home
+    $irc = Test-IrcTsrHealth -AgentHome $AgentHome
     if ($irc.Healthy) {
         Write-AgentLog ("IRC TSR ok nick={0} agent={1} listen={2} log={3}" -f $irc.Coordinator.nick, $irc.Coordinator.agentPid, $irc.Coordinator.listenPid, $irc.ListenLog)
+        # FR #213: clear fast-exit counter when healthy
+        try {
+            Invoke-AgentHealthPy -PyArgs @('monitor-note-healthy', '--home', $AgentHome) | Out-Null
+        } catch { }
         return $irc
     }
     Write-AgentLog ("IRC TSR unhealthy agentOk={0} listenOk={1} logOk={2} stale={3} - repairing" -f $irc.AgentOk, $irc.ListenOk, $irc.LogOk, $irc.Stale)
+    # FR #213: exponential restart backoff so crash loops cannot trip Ergo IP throttle
+    try {
+        $waitOut = Invoke-AgentHealthPy -PyArgs @('monitor-wait', '--home', $AgentHome)
+        if ($waitOut -and [double]$waitOut -gt 0) {
+            Write-AgentLog ("IRC repair backoff slept={0}s" -f $waitOut)
+        }
+    } catch {
+        Write-AgentLog 'IRC repair backoff skipped'
+    }
+    try {
+        Invoke-AgentHealthPy -PyArgs @('live-tree-check', '--home', $AgentHome, '--role', 'monitor') | Out-Null
+    } catch { }
     $nick = $irc.Coordinator.nick
     if (-not $nick) {
         $mach = $env:COMPUTERNAME
@@ -168,21 +184,34 @@ function Ensure-IrcTsr {
     $tsrScript = Join-Path $Scripts 'Start-IrcTsr.ps1'
     if ($irc.AgentOk -and -not $irc.ListenOk -and (Test-Path -LiteralPath $tsrScript)) {
         Write-AgentLog 'IRC repair: Start-IrcTsr (listen only)'
+        try { Invoke-AgentHealthPy -PyArgs @('monitor-note-start', '--home', $AgentHome) | Out-Null } catch { }
         & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $tsrScript -IrcHome $AgentHome -Nick $nick -Scripts $Scripts | Out-Null
-        return (Test-IrcTsrHealth -AgentHome $Home)
+        $after = Test-IrcTsrHealth -AgentHome $AgentHome
+        if (-not $after.Healthy) {
+            try { Invoke-AgentHealthPy -PyArgs @('monitor-note-exit', '--home', $AgentHome) | Out-Null } catch { }
+        }
+        return $after
     }
     $roll = Resolve-RepairScript
     if (-not $roll) {
         Write-AgentLog 'IRC repair skipped: no Stop-HungAgent.ps1 and listen/agent still bad'
-        return (Test-IrcTsrHealth -AgentHome $Home)
+        try { Invoke-AgentHealthPy -PyArgs @('monitor-note-exit', '--home', $AgentHome) | Out-Null } catch { }
+        return (Test-IrcTsrHealth -AgentHome $AgentHome)
     }
+    try { Invoke-AgentHealthPy -PyArgs @('monitor-note-start', '--home', $AgentHome) | Out-Null } catch { }
     & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $roll -IrcHome $AgentHome -Nick $nick -Roll
-    return (Test-IrcTsrHealth -AgentHome $Home)
+    $after = Test-IrcTsrHealth -AgentHome $AgentHome
+    if (-not $after.Healthy) {
+        try { Invoke-AgentHealthPy -PyArgs @('monitor-note-exit', '--home', $AgentHome) | Out-Null } catch { }
+    } else {
+        try { Invoke-AgentHealthPy -PyArgs @('monitor-note-healthy', '--home', $AgentHome) | Out-Null } catch { }
+    }
+    return $after
 }
 
 function Read-NewIrcFromLines {
     param([string]$AgentHome, [long]$Offset)
-    $sink = Get-ListenPollSink -AgentHome $Home
+    $sink = Get-ListenPollSink -AgentHome $AgentHome
     $json = Invoke-AgentHealthPy -PyArgs @(
         'read-from', '--home', $AgentHome, '--offset', "$Offset", '--sink-path', $sink.Path, '--sink-kind', $sink.Kind
     )

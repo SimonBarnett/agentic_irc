@@ -42,8 +42,28 @@ class ShopJobLine:
     url: str = ""
 
 
+def _strip_bom_and_nested_privmsg(body: str) -> str:
+    """FR #226 belt-and-braces: BOM + accidental PRIVMSG prefix still parse as ACK/DONE."""
+    text = body or ""
+    while text.startswith("\ufeff"):
+        text = text[1:]
+    text = text.strip()
+    # Nested: PRIVMSG #chan :actual  OR  PRIVMSG #chan :PRIVMSG #chan :actual
+    for _ in range(6):
+        if not text.upper().startswith("PRIVMSG "):
+            break
+        rest = text[8:]
+        if " :" not in rest:
+            break
+        _tgt, _, text = rest.partition(" :")
+        while text.startswith("\ufeff"):
+            text = text[1:]
+        text = text.lstrip(" \t")
+    return text.strip()
+
+
 def parse_shop_job_line(body: str) -> ShopJobLine | None:
-    text = (body or "").strip()
+    text = _strip_bom_and_nested_privmsg(body or "")
     if not text:
         return None
     m = _VERB_RE.match(text)

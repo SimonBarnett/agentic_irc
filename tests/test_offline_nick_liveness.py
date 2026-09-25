@@ -184,7 +184,7 @@ def test_seat_liveness_loop_quits_on_pong_overdue(tmp_path: Path, monkeypatch):
     assert any("QUIT" in x for x in sent)
 
 
-def test_seat_liveness_loop_quits_on_recv_idle(tmp_path: Path, monkeypatch):
+def test_seat_liveness_loop_reconnects_on_recv_idle(tmp_path: Path, monkeypatch):
     monkeypatch.setenv("AGENTIC_IRC_HOME", str(tmp_path))
     monkeypatch.setattr(irc_agent.talk_seat_pid, "seat_liveness_poll_s", lambda: 0.05)
     monkeypatch.setattr(irc_agent.talk_seat_ghost, "seat_recv_idle_s", lambda: 0.01)
@@ -206,10 +206,12 @@ def test_seat_liveness_loop_quits_on_recv_idle(tmp_path: Path, monkeypatch):
     t = threading.Thread(target=c.seat_liveness_loop, daemon=True)
     t.start()
     deadline = time.time() + 2.0
-    while time.time() < deadline and not c.stop.is_set():
+    while time.time() < deadline and not c.dead.is_set():
         time.sleep(0.02)
-    assert c.stop.is_set()
-    assert any("QUIT" in x for x in sent)
+    # recv idle now reconnects in place: drop socket, no PART/QUIT, no stop
+    assert c.dead.is_set()
+    assert not c.stop.is_set()
+    assert not any(x.startswith(("PART", "QUIT")) for x in sent)
 
 
 def test_seat_liveness_loop_quits_when_coordinator_gone(tmp_path: Path, monkeypatch):

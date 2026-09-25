@@ -368,3 +368,11 @@ v2 blob: `sender_pk || eph_pk || nonce || ct`. AAD: `lower(channel)|lower(to)|lo
 If there is no AGPK pin yet, wait. Do not send cleartext.
 
 Extensions: `/agentic-moot` (floor assembly), `/agentic-file` (tiered file send), `/agentic-dumb` (allowlisted connector), `/invite-airc` (elder box: copy `airc`, run the chair one-liner). **Two chairs:** digest **Jeeves** (`irc_agent.py --chair`, `#bobiverse` only) is not Mode 3. Elder PIN chair is **`airc-moot-thin.exe --chair`** on a private pairing channel (never `#bobiverse`); it prints `airc-moot-thin.exe --pin â€¦ --channel "â€¦" --moot â€¦ --host irc.ntsa.uk` (expires 10m). Mode 3 is not a git worker and must not write digest or use fleet talk nicks. CAPA on the pairing channel only. Win95 TLS is not claimed.
+
+## bob-* shop ops: kick invalid workers (A23 / LOCKED 15)
+
+A `bob-{machine}` ear may send these lines raw through its outbox, but only on its own `#{machine}`: `KICK #{machine} <nick> :reason`, `MODE #{machine} +o|-o|+v|-v <nick>`, `NAMES #{machine}`. Any other non-`PRIVMSG` line is still sent as chat. The ear never kicks itself, Jeeves or another `bob-*`.
+
+- `python scripts/shop_ops.py invalid --home <bob home> --nick bob-<machine>`: lists nicks in the shop whose `w-<short>-<pid>` / `<machine>-<pid>` pid isn't running on this box.
+- `... kick-invalid [--dry-run]`: queues KICKs for those nicks.
+- Ergo on irc.ntsa.uk has channel registration and ChanServ disabled, so op only goes to the creator of an empty channel. Without op, a KICK gets numeric 482 and the agent logs `INFO shop-op 482 not channel operator`. In that case, remove the leak by stopping its local process; the server then QUITs the nick.

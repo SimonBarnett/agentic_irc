@@ -29,6 +29,7 @@ import filexfer  # noqa: E402
 import moot  # noqa: E402
 import protect  # noqa: E402
 import seal  # noqa: E402
+import shop_ops  # noqa: E402
 import agent_control  # noqa: E402
 import talk_seat_ghost  # noqa: E402
 import talk_seat_pid  # noqa: E402
@@ -1457,6 +1458,7 @@ class Client:
                             self._throttled = True
                     if cmd == "001":
                         self.ready.set()
+
                         self._throttle_n = 0
 
                     if cmd == "005" or cmd == "RPL_ISUPPORT":
@@ -1478,6 +1480,11 @@ class Client:
                         if raw_tr.lower().startswith("line too long"):
                             prev = "Line too long"
                         info(f"INFO 417 line too long nick={who} preview={prev}")
+
+
+                    if cmd == "482":
+                        # ERR_CHANOPRIVSNEEDED: shop KICK/MODE without op (Ergo: creator-only op).
+                        info(f"INFO shop-op 482 not channel operator: {' '.join(parts[2:4])}"[:200])
 
                     if cmd == "JOIN":
                         ch = parts[1].lstrip(":") if len(parts) > 1 else ""
@@ -1526,9 +1533,15 @@ class Client:
         for line in lines:
             if gate_fleet and bobreport.outbox_line_spam_for_fleet_channel(line, default_channel=self.chan):
                 continue
+            op = shop_ops.raw_op_line(line, self.original_nick)
             if line.startswith("PRIVMSG "):
                 wire = self.send_privmsg_lines(line)
                 sent.extend(wire)
+                time.sleep(FLOOD_S)
+            elif op:
+                # bob-* shop ops (A23): KICK / MODE / NAMES on own #{machine}, raw.
+                self.send(op)
+                info(f"INFO shop-op sent {op.split(' :', 1)[0]}")
                 time.sleep(FLOOD_S)
             else:
                 self.say(line)

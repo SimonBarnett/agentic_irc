@@ -125,6 +125,7 @@ def info(msg: str) -> None:
     print(msg, flush=True)
 
 
+
 def extract_privmsg_address_prefix(text: str) -> tuple[str, str]:
     """Return (prefix, rest). Prefix is nick: / @nick, / nick - kept on every split piece."""
     t = text or ""
@@ -243,6 +244,23 @@ def expand_irc_outbound_line(
     budget = text_max if text_max is not None else privmsg_text_budget(nick=nick, target=target, linelen=linelen)
     pieces = split_privmsg_body(text, budget)
     return [f"PRIVMSG {target} :{p}" for p in pieces]
+
+
+def is_connect_throttle(text: str) -> bool:
+    t = (text or "").lower()
+    return "too many times" in t or "throttl" in t
+
+
+def throttle_delay_s(n: int) -> float:
+    """Backoff after the n-th consecutive Ergo connect-throttle ERROR (n>=1)."""
+    raw = (os.environ.get("AGENTIC_IRC_THROTTLE_BASE_S") or "120").strip()
+    try:
+        base = float(raw)
+    except ValueError:
+        base = 120.0
+    base = max(1.0, base)
+    return min(900.0, base * (2 ** max(0, n - 1)))
+
 
 
 def reconnect_cap() -> int | None:
@@ -835,6 +853,22 @@ class Client:
             pass
         self.stop.set()
 
+    def recv_idle_reconnect(self) -> None:
+        """Deaf socket: drop it and let run_forever reconnect in-process.
+
+        No PART/QUIT (the seat stays in its channels from the server's view
+        until the TCP dies) and no process exit, so the monitor does not
+        relaunch us and hammer Ergo's connect throttle.
+        """
+        self._last_server_rx = time.time()
+        self.dead.set()
+        sock = self.sock
+        try:
+            if sock is not None:
+                sock.close()
+        except OSError:
+            pass
+
     def _seat_liveness_enabled(self) -> bool:
         if talk_seat_pid.parse_talk_seat_nick(self.original_nick) is None:
             return False
@@ -879,8 +913,8 @@ class Client:
                 self.request_shutdown(":pong timeout")
                 return
             if self._seat_recv_stale():
-                info("INFO seat server idle; QUIT")
-                self.request_shutdown(":recv idle")
+                info("INFO seat server idle; reconnect in place (no PART)")
+                self.recv_idle_reconnect()
                 return
             if talk_seat_pid.talk_seat_coordinator_gone(self.original_nick, self.home):
                 info("INFO seat coordinator gone; QUIT")
@@ -1418,8 +1452,12 @@ class Client:
                     if not self.ready.is_set() and cmd in REG_FAIL_CMDS:
                         detail = trailing.strip() or (parts[1] if len(parts) > 1 else "")
                         info(f"INFO reg {cmd} {detail}".strip()[:220])
+                        if cmd == "ERROR" and is_connect_throttle(detail):
+                            self._throttled = True
                     if cmd == "001":
                         self.ready.set()
+                        self._throttle_n = 0
+
                     if cmd == "005" or cmd == "RPL_ISUPPORT":
                         # ISUPPORT tokens in parts[1:] until :trailing
                         for tok in parts[1:]:
@@ -1439,6 +1477,7 @@ class Client:
                         if raw_tr.lower().startswith("line too long"):
                             prev = "Line too long"
                         info(f"INFO 417 line too long nick={who} preview={prev}")
+
                     if cmd == "JOIN":
                         ch = parts[1].lstrip(":") if len(parts) > 1 else ""
                         if not ch and trailing:
@@ -1610,6 +1649,11 @@ class Client:
                 info(f"INFO reconnect stopped (AGENTIC_IRC_RECONNECT_MAX={cap})")
                 return
             delay = backoff + random.uniform(0, 1)
+            if getattr(self, "_throttled", False):
+                self._throttled = False
+                self._throttle_n = getattr(self, "_throttle_n", 0) + 1
+                delay = throttle_delay_s(self._throttle_n) + random.uniform(0, 5)
+                info(f"INFO connect throttled n={self._throttle_n}; wait {delay:.0f}s")
             info(f"INFO reconnect attempt={attempt} in {delay:.1f}s (backoff cap 60s)")
             time.sleep(delay)
             backoff = min(60.0, backoff * 2)

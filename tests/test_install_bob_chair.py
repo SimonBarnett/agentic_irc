@@ -26,3 +26,13 @@ def test_install_bob_chair_splits_jeeves_home_and_digest_home():
     assert "--password" not in launch[0]
     assert "--home $chairHome" in launch[0]
     assert ".agentic-irc-bobiverse" not in launch[0]
+
+def test_install_bob_chair_clears_stale_quit_request_before_launch():
+    """A force-killed prior chair leaves agent.quit.request; new Jeeves must not eat it."""
+    text = SCRIPT.read_text(encoding="utf-8-sig")
+    stop = text.index("\nStop-PriorChair -Nick $nick")
+    launch = text.index("& python $py")
+    clear = text.find("Remove-Item -LiteralPath $staleQuit")
+    assert clear != -1, "stale agent.quit.request is never removed"
+    assert stop < clear < launch
+    assert "$staleQuit = Join-Path $chairHome 'agent.quit.request'" in text

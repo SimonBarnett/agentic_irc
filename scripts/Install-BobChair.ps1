@@ -114,6 +114,13 @@ Stop-PriorChair -Nick $nick
 if (-not (Test-Path -LiteralPath $chairHome)) {
     New-Item -ItemType Directory -Force -Path $chairHome | Out-Null
 }
+# Stop-PriorChair writes agent.quit.request for the old chair. If that chair
+# ignored it and was force-killed, the file stays and the NEW chair consumes it
+# on its first tick and quits ("agent quit request (jeeves-restart)").
+$staleQuit = Join-Path $chairHome 'agent.quit.request'
+if (Test-Path -LiteralPath $staleQuit) {
+    Remove-Item -LiteralPath $staleQuit -Force -ErrorAction SilentlyContinue
+}
 & python -c "import sys; sys.path.insert(0, r'$here'); import bobreport; bobreport.persist_chair_nick(r'$chairHome', r'$nick')"
 & python $py --nick $nick --channel '#bobiverse' --home $chairHome --chair @forward
 if ($null -ne $LASTEXITCODE) { exit $LASTEXITCODE }

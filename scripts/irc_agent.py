@@ -93,7 +93,8 @@ def take_outbox_lines(path: Path, last: int) -> tuple[list[str], int]:
         if nl < 0:
             break
         raw = buf[consumed:nl].rstrip(b"\r")
-        text = raw.decode("utf-8", "replace").strip()
+        # lstrip only — trailing spaces in PRIVMSG bodies must stay (FR #205 reassembly)
+        text = raw.decode("utf-8", "replace").lstrip(" \t")
         if text:
             lines.append(text)
         consumed = nl + 1
@@ -161,7 +162,7 @@ def privmsg_text_budget(
 def split_utf8_by_words(text: str, max_bytes: int) -> list[str]:
     """Split text into pieces each encoding to <= max_bytes; never split a UTF-8 codepoint.
 
-    Prefer breaks at ASCII space. Concatenating pieces recovers ``text`` exactly.
+    Prefer breaks after whitespace. ``"".join(pieces) == text`` always.
     """
     if max_bytes < 1:
         max_bytes = 1
@@ -170,51 +171,25 @@ def split_utf8_by_words(text: str, max_bytes: int) -> list[str]:
         return [raw] if raw != "" else [""]
 
     parts: list[str] = []
-    buf = ""
-
-    def flush() -> None:
-        nonlocal buf
-        if buf != "":
-            parts.append(buf)
-            buf = ""
-
-    def hard_split(s: str) -> None:
-        """Append s into parts by codepoint so each piece fits max_bytes."""
-        nonlocal buf
-        for ch in s:
-            trial = buf + ch
-            if len(trial.encode("utf-8")) <= max_bytes:
-                buf = trial
-            else:
-                flush()
-                # single codepoint larger than budget: still emit (should not happen for IRC)
-                if len(ch.encode("utf-8")) > max_bytes:
-                    parts.append(ch)
-                    buf = ""
-                else:
-                    buf = ch
-
-    i = 0
+    start = 0
     n = len(raw)
-    while i < n:
-        # take next word including following spaces as break candidates
-        j = i
-        while j < n and not raw[j].isspace():
-            j += 1
-        while j < n and raw[j].isspace():
-            j += 1
-        word = raw[i:j]
-        i = j
-        candidate = buf + word
-        if len(candidate.encode("utf-8")) <= max_bytes:
-            buf = candidate
-            continue
-        flush()
-        if len(word.encode("utf-8")) <= max_bytes:
-            buf = word
-        else:
-            hard_split(word)
-    flush()
+    while start < n:
+        end = start
+        break_at = start
+        while end < n:
+            trial = raw[start : end + 1]
+            if len(trial.encode("utf-8")) > max_bytes:
+                break
+            end += 1
+            if raw[end - 1].isspace():
+                break_at = end
+        if end == start:
+            # single codepoint longer than budget (should not happen for IRC text)
+            end = start + 1
+        elif end < n and break_at > start:
+            end = break_at
+        parts.append(raw[start:end])
+        start = end
     return parts if parts else [""]
 
 
@@ -253,7 +228,8 @@ def expand_irc_outbound_line(
     text_max: int | None = None,
 ) -> list[str]:
     """Expand one outbox/chat line into wire line(s). Non-PRIVMSG pass through."""
-    s = (line or "").strip()
+    # rstrip only CR/LF — never strip trailing body spaces (reassembly must be exact).
+    s = (line or "").rstrip("\r\n").lstrip(" \t")
     if not s.upper().startswith("PRIVMSG "):
         return [s] if s else []
     # PRIVMSG target :text  OR  PRIVMSG target : (empty)
@@ -1397,7 +1373,11 @@ class Client:
                     if cmd == "417":
                         # Ergo: line too long — message was dropped; never log full body/secrets
                         who = parts[1] if len(parts) > 1 else "?"
-                        prev = (trailing or "").strip().replace("\n", " ")[:80]
+                        raw_tr = (trailing or "").strip().replace("\n", " ")
+                        # Fixed short label only — do not echo server trailing (may carry payload)
+                        prev = "Line too long"
+                        if raw_tr.lower().startswith("line too long"):
+                            prev = "Line too long"
                         info(f"INFO 417 line too long nick={who} preview={prev}")
                     if cmd == "JOIN":
                         ch = parts[1].lstrip(":") if len(parts) > 1 else ""

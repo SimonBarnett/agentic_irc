@@ -863,10 +863,11 @@ class Client:
         self._last_server_rx = time.time()
         self.dead.set()
         sock = self.sock
+        self.sock = None
         try:
-            if sock is not None:
+            if sock is not None and hasattr(sock, "close"):
                 sock.close()
-        except OSError:
+        except Exception:
             pass
 
     def _seat_liveness_enabled(self) -> bool:

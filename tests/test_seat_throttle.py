@@ -76,3 +76,31 @@ def test_liveness_loop_uses_reconnect_for_recv_idle(tmp_path: Path, monkeypatch)
     assert c.dead.is_set()
     assert not c.stop.is_set()
     assert not any(x.startswith("PART") for x in sent)
+
+def test_mrb_recv_idle_sock_without_close(tmp_path: Path, monkeypatch):
+    """Hostile: mock sock without .close must not raise; sock cleared."""
+    monkeypatch.setenv("AGENTIC_IRC_HOME", str(tmp_path))
+    monkeypatch.setattr(irc_agent.Client, "send", lambda self, line: None)
+    c = irc_agent.Client(_args(tmp_path, "marchhare-34992"))
+    c.joined.set()
+    c.sock = object()  # no close
+    c.recv_idle_reconnect()
+    assert c.sock is None
+    assert c.dead.is_set()
+    assert not c.stop.is_set()
+
+
+def test_mrb_throttle_resets_on_001_source_lock():
+    src = (ROOT / "scripts" / "irc_agent.py").read_text(encoding="utf-8")
+    assert "is_connect_throttle(detail)" in src
+    assert "self._throttled = True" in src
+    assert "self._throttle_n = 0" in src
+    assert "recv_idle_reconnect()" in src
+    # pong path still QUIT (not reconnect)
+    assert 'request_shutdown(":pong timeout")' in src
+    assert "coordinator gone" in src.lower() or "talk_seat_coordinator_gone" in src
+
+
+def test_mrb_throttle_delay_large_n_caps():
+    assert irc_agent.throttle_delay_s(100) == 900.0
+    assert irc_agent.throttle_delay_s(0) == 120.0  # treated as n=1 base

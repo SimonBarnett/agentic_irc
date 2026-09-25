@@ -1684,6 +1684,9 @@ def main() -> None:
             )
         else:
             err = talk_seat_pid.check_nick_seat_pid(args.nick, seat_pid)
+        if err and talk_seat_pid.watch_seat_host_ok(args.nick, home or None):
+            info("INFO talk-seat nick matches live watch-seat monitor (coordinator seat=)")
+            err = None
     if err:
         info(err)
         sys.exit(2)

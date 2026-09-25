@@ -10,6 +10,7 @@ import argparse
 import base64
 import os
 import random
+import re
 import socket
 import ssl
 import sys
@@ -34,6 +35,9 @@ import talk_seat_pid  # noqa: E402
 import wire  # noqa: E402
 
 FLOOD_S = 0.8
+# IRC classic line limit is 512 bytes including CRLF. Ergo rejects oversize relays with 417.
+# Safe default for PRIVMSG *text* when LINELEN/prefix unknown (~400 bytes of UTF-8 text).
+DEFAULT_PRIVMSG_TEXT_MAX = 400
 REG_FAIL_CMDS = frozenset(
     {
         "ERROR",
@@ -120,6 +124,151 @@ def info(msg: str) -> None:
     print(msg, flush=True)
 
 
+def extract_privmsg_address_prefix(text: str) -> tuple[str, str]:
+    """Return (prefix, rest). Prefix is nick: / @nick, / nick - kept on every split piece."""
+    t = text or ""
+    m = re.match(r"^(@?[A-Za-z0-9_\[\]\\`^{|}-]+)(\s*[:,]\s*|\s+-\s+)", t)
+    if not m:
+        return "", t
+    return m.group(0), t[m.end() :]
+
+
+def privmsg_text_budget(
+    *,
+    nick: str,
+    target: str,
+    linelen: int = 512,
+    user: str = "u",
+    host: str = "h.irc",
+) -> int:
+    """Max UTF-8 bytes for PRIVMSG text so the *relayed* line fits linelen.
+
+    Server line: ``:nick!user@host PRIVMSG target :text\\r\\n``
+    """
+    prefix = f":{nick}!{user}@{host} PRIVMSG {target} :"
+    # linelen includes CRLF on many stacks; budget text only.
+    budget = int(linelen) - 2 - len(prefix.encode("utf-8"))
+    if budget < 32:
+        budget = 32
+    if budget > DEFAULT_PRIVMSG_TEXT_MAX:
+        # still cap: unknown long host cloaks shrink room; keep a conservative ceiling
+        # when linelen is the classic 512.
+        if linelen <= 512:
+            budget = min(budget, DEFAULT_PRIVMSG_TEXT_MAX)
+    return budget
+
+
+def split_utf8_by_words(text: str, max_bytes: int) -> list[str]:
+    """Split text into pieces each encoding to <= max_bytes; never split a UTF-8 codepoint.
+
+    Prefer breaks at ASCII space. Concatenating pieces recovers ``text`` exactly.
+    """
+    if max_bytes < 1:
+        max_bytes = 1
+    raw = text or ""
+    if len(raw.encode("utf-8")) <= max_bytes:
+        return [raw] if raw != "" else [""]
+
+    parts: list[str] = []
+    buf = ""
+
+    def flush() -> None:
+        nonlocal buf
+        if buf != "":
+            parts.append(buf)
+            buf = ""
+
+    def hard_split(s: str) -> None:
+        """Append s into parts by codepoint so each piece fits max_bytes."""
+        nonlocal buf
+        for ch in s:
+            trial = buf + ch
+            if len(trial.encode("utf-8")) <= max_bytes:
+                buf = trial
+            else:
+                flush()
+                # single codepoint larger than budget: still emit (should not happen for IRC)
+                if len(ch.encode("utf-8")) > max_bytes:
+                    parts.append(ch)
+                    buf = ""
+                else:
+                    buf = ch
+
+    i = 0
+    n = len(raw)
+    while i < n:
+        # take next word including following spaces as break candidates
+        j = i
+        while j < n and not raw[j].isspace():
+            j += 1
+        while j < n and raw[j].isspace():
+            j += 1
+        word = raw[i:j]
+        i = j
+        candidate = buf + word
+        if len(candidate.encode("utf-8")) <= max_bytes:
+            buf = candidate
+            continue
+        flush()
+        if len(word.encode("utf-8")) <= max_bytes:
+            buf = word
+        else:
+            hard_split(word)
+    flush()
+    return parts if parts else [""]
+
+
+def split_privmsg_body(text: str, max_bytes: int) -> list[str]:
+    """Split PRIVMSG body; keep address prefix on every piece.
+
+    ``"".join(p[len(prefix):] for p in pieces)`` with prefix stripped once recovers
+    the original body after the address prefix (pieces are prefix+chunk).
+    """
+    prefix, rest = extract_privmsg_address_prefix(text)
+    pref_b = len(prefix.encode("utf-8"))
+    room = max_bytes - pref_b
+    if room < 8:
+        room = max(8, max_bytes // 4)
+    chunks = split_utf8_by_words(rest, room)
+    if not prefix:
+        return chunks
+    return [prefix + c for c in chunks]
+
+
+def reassemble_privmsg_bodies(pieces: list[str]) -> str:
+    """Undo split_privmsg_body for tests / verification."""
+    if not pieces:
+        return ""
+    prefix, _ = extract_privmsg_address_prefix(pieces[0])
+    if not prefix:
+        return "".join(pieces)
+    return prefix + "".join(p[len(prefix) :] if p.startswith(prefix) else p for p in pieces)
+
+
+def expand_irc_outbound_line(
+    line: str,
+    *,
+    nick: str,
+    linelen: int = 512,
+    text_max: int | None = None,
+) -> list[str]:
+    """Expand one outbox/chat line into wire line(s). Non-PRIVMSG pass through."""
+    s = (line or "").strip()
+    if not s.upper().startswith("PRIVMSG "):
+        return [s] if s else []
+    # PRIVMSG target :text  OR  PRIVMSG target : (empty)
+    rest = s[8:]  # after "PRIVMSG "
+    if " :" not in rest:
+        return [s]
+    target, _, text = rest.partition(" :")
+    target = target.strip()
+    if not target:
+        return [s]
+    budget = text_max if text_max is not None else privmsg_text_budget(nick=nick, target=target, linelen=linelen)
+    pieces = split_privmsg_body(text, budget)
+    return [f"PRIVMSG {target} :{p}" for p in pieces]
+
+
 def reconnect_cap() -> int | None:
     """Max reconnect cycles after a failed session; None = unlimited."""
     raw = (os.environ.get("AGENTIC_IRC_RECONNECT_MAX") or "").strip()
@@ -177,6 +326,8 @@ class Client:
         self.lock = threading.Lock()
         self.sock: ssl.SSLSocket | None = None
         self._outbox_gen = 0
+        self._linelen = 512
+        self._privmsg_text_max: int | None = None  # None → derive from nick/target/linelen
         self.ready = threading.Event()
         self.joined = threading.Event()
         self.dead = threading.Event()
@@ -204,9 +355,26 @@ class Client:
         with self.lock:
             self.sock.sendall((line + "\r\n").encode("utf-8"))
 
+    def send_privmsg_lines(self, line: str) -> list[str]:
+        """Send PRIVMSG (splitting if needed). Returns wire lines actually sent."""
+        nick = self.live_nick or self.original_nick or "agent"
+        wire_lines = expand_irc_outbound_line(
+            line,
+            nick=nick,
+            linelen=getattr(self, "_linelen", 512) or 512,
+            text_max=getattr(self, "_privmsg_text_max", None),
+        )
+        out: list[str] = []
+        for w in wire_lines:
+            self.send(w)
+            out.append(w)
+            if len(wire_lines) > 1:
+                time.sleep(FLOOD_S)
+        return out
+
     def say(self, msg: str) -> None:
         dest = self._reply_channel()
-        self.send("PRIVMSG " + dest + " :" + msg)
+        self.send_privmsg_lines("PRIVMSG " + dest + " :" + msg)
         time.sleep(FLOOD_S)
 
     def _reply_channel(self) -> str:
@@ -240,7 +408,7 @@ class Client:
         target = (nick or "").strip()
         if not target or "|" in target:
             return
-        self.send("PRIVMSG " + target + " :" + msg)
+        self.send_privmsg_lines("PRIVMSG " + target + " :" + msg)
         time.sleep(FLOOD_S)
 
     def _mine_nicks(self) -> set[str]:
@@ -1216,6 +1384,21 @@ class Client:
                         info(f"INFO reg {cmd} {detail}".strip()[:220])
                     if cmd == "001":
                         self.ready.set()
+                    if cmd == "005" or cmd == "RPL_ISUPPORT":
+                        # ISUPPORT tokens in parts[1:] until :trailing
+                        for tok in parts[1:]:
+                            if tok.startswith(":"):
+                                break
+                            if tok.upper().startswith("LINELEN="):
+                                try:
+                                    self._linelen = max(200, int(tok.split("=", 1)[1]))
+                                except ValueError:
+                                    pass
+                    if cmd == "417":
+                        # Ergo: line too long — message was dropped; never log full body/secrets
+                        who = parts[1] if len(parts) > 1 else "?"
+                        prev = (trailing or "").strip().replace("\n", " ")[:80]
+                        info(f"INFO 417 line too long nick={who} preview={prev}")
                     if cmd == "JOIN":
                         ch = parts[1].lstrip(":") if len(parts) > 1 else ""
                         if not ch and trailing:
@@ -1264,11 +1447,12 @@ class Client:
             if gate_fleet and bobreport.outbox_line_spam_for_fleet_channel(line, default_channel=self.chan):
                 continue
             if line.startswith("PRIVMSG "):
-                self.send(line)
+                wire = self.send_privmsg_lines(line)
+                sent.extend(wire)
                 time.sleep(FLOOD_S)
             else:
                 self.say(line)
-            sent.append(line)
+                sent.append(line)
         if new_last != last:
             save_outbox_pos(path, new_last)
         return sent

@@ -25,6 +25,10 @@ Shop rooms: `#flamingo` `#marchhare` `#ionos` `#ce-priority-dev1`. Workers `w-<s
 
 Worker nicks `{machine}-{pid}` (and legacy `w-*`) send **only** `PRIVMSG #{machine}`.
 They never `PRIVMSG` a nick (not bob-*, simon, or Jeeves). Outbox nick targets are rewritten to the shop.
+Worker `outbox.txt` lines must be UTF-8 **without BOM** and preferably bare text
+(`{nick} ACK …`). A leading BOM or raw `PRIVMSG #chan :` prefix is stripped so
+`irc_agent` never double-wraps (FR #226).
+
 `!list` / `!help` are typed in-channel; **Jeeves replies by PM** and stays silent in the shop otherwise.
 See `docs/worker-channel-only.md`.
 

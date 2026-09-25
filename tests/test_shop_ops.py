@@ -75,3 +75,34 @@ def test_cli_dry_run(tmp_path: Path, capsys):
     assert rc == 0
     assert "invalid: w-mh-1" in out and "DRY KICK #marchhare w-mh-1" in out
     assert not (tmp_path / "outbox.txt").exists()
+
+def test_mrb_reason_sanitized_and_mode_v():
+    k = shop_ops.raw_op_line("KICK #marchhare w-mh-1 :bad\r\nline", "bob-marchhare")
+    assert k and "\r" not in k and "\n" not in k
+    assert shop_ops.raw_op_line("MODE #marchhare +v w-mh-1", "bob-marchhare") == "MODE #marchhare +v w-mh-1"
+    assert shop_ops.raw_op_line("MODE #marchhare -o simon", "bob-marchhare") == "MODE #marchhare -o simon"
+    assert shop_ops.raw_op_line("MODE #bobiverse +o bob-marchhare", "bob-marchhare") is None
+
+
+def test_mrb_dead_talk_seat_is_invalid():
+    members = ["@bob-marchhare", "marchhare-34992", "w-mh-41124", "simon"]
+    bad = shop_ops.invalid_shop_workers(members, "marchhare", alive=lambda p: False)
+    assert set(bad) == {"marchhare-34992", "w-mh-41124"}
+
+
+def test_mrb_members_kick_and_nick_change():
+    lines = [
+        ":irc 353 bob-marchhare = #marchhare :@bob-marchhare w-mh-1 w-mh-2",
+        ":bob-marchhare!b@h KICK #marchhare w-mh-1 :gone",
+        ":w-mh-2!~u@h NICK :w-mh-9",
+    ]
+    mem = shop_ops.members_from_log(lines, "#marchhare")
+    assert "w-mh-1" not in mem
+    assert "w-mh-9" in mem and "w-mh-2" not in mem
+
+
+def test_mrb_bob_l_suffix_and_cli_non_bob(tmp_path, capsys):
+    assert shop_ops.own_shop("bob-marchhare_l") == "#marchhare"
+    rc = shop_ops.main(["names", "--home", str(tmp_path), "--nick", "simon", "--dry-run"])
+    assert rc == 2
+    assert "bob-*" in capsys.readouterr().err

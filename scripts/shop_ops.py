@@ -61,7 +61,8 @@ def raw_op_line(line: str, own_nick: str) -> str | None:
     shop = own_shop(own_nick)
     if not shop:
         return None
-    t = (line or "").strip()
+    # Collapse CR/LF so outbox multi-line paste cannot smuggle a second verb.
+    t = (line or "").replace("\r", " ").replace("\n", " ").strip()
     m = KICK_RE.match(t)
     if m:
         if m.group("chan").lower() != shop:

@@ -110,6 +110,83 @@ def is_list_command(body: str) -> bool:
     return bool(parts) and parts[0].lower() == "!list"
 
 
+def is_help_command(body: str) -> bool:
+    """True for !help and !help <cmd> (FR #224 / gh-Jeeves #27)."""
+    parts = (body or "").strip().split()
+    return bool(parts) and parts[0].lower() == "!help"
+
+
+_HELP_LAST: dict[str, float] = {}
+HELP_RATE_S = 30.0
+
+# Chair-visible commands (registry-lite; keep in sync with docs)
+_HELP_INDEX = (
+    ("!help [cmd]", "list commands or detail one (PM only)", "all"),
+    ("!list [all|<repo>]", "unaccepted queue, one PM line per job", "all"),
+    ("!status", "version/uptime/queue counts (when enabled)", "all"),
+    ("!resync", "rebuild queue from GitHub now", "simon,bob-*"),
+)
+
+
+def reset_help_rate() -> None:
+    _HELP_LAST.clear()
+
+
+def help_rate_ok(nick: str, now: float) -> bool:
+    key = (nick or "").strip().lower()
+    if not key:
+        return False
+    last = _HELP_LAST.get(key)
+    if last is not None and (float(now) - last) < HELP_RATE_S:
+        return False
+    _HELP_LAST[key] = float(now)
+    return True
+
+
+def help_rate_notice(nick: str, now: float) -> str:
+    key = (nick or "").strip().lower()
+    last = _HELP_LAST.get(key)
+    if last is None:
+        return "(help rate)"
+    left = HELP_RATE_S - (float(now) - last)
+    return f"(help sent; wait {int(max(0.0, left))}s)"
+
+
+def format_help_lines(body: str, *, asker: str = "") -> list[str]:
+    """PM lines for !help / !help <cmd>. One line per command; detail <=5 lines."""
+    parts = (body or "").strip().split()
+    arg = parts[1].lower().lstrip("!") if len(parts) > 1 else None
+    asker_l = (asker or "").strip().lower()
+    is_priv = asker_l == "simon" or asker_l.startswith("bob-")
+
+    if arg:
+        for syntax, summary, who in _HELP_INDEX:
+            name = syntax.split()[0].lstrip("!").lower()
+            if name != arg and not syntax.lower().startswith(f"!{arg}"):
+                continue
+            if who != "all" and not is_priv:
+                return ["unknown command; try !help"]
+            lines = [
+                f"syntax: {syntax}",
+                f"what: {summary}",
+                f"who: {who}",
+                f"example: {syntax.split()[0]}",
+                "note: ACK/DONE/!bored are shop wire in #{machine}, not Jeeves PM",
+            ]
+            return lines[:5]
+        return ["unknown command; try !help"]
+
+    out: list[str] = []
+    for syntax, summary, who in _HELP_INDEX:
+        if who != "all" and not is_priv:
+            continue
+        out.append(f"{syntax} - {summary} [{who}]")
+    out.append(
+        "note: ACK/DONE/NACK in #{machine} and ear !bored/OFFER are shop wire — see README"
+    )
+    return out
+
+
 def parse_list_command(body: str) -> tuple[str | None, str | None, bool]:
     """Return (task_filter, repo_filter, list_all)."""
     parts = (body or "").strip().split()

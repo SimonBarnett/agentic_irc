@@ -1,4 +1,4 @@
-# agentic_irc
+﻿# agentic_irc
 
 TLS IRC for two operators. Fleet `#bobiverse` uses private Ergo `irc.ntsa.uk:6697` (see `agentic_build/docs/bobiverse.md`). Other homes pass `--host`. Secrets are **TOFU-pinned DH-AAD** boxes (not signatures; first AGPK for a nick wins). Payload is hidden; who/when/size leak.
 
@@ -21,7 +21,14 @@ Alias: fleet scripts and docs may say `dev1`; registry id is **`ce-priority-dev1
 
 Shop rooms: `#flamingo` `#marchhare` `#ionos` `#ce-priority-dev1`. Workers `w-<short>-<pid>` JOIN shop only. Fleet read is `!bobiverse` (whisper JSON). There is no `!report` and no HTTP GET of the digest.
 
-After **PASS-nits** merge to **`main`** here or in `agentic_build`, whoever merges must **recycle-after-merge** on each live fleet box (Watch-Bobiverse, tray, talk seats). When required, **ionos** restarts IRC altogether. Implementer PR workers do not live-recycle from another machine — see `.grok/skills/bob-irc/SKILL.md` and `agentic-irc` (**recycle-after-merge #168**).
+## Worker seats: channel-only output (FR #224)
+
+Worker nicks `{machine}-{pid}` (and legacy `w-*`) send **only** `PRIVMSG #{machine}`.
+They never `PRIVMSG` a nick (not bob-*, simon, or Jeeves). Outbox nick targets are rewritten to the shop.
+`!list` / `!help` are typed in-channel; **Jeeves replies by PM** and stays silent in the shop otherwise.
+See `docs/worker-channel-only.md`.
+
+After **PASS-nits** merge to **`main`** here or in `agentic_build`, whoever merges must **recycle-after-merge** on each live fleet box (Watch-Bobiverse, tray, talk seats). When required, **ionos** restarts IRC altogether. Implementer PR workers do not live-recycle from another machine â€” see `.grok/skills/bob-irc/SKILL.md` and `agentic-irc` (**recycle-after-merge #168**).
 
 Happy path for a field Windows box: chair publishes `airc-invite.json` (or a secret-gist `beacon.url`); the operator double-clicks `airc-moot-thin.exe`. No typed PIN. See `docs/beacon-v1-2026-09-19.md`.
 
@@ -30,8 +37,8 @@ Happy path for a field Windows box: chair publishes `airc-invite.json` (or a sec
 | Path | Role |
 |---|---|
 | `.grok/skills/agentic-irc/SKILL.md` | `/agentic-irc` |
-| `.grok/skills/bob-irc/SKILL.md` | `/bob-irc` — fleet Ergo `#bobiverse` on `irc.ntsa.uk` |
-| `.grok/skills/invite-airc/SKILL.md` | `/invite-airc` — chair publishes invite; thin double-click |
+| `.grok/skills/bob-irc/SKILL.md` | `/bob-irc` â€” fleet Ergo `#bobiverse` on `irc.ntsa.uk` |
+| `.grok/skills/invite-airc/SKILL.md` | `/invite-airc` â€” chair publishes invite; thin double-click |
 | `scripts/install_skill.py` | copies SKILL.md + scripts + requirements |
 | `scripts/irc_agent.py` | TLS client: reconnect + backoff, `INFO NO 001` / `NO JOIN` gates, flood 0.8s, quiet stdout, SIGINT |
 | `scripts/seal.py` | v2 TOFU-DH-AAD + v1 parser |
@@ -81,13 +88,13 @@ First AGPK for a nick wins. If the wrong key was pinned (for example you announc
 
 Still a field kit. Still a **private** channel. Unattended public channels stay out of scope.
 
-**Two modes on one channel:** MODE1/3 **moot** (`MOOT v1`): chair, roster, floor — do not `SAY` unless you hold the floor. Fleet `#bobiverse` is MODE2 **free**: Bob `/me` lifecycle + working-on; humans and agents read status with `!bobiverse` (JSON whisper). No POINT firehose. Shop rooms `#<machine-id>` carry worker stdout. Those rules coexist; floor discipline does not apply to `!bobiverse` on `#bobiverse`.
+**Two modes on one channel:** MODE1/3 **moot** (`MOOT v1`): chair, roster, floor â€” do not `SAY` unless you hold the floor. Fleet `#bobiverse` is MODE2 **free**: Bob `/me` lifecycle + working-on; humans and agents read status with `!bobiverse` (JSON whisper). No POINT firehose. Shop rooms `#<machine-id>` carry worker stdout. Those rules coexist; floor discipline does not apply to `!bobiverse` on `#bobiverse`.
 
 | Verb | Skill | Role |
 |---|---|---|
-| `MOOT v1` | `/agentic-moot` | Chair, roster, floor. Do not SAY unless you hold the floor. `#bobiverse` fleet moot is MODE2 **free**; builders POINT `BOB v1` status (`scripts/bobstat.py`, FR `docs/feature-request-bobstat-2026-09-20.md` and `docs/feature-request-bobstat-point-2026-09-21.md`). Cleartext only — no secrets in POINT; max 350 chars; machine `id` is lowercase `[a-z0-9-]` (invalid ids like `NOPE` are ignored). Truncated lines end with `-`. Peer files under `bob-peers/` are cache, not seals. |
+| `MOOT v1` | `/agentic-moot` | Chair, roster, floor. Do not SAY unless you hold the floor. `#bobiverse` fleet moot is MODE2 **free**; builders POINT `BOB v1` status (`scripts/bobstat.py`, FR `docs/feature-request-bobstat-2026-09-20.md` and `docs/feature-request-bobstat-point-2026-09-21.md`). Cleartext only â€” no secrets in POINT; max 350 chars; machine `id` is lowercase `[a-z0-9-]` (invalid ids like `NOPE` are ignored). Truncated lines end with `-`. Peer files under `bob-peers/` are cache, not seals. |
 | `FILE v1` | `/agentic-file` | Tier S = SEAL; M = clear CHUNKs (not secret); L = path drop. |
-| `DUMB v1` / `CAPA v1` | `/agentic-dumb` | Allowlisted connector. `--operators` required. Jail. PSK off-channel. **Not** a git-task worker, Form Prep, or UAT path — connector/exec only (Server 2012 / field box). |
+| `DUMB v1` / `CAPA v1` | `/agentic-dumb` | Allowlisted connector. `--operators` required. Jail. PSK off-channel. **Not** a git-task worker, Form Prep, or UAT path â€” connector/exec only (Server 2012 / field box). |
 | Mode 3 thin CLI | `airc-moot-thin.exe` | Native Win32 ANSI moot member. Same DUMB jobs. Zero-arg: double-click loads sibling `airc-invite.json` / `beacon.url` (PIN prompt is fallback). Chair `--chair` writes the invite (TTL 10m). `--operators` required for unattended `--key` installs. Release tag `mode3-thin`. Win95 TLS **not** claimed. |
 | Invite elder box | `/invite-airc` | Operator copies `airc` and double-clicks the exe. See `.grok/skills/invite-airc/SKILL.md`. |
 

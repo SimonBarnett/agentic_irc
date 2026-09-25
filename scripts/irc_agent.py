@@ -35,6 +35,7 @@ import agent_control  # noqa: E402
 import talk_seat_ghost  # noqa: E402
 import talk_seat_pid  # noqa: E402
 import wire  # noqa: E402
+import channel_only  # noqa: E402
 
 FLOOD_S = 0.8
 # IRC classic line limit is 512 bytes including CRLF. Ergo rejects oversize relays with 417.
@@ -351,9 +352,21 @@ class Client:
         with self.lock:
             self.sock.sendall((line + "\r\n").encode("utf-8"))
 
+    def _channel_only_worker(self) -> bool:
+        """FR #224: {machine}-{pid} / w-* seats never PRIVMSG a nick."""
+        if getattr(self.args, "chair", False):
+            return False
+        nick = self.original_nick or self.live_nick or ""
+        return channel_only.is_channel_only_worker_nick(nick)
+
     def send_privmsg_lines(self, line: str) -> list[str]:
-        """Send PRIVMSG (splitting if needed). Returns wire lines actually sent."""
+        """Send PRIVMSG (splitting if needed). Returns wire lines actually sent.
+
+        FR #224: channel-only workers rewrite PRIVMSG <nick> to PRIVMSG #{machine}.
+        """
         nick = self.live_nick or self.original_nick or "agent"
+        if self._channel_only_worker():
+            line = channel_only.rewrite_worker_outbound_line(self.original_nick or nick, line)
         wire_lines = expand_irc_outbound_line(
             line,
             nick=nick,
@@ -362,6 +375,13 @@ class Client:
         )
         out: list[str] = []
         for w in wire_lines:
+            # Final guard: never emit nick target from worker seat
+            if self._channel_only_worker():
+                w = channel_only.rewrite_worker_outbound_line(self.original_nick or nick, w)
+                bad = channel_only.assert_no_worker_nick_privmsg(self.original_nick or nick, [w])
+                if bad:
+                    info(f"INFO channel-only blocked nick-PRIVMSG {w[:80]!r}")
+                    continue
             self.send(w)
             out.append(w)
             if len(wire_lines) > 1:
@@ -370,6 +390,10 @@ class Client:
 
     def say(self, msg: str) -> None:
         dest = self._reply_channel()
+        if self._channel_only_worker():
+            shop = self._shop_channel() or channel_only.worker_own_shop(self.original_nick or "")
+            if shop:
+                dest = shop
         self.send_privmsg_lines("PRIVMSG " + dest + " :" + msg)
         time.sleep(FLOOD_S)
 
@@ -401,8 +425,18 @@ class Client:
         return None
 
     def whisper(self, nick: str, msg: str) -> None:
+        """PM a nick. FR #224: channel-only workers redirect to own shop instead."""
         target = (nick or "").strip()
         if not target or "|" in target:
+            return
+        if self._channel_only_worker():
+            shop = self._shop_channel() or channel_only.worker_own_shop(self.original_nick or "")
+            if not shop:
+                info("INFO channel-only drop whisper (no shop)")
+                return
+            info(f"INFO channel-only whisper->shop {shop}")
+            self.send_privmsg_lines("PRIVMSG " + shop + " :" + msg)
+            time.sleep(FLOOD_S)
             return
         self.send_privmsg_lines("PRIVMSG " + target + " :" + msg)
         time.sleep(FLOOD_S)
@@ -831,9 +865,11 @@ class Client:
         self._mention_last[key] = now
         if to_channel:
             dest = bobreport.normalize_channel(target) or self._reply_channel()
-            self.send("PRIVMSG " + dest + " :" + line)
+            self.send_privmsg_lines("PRIVMSG " + dest + " :" + line)
             time.sleep(FLOOD_S)
         else:
+            # bob-* may still PM; workers never reach here as fleet_bob-only path.
+            # If a worker seat ever hits this, whisper() rewrites to shop (FR #224).
             self.whisper(src, line)
         info(f"INFO mention-ack to={src} dest={'chan' if to_channel else 'pm'}")
         grok_talk.enqueue_mention(
@@ -1195,12 +1231,15 @@ class Client:
         time.sleep(FLOOD_S)
 
     def _maybe_git_list(self, src: str, target: str, body: str, *, to_channel: bool) -> bool:
-        """Chair only (FR #208): !list → PM queue to requester; never channel noise."""
+        """Chair only (FR #208 / #224): !list typed in-channel or PM → reply by PM only.
+
+        Never post list lines in the channel (no flood). Accepts #{machine} and #bobiverse.
+        """
         if not getattr(self.args, "chair", False):
             return False
         if not gitclaim.is_list_command(body):
             return False
-        # Channel: only fleet channel (or any joined) — FR says #bobiverse and PM
+        # In-channel: must be a joined channel (shop or bobiverse). PM also ok.
         if to_channel and not self._joined_channel(target):
             return False
         now = time.time()
@@ -1217,11 +1256,31 @@ class Client:
             list_all=list_all,
             now=now,
         )
-        # Pace under Ergo flood/fakelag (one job line per FLOOD_S).
+        # Pace under Ergo flood/fakelag (one job line per FLOOD_S). PM only.
         for ln in lines:
             self.whisper(src, ln)
             time.sleep(FLOOD_S)
-        info(f"INFO git-list pm nick={src} lines={len(lines)}")
+        info(f"INFO git-list pm nick={src} lines={len(lines)} from_chan={to_channel}")
+        return True
+
+    def _maybe_git_help(self, src: str, target: str, body: str, *, to_channel: bool) -> bool:
+        """Chair only (FR #224 / gh-Jeeves #27): !help in-channel or PM → PM reply, no channel flood."""
+        if not getattr(self.args, "chair", False):
+            return False
+        if not gitclaim.is_help_command(body):
+            return False
+        if to_channel and not self._joined_channel(target):
+            return False
+        now = time.time()
+        if not gitclaim.help_rate_ok(src, now):
+            self.whisper(src, gitclaim.help_rate_notice(src, now))
+            info(f"INFO git-help rate nick={src}")
+            return True
+        lines = gitclaim.format_help_lines(body, asker=src)
+        for ln in lines:
+            self.whisper(src, ln)
+            time.sleep(FLOOD_S)
+        info(f"INFO git-help pm nick={src} lines={len(lines)} from_chan={to_channel}")
         return True
 
     def _maybe_git_claim(self, src: str, target: str, body: str) -> bool:
@@ -1345,6 +1404,8 @@ class Client:
         if to_channel and self._maybe_channel_pong(src, target, body):
             return
         if self._maybe_git_list(src, target, body, to_channel=to_channel):
+            return
+        if self._maybe_git_help(src, target, body, to_channel=to_channel):
             return
         if to_channel and self._maybe_shop_listen(src, target, body):
             return

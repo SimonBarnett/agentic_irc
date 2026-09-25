@@ -1,4 +1,4 @@
-﻿# Build and test plan - invite-airc
+# Build and test plan - invite-airc
 
 **Spec:** docs/feature-request-invite-airc-2026-09-19.md
 **Skill:** .grok/skills/invite-airc/SKILL.md

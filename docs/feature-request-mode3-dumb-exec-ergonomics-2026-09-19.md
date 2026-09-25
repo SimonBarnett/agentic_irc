@@ -1,4 +1,4 @@
-﻿# Feature request: Mode 3 DUMB exec ergonomics (long installs / HTTPS / meta-char argv)
+# Feature request: Mode 3 DUMB exec ergonomics (long installs / HTTPS / meta-char argv)
 
 **Date:** 2026-09-19  
 **Repo:** https://github.com/SimonBarnett/agentic_irc  

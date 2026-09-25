@@ -1,4 +1,4 @@
-﻿# Work package backlog - finish agentic_irc (2026-09-19)
+# Work package backlog - finish agentic_irc (2026-09-19)
 
 Owner: Bob orchestrates; build agents on **ionos** implement. Prefer model build0.1 when available.
 

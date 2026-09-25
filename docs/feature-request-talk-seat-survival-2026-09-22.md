@@ -1,4 +1,4 @@
-﻿# FR: talk-seat survival — detached listen by default; no home steal
+# FR: talk-seat survival — detached listen by default; no home steal
 
 **Date:** 2026-09-22  
 **Source:** Simon `#bobiverse` — why bots keep dying. Analysis flamingo-17568 + marchhare.

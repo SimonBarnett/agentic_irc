@@ -1,4 +1,4 @@
-﻿# Build-and-test plan: multi-agent irc_agent registration (no 001)
+# Build-and-test plan: multi-agent irc_agent registration (no 001)
 
 **FR:** `docs/feature-request-irc-multi-agent-registration-2026-09-20.md`
 

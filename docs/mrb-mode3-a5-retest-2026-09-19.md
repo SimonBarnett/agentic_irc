@@ -1,4 +1,4 @@
-﻿# Hostile MRB - Mode 3 A5 live retest (2026-09-19)
+# Hostile MRB - Mode 3 A5 live retest (2026-09-19)
 
 **Repo:** SimonBarnett/agentic_irc
 **Tip:** 4abdce5 fix: Mode 3 Schannel handshake and CAP END; A5 IONOS live smoke

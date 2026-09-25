@@ -1,4 +1,4 @@
-﻿# Feature request - invite-airc skill + chair invite one-liner (2026-09-19)
+# Feature request - invite-airc skill + chair invite one-liner (2026-09-19)
 
 **Status:** parked for build agent
 **Repo:** SimonBarnett/agentic_irc

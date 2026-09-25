@@ -1,4 +1,4 @@
-﻿# FR: reply on the same call channel (bobs + workers)
+# FR: reply on the same call channel (bobs + workers)
 
 ## Summary
 Simon (agentic_irc #187): bobs and workers MUST listen on call channels they are in and reply to the same channel.

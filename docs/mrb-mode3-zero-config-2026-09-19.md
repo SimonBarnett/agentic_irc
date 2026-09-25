@@ -1,4 +1,4 @@
-﻿# Hostile MRB / plan - Mode 3 zero-config onboarding (2026-09-19)
+# Hostile MRB / plan - Mode 3 zero-config onboarding (2026-09-19)
 
 **Repo:** SimonBarnett/agentic_irc
 **Surface:** `src/moot_thin/` (`airc-moot-thin.exe`)

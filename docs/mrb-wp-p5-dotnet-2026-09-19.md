@@ -1,4 +1,4 @@
-﻿# Hostile MRB - WP-P5 net45 airc-dumb.exe (2026-09-19)
+# Hostile MRB - WP-P5 net45 airc-dumb.exe (2026-09-19)
 
 **Repo:** SimonBarnett/agentic_irc
 **Commit:** 2751f54 feat: WP-P5 net45 airc-dumb.exe protocol clone

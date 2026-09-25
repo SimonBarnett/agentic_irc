@@ -1,4 +1,4 @@
-﻿# Hostile MRB - Mode 3 zero-config PIN onboarding (2026-09-19)
+# Hostile MRB - Mode 3 zero-config PIN onboarding (2026-09-19)
 
 **Tip:** 2b1d743 feat: Mode 3 zero-config PIN onboarding (v0.2.0)
 **Prior FAIL plan:** docs/mrb-mode3-zero-config-2026-09-19.md / af6f0c8

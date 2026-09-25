@@ -1,4 +1,4 @@
-﻿# Feature request: harden irc_agent registration for multiple agents on one public IP
+# Feature request: harden irc_agent registration for multiple agents on one public IP
 
 **Date:** 2026-09-20  
 **Repo:** https://github.com/SimonBarnett/agentic_irc  

@@ -1,4 +1,4 @@
-﻿# Build-and-test plan: Mode 3 DUMB exec ergonomics
+# Build-and-test plan: Mode 3 DUMB exec ergonomics
 
 **FR:** `docs/feature-request-mode3-dumb-exec-ergonomics-2026-09-19.md`  
 **Issue:** https://github.com/SimonBarnett/agentic_irc/issues/2  

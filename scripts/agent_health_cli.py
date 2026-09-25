@@ -61,6 +61,28 @@ def _cli() -> int:
     p_off.add_argument("--current-offset", type=int, required=True)
     p_off.add_argument("--next-offset", type=int, required=True)
 
+    # FR #213 monitor restart backoff + live tree guard
+    p_bo = sub.add_parser("monitor-backoff-delay")
+    p_bo.add_argument("--n", type=int, required=True)
+
+    p_bs = sub.add_parser("monitor-note-start")
+    p_bs.add_argument("--home", required=True)
+
+    p_be = sub.add_parser("monitor-note-exit")
+    p_be.add_argument("--home", required=True)
+
+    p_bh = sub.add_parser("monitor-note-healthy")
+    p_bh.add_argument("--home", required=True)
+
+    p_bw = sub.add_parser("monitor-wait")
+    p_bw.add_argument("--home", required=True)
+
+    p_lt = sub.add_parser("live-tree-check")
+    p_lt.add_argument("--home", default="")
+    p_lt.add_argument("--tree", default="")
+    p_lt.add_argument("--role", default="monitor")
+    p_lt.add_argument("--no-mark-start", action="store_true")
+
     args = parser.parse_args()
 
     if args.cmd == "select-sink":
@@ -138,6 +160,55 @@ def _cli() -> int:
         )
         print(committed)
         return 0
+
+    if args.cmd == "monitor-backoff-delay":
+        import monitor_restart_backoff as mrb
+
+        print(f"{mrb.delay_after_fast_exits(args.n):.3f}")
+        return 0
+
+    if args.cmd == "monitor-note-start":
+        import monitor_restart_backoff as mrb
+        from dataclasses import asdict
+
+        print(json.dumps(asdict(mrb.note_start(args.home))))
+        return 0
+
+    if args.cmd == "monitor-note-exit":
+        import monitor_restart_backoff as mrb
+        from dataclasses import asdict
+
+        st, delay = mrb.note_exit(args.home)
+        print(json.dumps({**asdict(st), "delay_s": delay}))
+        return 0
+
+    if args.cmd == "monitor-note-healthy":
+        import monitor_restart_backoff as mrb
+        from dataclasses import asdict
+
+        print(json.dumps(asdict(mrb.note_healthy(args.home))))
+        return 0
+
+    if args.cmd == "monitor-wait":
+        import monitor_restart_backoff as mrb
+
+        slept = mrb.sleep_before_repair(args.home)
+        print(f"{slept:.3f}")
+        return 0
+
+    if args.cmd == "live-tree-check":
+        import live_tree_guard
+        from dataclasses import asdict
+
+        snap = live_tree_guard.check_and_report(
+            tree=args.tree or None,
+            home=args.home or None,
+            role=args.role,
+            log=lambda m: print(m, flush=True),
+            mark_start=not args.no_mark_start,
+        )
+        print(json.dumps(asdict(snap)))
+        return 0 if snap.ok else 1
 
     parser.error("unknown command")
     return 2

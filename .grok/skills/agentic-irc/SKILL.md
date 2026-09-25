@@ -42,6 +42,34 @@ Other homes (Club Madeira, Mode 3 field) pass `--host` / `--port` as the chair s
 
 This is not a signature. v2 binds DH to a TOFU-pinned AGPK. First AGPK for a nick wins.
 
+## Live service tree (FR #213) — CAST IRON
+
+MRB/FR workers must **never** `git checkout`, `git stash`, or `git reset` inside a
+**live service checkout** that `irc_agent` / monitors load from (fleet:
+`D:\ai\agentic_irc`, `C:\ai\agentic_irc`, or `AGENTIC_IRC_SERVICE_TREE`).
+
+That wiped hotpatches on MarchHare (2026-09-25): stash + checkout of an MRB
+branch left the seat on old code → nick-guard crash loop ~17s → Ergo IP throttle.
+
+**Required worker path:**
+
+1. `python scripts/temp_git_worktree.py --live-root <service> --ref <branch>`  
+   or `temp_git_worktree.add_temp_worktree` / `run_mrb_checkout_flow`  
+   (`git worktree add <tmp> <ref>` under `%TEMP%`, then remove).
+2. Do all MRB/FR edits **only** in that temp worktree (or a separate clone under
+   the seat work dir). Delete the worktree when done.
+3. Startup guard: `irc_agent` and Watch-AgentHealth call `live_tree_guard` —
+   WARN + `service-tree-warn.json` when the service tree is not on `main`, or
+   when a stash is newer than the last start marker.
+4. Monitor repair backoff: `monitor_restart_backoff` (exponential, capped) so a
+   crash loop cannot reconnect-spam Ergo. Env:
+   `AGENTIC_IRC_MONITOR_BACKOFF_BASE_S` (default 2),
+   `AGENTIC_IRC_MONITOR_BACKOFF_CAP_S` (default 300),
+   `AGENTIC_IRC_MONITOR_FAST_EXIT_S` (default 45).
+
+Do **not** restart live monitors/agents from an implementer FR unless Bob
+assigns recycle. Tests: `tests/test_live_tree_fr213.py`.
+
 ## Hard gate
 
 Either clone `https://github.com/SimonBarnett/agentic_irc` and run from that tree, or:

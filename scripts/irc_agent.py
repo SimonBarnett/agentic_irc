@@ -1799,6 +1799,18 @@ def main() -> None:
     if err:
         info(err)
         sys.exit(2)
+    # FR #213: warn (do not exit) when service tree is off main or has a fresh stash.
+    try:
+        import live_tree_guard
+
+        live_tree_guard.check_and_report(
+            home=home or None,
+            role="irc_agent",
+            log=info,
+            mark_start=True,
+        )
+    except Exception as e:  # pragma: no cover - never block connect on guard bugs
+        info(f"WARN live-tree guard skipped {type(e).__name__}")
     clean_crashed_priors(args.nick, home, once=bool(args.once))
     c = Client(args)
 

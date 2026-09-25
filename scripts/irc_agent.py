@@ -1140,8 +1140,15 @@ class Client:
         time.sleep(FLOOD_S)
 
     def _maybe_git_claim(self, src: str, target: str, body: str) -> bool:
-        """Chair only. !BORED claims the webhook queue head. !ACCEPT does not."""
-        if not getattr(self.args, "chair", False):
+        """Shop claim path (FR #207): chair or bob-* ear in #{machine}.
+
+        !BORED offers the top unaccepted job (does not accept).
+        Worker ACK in #{machine} marks that offered job accepted.
+        !ACCEPT remains a no-op (legacy).
+        """
+        chair = bool(getattr(self.args, "chair", False))
+        fleet_bob = bobtalk.is_fleet_bob_nick(self.original_nick)
+        if not chair and not fleet_bob:
             return False
         if not self._joined_channel(target):
             return False
@@ -1151,6 +1158,9 @@ class Client:
             return True
         if gitclaim.is_accept_command(body):
             self._git_accept(src, target, body)
+            return True
+        if gitclaim.parse_worker_ack(body):
+            self._git_ack(src, target, now)
             return True
         shop = gitclaim.worker_shop_channel(src)
         if shop and bobreport.normalize_channel(target).lower() == shop:
@@ -1171,22 +1181,38 @@ class Client:
             self._git_say(target, gitclaim.NAK_BORED_BUSY)
             info(f"INFO git-claim bored nak busy nick={src}")
             return
-        status, job = gitclaim.claim_top_http(src, bobreport.normalize_channel(target))
+        # Offer only — acceptance is ACK (FR #207). Prefer local queue (scripts, no tokens).
+        status, job = gitclaim.offer_top(self.home, src, bobreport.normalize_channel(target))
         if status == "ok" and isinstance(job, dict):
             gitclaim.note_worker_activity(self.home, src, now)
             line = gitclaim.format_claimed(job)
-            self._git_say(target, line)
-            info(f"INFO git-claim bored claimed {line} nick={src}")
+            # Address the worker so the seat knows the offer is theirs
+            self._git_say(target, f"{src}: ASSIGN {line}")
+            info(f"INFO git-claim bored offered {line} nick={src}")
             return
         if status == "empty":
             gitclaim.note_worker_activity(self.home, src, now)
             self._git_say(target, gitclaim.NO_JOBS)
             info(f"INFO git-claim bored empty nick={src}")
             return
-        info(f"INFO git-claim bored post failed nick={src}")
+        info(f"INFO git-claim bored offer failed nick={src}")
+
+    def _git_ack(self, src: str, target: str, now: float) -> None:
+        """ACK in #{machine} marks the offered job accepted on the webhook mirror."""
+        shop = gitclaim.worker_shop_channel(src)
+        if shop is None or bobreport.normalize_channel(target).lower() != shop:
+            return
+        status, job = gitclaim.accept_offered(self.home, src, bobreport.normalize_channel(target))
+        if status == "ok" and isinstance(job, dict):
+            gitclaim.note_worker_activity(self.home, src, now)
+            line = gitclaim.format_claimed(job)
+            self._git_say(target, f"{src}: accepted {line}")
+            info(f"INFO git-claim ack accepted {line} nick={src}")
+            return
+        info(f"INFO git-claim ack no offer nick={src}")
 
     def _git_accept(self, src: str, target: str, body: str) -> None:
-        """Transition no-op. !BORED already claimed. Do not pop the queue."""
+        """Legacy !ACCEPT is a no-op; use ACK after !BORED offer (FR #207)."""
         del target, body
         info(f"INFO git-claim accept noop nick={src}")
 

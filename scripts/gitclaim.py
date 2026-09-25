@@ -37,12 +37,17 @@ ACCEPTED_CAP = 200
 # Task vocabulary. The GIT allowlist below is unchanged: only PR and MRB
 # are produced from GitHub events. BUILD, FIX, and UAT are valid kinds if a
 # row is already on the queue; this map does not emit them.
-TASK_KINDS = frozenset({"PR", "BUILD", "MRB", "FIX", "UAT"})
+TASK_KINDS = frozenset({"FR", "PR", "BUILD", "MRB", "FIX", "UAT"})
+# Issues are FR (not PR). PR open/ready -> MRB. Legacy PR rows still valid.
 CLAIM_ACTIONS: dict[tuple[str, str], str] = {
-    ("issues", "opened"): "PR",
+    ("issues", "opened"): "FR",
+    ("issues", "reopened"): "FR",
     ("pull_request", "opened"): "MRB",
     ("pull_request", "ready_for_review"): "MRB",
 }
+CLOSES_RE = re.compile(
+    r"(?i)\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?|refs?)\s+#(\d+)\b"
+)
 
 REPO_RE = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
 ID_RE = re.compile(r"^#\d+$")
@@ -60,6 +65,8 @@ class GitClaim:
     event: str
     action: str
     line: str
+    refs: tuple[str, ...] = ()  # linked issue ids e.g. ("#19",) when PR supersedes FR
+    merged: bool | None = None  # pull_request closed: True if merged
 
 
 def _utc_now() -> str:
@@ -145,21 +152,238 @@ def _payload_number(event: str, payload: dict) -> str | None:
     return f"#{n}"
 
 
+
+def extract_closes_issue_ids(*texts: str) -> tuple[str, ...]:
+    """Issue ids referenced via Closes/Fixes/Resolves/Refs #n (deterministic)."""
+    found: list[str] = []
+    seen: set[str] = set()
+    for text in texts:
+        for m in CLOSES_RE.finditer(text or ""):
+            ident = f"#{int(m.group(1))}"
+            if ident not in seen:
+                seen.add(ident)
+                found.append(ident)
+    return tuple(found)
+
+
+def _pr_blob(payload: dict) -> dict:
+    pr = payload.get("pull_request")
+    return pr if isinstance(pr, dict) else {}
+
+
+def _issue_blob(payload: dict) -> dict:
+    issue = payload.get("issue")
+    return issue if isinstance(issue, dict) else {}
+
+
 def claim_from_payload(event: str, payload: dict, *, line: str = "") -> GitClaim | None:
-    """Build a claim from the GitHub webhook body. None if not on the allowlist."""
+    """Build a claim from the GitHub webhook body. None if not a queue-driving event.
+
+    issues opened/reopened -> FR
+    pull_request opened/ready_for_review -> MRB (with refs to linked issues)
+    pull_request closed -> MRB row used for supersede (merged flag set)
+    issues closed -> FR/UAT removal via apply_queue_event (task FR id)
+    """
     if not isinstance(payload, dict):
         return None
     ev = (event or "").strip().lower()
     action = str(payload.get("action") or "").strip().lower()
+    repo = _payload_repo(payload)
+    if not repo or not REPO_RE.fullmatch(repo):
+        return None
+    src = (line or "").strip()
+
+    if ev == "issues" and action in ("opened", "reopened"):
+        ident = _payload_number(ev, payload)
+        if ident is None:
+            return None
+        return GitClaim(repo=repo, task="FR", id=ident, event=ev, action=action, line=src)
+
+    if ev == "issues" and action == "closed":
+        ident = _payload_number(ev, payload)
+        if ident is None:
+            return None
+        return GitClaim(repo=repo, task="FR", id=ident, event=ev, action=action, line=src)
+
+    if ev == "pull_request" and action in ("opened", "ready_for_review", "edited"):
+        ident = _payload_number(ev, payload)
+        if ident is None:
+            return None
+        pr = _pr_blob(payload)
+        title = str(pr.get("title") or "")
+        body = str(pr.get("body") or "")
+        refs = extract_closes_issue_ids(title, body, src)
+        task = "MRB" if action in ("opened", "ready_for_review") else "MRB"
+        return GitClaim(
+            repo=repo, task=task, id=ident, event=ev, action=action, line=src, refs=refs
+        )
+
+    if ev == "pull_request" and action == "closed":
+        ident = _payload_number(ev, payload)
+        if ident is None:
+            return None
+        pr = _pr_blob(payload)
+        title = str(pr.get("title") or "")
+        body = str(pr.get("body") or "")
+        refs = extract_closes_issue_ids(title, body, src)
+        merged = bool(pr.get("merged"))
+        return GitClaim(
+            repo=repo,
+            task="MRB",
+            id=ident,
+            event=ev,
+            action=action,
+            line=src,
+            refs=refs,
+            merged=merged,
+        )
+
+    # legacy allowlist map for anything else
     task = CLAIM_ACTIONS.get((ev, action))
     if task is None:
         return None
-    repo = _payload_repo(payload)
     ident = _payload_number(ev, payload)
-    if not repo or ident is None or not REPO_RE.fullmatch(repo):
+    if ident is None:
         return None
-    src = (line or "").strip()
     return GitClaim(repo=repo, task=task, id=ident, event=ev, action=action, line=src)
+
+
+def _remove_unaccepted(doc: dict, repo: str, task: str, ident: str) -> int:
+    before = len(doc["unaccepted"])
+    doc["unaccepted"] = [
+        r for r in doc["unaccepted"] if not _same(r, repo, task, ident)
+    ]
+    return before - len(doc["unaccepted"])
+
+
+def _remove_unaccepted_tasks(doc: dict, repo: str, ident: str, tasks: set[str]) -> int:
+    before = len(doc["unaccepted"])
+    doc["unaccepted"] = [
+        r
+        for r in doc["unaccepted"]
+        if not (r.get("repo") == repo and r.get("id") == ident and r.get("task") in tasks)
+    ]
+    return before - len(doc["unaccepted"])
+
+
+def _append_unaccepted(doc: dict, claim: GitClaim, **extra: str) -> str:
+    if _already(doc, claim.repo, claim.task, claim.id):
+        # refresh refs/line on existing unaccepted row
+        for row in doc["unaccepted"]:
+            if _same(row, claim.repo, claim.task, claim.id):
+                row["line"] = claim.line
+                row["event"] = claim.event
+                row["action"] = claim.action
+                if claim.refs:
+                    row["refs"] = list(claim.refs)
+                for k, v in extra.items():
+                    if v:
+                        row[k] = v
+                return "duplicate"
+        return "duplicate"
+    seq = 1
+    for row in doc["unaccepted"]:
+        try:
+            seq = max(seq, int(row.get("seq") or 0) + 1)
+        except (TypeError, ValueError):
+            continue
+    row = {
+        "repo": claim.repo,
+        "task": claim.task,
+        "id": claim.id,
+        "ts": _utc_now(),
+        "line": claim.line,
+        "event": claim.event,
+        "action": claim.action,
+        "seq": seq,
+    }
+    if claim.refs:
+        row["refs"] = list(claim.refs)
+    for k, v in extra.items():
+        if not v:
+            continue
+        if k == "refs" and isinstance(v, str):
+            row["refs"] = [x for x in v.split(",") if x]
+        else:
+            row[k] = v
+    doc["unaccepted"].append(row)
+    return "added"
+
+
+def apply_queue_event(home: Path, claim: GitClaim) -> str:
+    """Apply one deterministic queue transition. Returns added|removed|updated|duplicate|error|noop."""
+    if claim.task not in TASK_KINDS and claim.action not in ("closed", "edited"):
+        return "error"
+    try:
+        with _lock(home):
+            try:
+                doc = _load_queue_unlocked(home)
+            except (OSError, json.JSONDecodeError, ValueError):
+                return "error"
+
+            ev, action = claim.event, claim.action
+            changed = "noop"
+
+            if ev == "issues" and action in ("opened", "reopened"):
+                # FR for issue; drop any stale UAT for same id
+                _remove_unaccepted_tasks(doc, claim.repo, claim.id, {"UAT", "PR"})
+                changed = _append_unaccepted(doc, claim)
+
+            elif ev == "issues" and action == "closed":
+                n = _remove_unaccepted_tasks(doc, claim.repo, claim.id, {"FR", "PR", "UAT"})
+                changed = "removed" if n else "noop"
+
+            elif ev == "pull_request" and action in ("opened", "ready_for_review", "edited"):
+                # Supersede linked FRs with this MRB
+                for ref in claim.refs:
+                    _remove_unaccepted_tasks(doc, claim.repo, ref, {"FR", "PR", "UAT"})
+                extra = {}
+                if claim.refs:
+                    extra["refs"] = ",".join(claim.refs)
+                changed = _append_unaccepted(doc, claim, **extra)
+
+            elif ev == "pull_request" and action == "closed":
+                _remove_unaccepted(doc, claim.repo, "MRB", claim.id)
+                if claim.merged:
+                    # PASS path: UAT for each linked open issue (queue UAT rows)
+                    for ref in claim.refs:
+                        _remove_unaccepted_tasks(doc, claim.repo, ref, {"FR", "PR", "MRB"})
+                        uat = GitClaim(
+                            repo=claim.repo,
+                            task="UAT",
+                            id=ref,
+                            event="issues",
+                            action="uat",
+                            line=claim.line,
+                            refs=(claim.id,),
+                        )
+                        _append_unaccepted(doc, uat)
+                    changed = "updated"
+                else:
+                    # closed without merge: restore FR for linked issues
+                    for ref in claim.refs:
+                        fr = GitClaim(
+                            repo=claim.repo,
+                            task="FR",
+                            id=ref,
+                            event="issues",
+                            action="reopened",
+                            line=claim.line,
+                        )
+                        _append_unaccepted(doc, fr)
+                    changed = "updated"
+            else:
+                # plain enqueue
+                changed = _append_unaccepted(doc, claim)
+
+            try:
+                _write_queue(queue_path(home), doc)
+            except OSError:
+                return "error"
+            return changed
+    except (TimeoutError, OSError):
+        return "error"
+
 
 
 def canonical_worker_nick(nick: str) -> str | None:
@@ -256,9 +480,15 @@ def _coerce_row(row: dict) -> dict | None:
         out["seq"] = int(row.get("seq") or 0)
     except (TypeError, ValueError):
         out["seq"] = 0
-    for key in ("nick", "channel", "accepted_ts"):
+    for key in ("nick", "channel", "accepted_ts", "offered_to", "offered_ts", "offered_channel"):
         if row.get(key):
             out[key] = str(row.get(key))
+    if row.get("refs"):
+        refs = row.get("refs")
+        if isinstance(refs, list):
+            out["refs"] = [str(x) for x in refs]
+        else:
+            out["refs"] = str(refs)
     return out
 
 
@@ -353,42 +583,20 @@ def _already(doc: dict, repo: str, task: str, ident: str) -> bool:
 
 
 def enqueue_unaccepted(home: Path, claim: GitClaim) -> str:
-    """Append FIFO on the webhook mirror. Returns added, duplicate, or error."""
+    """Apply deterministic queue transition for this claim (FR #207 supersede table)."""
     if claim.task not in TASK_KINDS:
         return "error"
-    try:
-        with _lock(home):
-            try:
-                doc = _load_queue_unlocked(home)
-            except (OSError, json.JSONDecodeError, ValueError):
-                return "error"
-            if _already(doc, claim.repo, claim.task, claim.id):
-                return "duplicate"
-            seq = 1
-            for row in doc["unaccepted"]:
-                try:
-                    seq = max(seq, int(row.get("seq") or 0) + 1)
-                except (TypeError, ValueError):
-                    continue
-            doc["unaccepted"].append(
-                {
-                    "repo": claim.repo,
-                    "task": claim.task,
-                    "id": claim.id,
-                    "ts": _utc_now(),
-                    "line": claim.line,
-                    "event": claim.event,
-                    "action": claim.action,
-                    "seq": seq,
-                }
-            )
-            try:
-                _write_queue(queue_path(home), doc)
-            except OSError:
-                return "error"
+    result = apply_queue_event(home, claim)
+    if result in ("added", "updated", "removed", "duplicate", "noop"):
+        # map to legacy return values for callers
+        if result == "added":
             return "added"
-    except (TimeoutError, OSError):
-        return "error"
+        if result == "duplicate":
+            return "duplicate"
+        if result == "error":
+            return "error"
+        return "added" if result in ("updated", "removed") else "duplicate"
+    return "error"
 
 
 def load_unaccepted(home: Path) -> list[dict]:
@@ -536,6 +744,186 @@ def last_worker_activity(home: Path, nick: str) -> float | None:
         return None
     val = seen.get(canon)
     return float(val) if val is not None else None
+
+
+
+def offer_top(home: Path, nick: str, channel: str) -> tuple[str, dict | None]:
+    """Peek oldest unaccepted and stamp offered_to without accepting (FR #207)."""
+    try:
+        with _lock(home):
+            try:
+                doc = _load_queue_unlocked(home)
+            except (OSError, json.JSONDecodeError, ValueError):
+                return "error", None
+            if not doc["unaccepted"]:
+                return "empty", None
+            doc["unaccepted"].sort(key=_sort_key)
+            job = dict(doc["unaccepted"][0])
+            job["offered_to"] = (nick or "").strip()
+            job["offered_ts"] = _utc_now()
+            job["offered_channel"] = bobreport.normalize_channel(channel) if channel else ""
+            doc["unaccepted"][0] = job
+            try:
+                _write_queue(queue_path(home), doc)
+            except OSError:
+                return "error", None
+            return "ok", job
+    except (TimeoutError, OSError):
+        return "error", None
+
+
+def parse_worker_ack(body: str) -> bool:
+    """True if shop line is an ACK (not FILE v1 ACCEPT)."""
+    text = (body or "").strip()
+    if not text:
+        return False
+    # bare ACK or "nick: ACK ..." or "ACK ASSIGN ..."
+    low = text.lower()
+    if low == "ack":
+        return True
+    if re.match(r"(?i)^@?\S+[:\s]+ack\b", text):
+        return True
+    if re.match(r"(?i)^ack\b", text):
+        return True
+    return False
+
+
+def accept_offered(home: Path, nick: str, channel: str) -> tuple[str, dict | None]:
+    """Move offered unaccepted row for this nick to accepted (ACK in #machine)."""
+    try:
+        with _lock(home):
+            try:
+                doc = _load_queue_unlocked(home)
+            except (OSError, json.JSONDecodeError, ValueError):
+                return "error", None
+            canon = (nick or "").strip()
+            idx = None
+            for i, row in enumerate(doc["unaccepted"]):
+                if str(row.get("offered_to") or "").strip() == canon:
+                    ch = str(row.get("offered_channel") or "").lower()
+                    want = bobreport.normalize_channel(channel).lower() if channel else ""
+                    if ch and want and ch != want:
+                        continue
+                    idx = i
+                    break
+            if idx is None:
+                return "empty", None
+            job = dict(doc["unaccepted"].pop(idx))
+            job["nick"] = canon
+            job["channel"] = bobreport.normalize_channel(channel) if channel else ""
+            job["accepted_ts"] = _utc_now()
+            doc["accepted"].append(job)
+            if len(doc["accepted"]) > ACCEPTED_CAP:
+                doc["accepted"] = doc["accepted"][-ACCEPTED_CAP:]
+            try:
+                _write_queue(queue_path(home), doc)
+            except OSError:
+                return "error", None
+            return "ok", job
+    except (TimeoutError, OSError):
+        return "error", None
+
+
+def resync_from_github(
+    home: Path,
+    repos: list[str],
+    *,
+    fetch_json=None,
+) -> dict:
+    """Deterministic rebuild: open FR issues + open PRs as MRB; drop closed/superseded.
+
+    fetch_json(url) -> dict|list for tests. Default uses gh api via urllib if available.
+    """
+    import urllib.request
+
+    def _default_fetch(url: str):
+        req = urllib.request.Request(url, headers={"Accept": "application/vnd.github+json"})
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            return json.loads(resp.read().decode("utf-8"))
+
+    getter = fetch_json or _default_fetch
+    desired: list[GitClaim] = []
+    for repo in repos:
+        if not REPO_RE.fullmatch(repo):
+            continue
+        # open issues without open PR that closes them -> FR
+        issues = getter(f"https://api.github.com/repos/{repo}/issues?state=open&per_page=100")
+        prs = getter(f"https://api.github.com/repos/{repo}/pulls?state=open&per_page=100")
+        if not isinstance(issues, list):
+            issues = []
+        if not isinstance(prs, list):
+            prs = []
+        closed_by_pr: set[str] = set()
+        for pr in prs:
+            if not isinstance(pr, dict):
+                continue
+            num = pr.get("number")
+            if not isinstance(num, int):
+                continue
+            title = str(pr.get("title") or "")
+            body = str(pr.get("body") or "")
+            refs = extract_closes_issue_ids(title, body)
+            for r in refs:
+                closed_by_pr.add(r)
+            desired.append(
+                GitClaim(
+                    repo=repo,
+                    task="MRB",
+                    id=f"#{num}",
+                    event="pull_request",
+                    action="opened",
+                    line="",
+                    refs=refs,
+                )
+            )
+        for iss in issues:
+            if not isinstance(iss, dict):
+                continue
+            # skip PR-shaped issues
+            if iss.get("pull_request"):
+                continue
+            num = iss.get("number")
+            if not isinstance(num, int):
+                continue
+            ident = f"#{num}"
+            if ident in closed_by_pr:
+                continue
+            desired.append(
+                GitClaim(
+                    repo=repo,
+                    task="FR",
+                    id=ident,
+                    event="issues",
+                    action="opened",
+                    line="",
+                )
+            )
+
+    try:
+        with _lock(home):
+            doc = _empty_queue()
+            for claim in desired:
+                _append_unaccepted(doc, claim)
+            # stable sort by repo then numeric id then task
+            def sk(row: dict) -> tuple:
+                ident = str(row.get("id") or "#0")
+                try:
+                    n = int(ident.lstrip("#"))
+                except ValueError:
+                    n = 0
+                return (str(row.get("repo") or ""), n, str(row.get("task") or ""))
+
+            doc["unaccepted"].sort(key=sk)
+            for i, row in enumerate(doc["unaccepted"], start=1):
+                row["seq"] = i
+            _write_queue(queue_path(home), doc)
+            return {
+                "ok": True,
+                "unaccepted": len(doc["unaccepted"]),
+                "repos": list(repos),
+            }
+    except (TimeoutError, OSError, json.JSONDecodeError, ValueError) as exc:
+        return {"ok": False, "error": str(exc)}
 
 
 def bored_gate(home: Path, nick: str, channel: str, now: float) -> str:

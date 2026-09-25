@@ -248,63 +248,17 @@ def _kind_phrase(kind: str, repo: str) -> str | None:
 
 
 def peer_talk_lines(peer: dict | None) -> list[str]:
-    """One conversational fact per list entry for a single machine."""
-    if not peer:
-        return []
-    mid = display_id(str(peer.get("id") or "?"))
-    running = int(peer.get("running") or 0)
-    queued = int(peer.get("queued") or 0)
-    job = _running_job(peer)
-    busy = running > 0 or queued > 0 or job is not None
+    """FR #341: no IRC status talk (idle/busy/model/repo). Digest webhook only.
 
-    if not busy:
-        return [f"{mid} is idle."]
-
-    lines: list[str] = []
-    model = _infer_model(peer)
-    if model:
-        lines.append(f"{mid} is on {model} now.")
-
-    kind = peer.get("kind")
-    repo = effective_repo(peer, job)
-    phrase = _kind_phrase(str(kind) if kind else "", repo or "")
-    if phrase:
-        lines.append(phrase)
-    elif repo:
-        lines.append(f"Working on {repo}.")
-
-    sha = peer.get("sha")
-    if sha:
-        lines.append(f"SHA is {_short_sha(str(sha))}.")
-
-    duration = _human_duration(peer)
-    hung = peer.get("hung")
-    if hung is True or str(hung).lower() in ("1", "true", "yes"):
-        if duration:
-            lines.append(f"About {duration} in, looks hung.")
-        else:
-            lines.append(f"{mid} looks hung.")
-    elif duration:
-        resp = peer.get("responding")
-        if resp is False or str(resp).lower() in ("0", "false", "no"):
-            lines.append(f"About {duration} in, not responding.")
-        else:
-            lines.append(f"About {duration} in, still responding.")
-    elif queued > 0 and running == 0:
-        lines.append(f"{mid} has {queued} queued.")
-
-    return lines or [f"{mid} is busy."]
+    Kept as a named API for callers; always returns an empty list so join-briefs
+    and mention ACKs never announce worker busy/idle on the wire.
+    """
+    return []
 
 
 def network_talk_lines(home: Path) -> list[str]:
-    """Current fleet picture: one fact per line across machines."""
-    lines: list[str] = []
-    peers = list_fleet_peers(home)
-    if not peers:
-        return ["No bob-peers status on this box yet."]
-    for peer in peers:
-        lines.extend(peer_talk_lines(peer))
-    return lines
+    """FR #341: join brief must not dump idle/busy lines onto IRC."""
+    return []
 
 
 def _tray_jobs_field(peer: dict) -> str:
@@ -343,33 +297,8 @@ def tray_pull_lines(home: Path) -> list[str]:
 
 
 def change_talk_line(before: dict | None, after: dict) -> str | None:
-    """One short channel line when a named field flips (not lastSeen-only)."""
-    if not after:
-        return None
-    mid = display_id(str(after.get("id") or "?"))
-    if before is None:
-        return peer_talk_lines(after)[0]
-
-    def _sig(doc: dict) -> str:
-        parts = [
-            str(doc.get("model") or ""),
-            str(doc.get("kind") or ""),
-            str(doc.get("repo") or ""),
-            str(doc.get("sha") or ""),
-            str(doc.get("hung") or ""),
-            str(doc.get("responding") or ""),
-            str(int(doc.get("running") or 0)),
-            str(int(doc.get("queued") or 0)),
-        ]
-        job = _running_job(doc)
-        if job:
-            parts.append(effective_repo(doc, job) or "")
-        return "|".join(parts)
-
-    if _sig(before) == _sig(after):
-        return None
-    new_lines = peer_talk_lines(after)
-    return new_lines[0] if new_lines else None
+    """FR #341: never emit status-change talk on IRC (digest owns state)."""
+    return None
 
 
 def is_fleet_bob_nick(nick: str) -> bool:
@@ -466,7 +395,7 @@ def mention_reply_line(
         return None
     mid = display_id(machine_id)
     peer = _resolve_peer_id(home, machine_id) or {}
-    status = (peer_talk_lines(peer) or [f"{mid} is here."])[0]
+    # FR #341: mention ACK is presence + weekly only — never idle/busy/model/repo status.
     weekly = peer.get("weekly")
     if weekly is None or weekly == "":
         week = "weekly=-"
@@ -497,7 +426,7 @@ def mention_reply_line(
             week = f"weekly={w}"
     heard = heard_snippet(body, list(nicks) + ["all", "bobiverse"])
     who = str(asker or "").strip() or "there"
-    line = f"@{who} {mid} here. {week}. {status}"
+    line = f"@{who} {mid} here. {week}."
     if heard:
         line = f"{line} Heard: {heard}"
     if len(line) > 350:

@@ -9,6 +9,7 @@ import bobtalk
 
 
 def test_idle_one_line(tmp_path):
+    # FR #341: no IRC idle status lines (webhook owns busy/idle).
     bobstat.write_peer(
         tmp_path,
         {
@@ -22,10 +23,12 @@ def test_idle_one_line(tmp_path):
         },
     )
     lines = bobtalk.network_talk_lines(tmp_path)
-    assert lines == ["flamingo is idle."]
+    assert lines == []
+    assert bobtalk.peer_talk_lines(bobstat.read_peer(tmp_path, "flamingo")) == []
 
 
 def test_busy_facts_split(tmp_path):
+    # FR #341: peer_talk_lines empty; tray line still carries machine-readable state.
     bobstat.write_peer(
         tmp_path,
         {
@@ -43,11 +46,11 @@ def test_busy_facts_split(tmp_path):
             "jobs": [{"repo": "SimonBarnett/agentic_build", "state": "running"}],
         },
     )
-    lines = bobtalk.peer_talk_lines(bobstat.read_peer(tmp_path, "ionos"))
-    assert lines[0] == "ionos is on Cursor Models now."
-    assert "MRB of SimonBarnett/agentic_build" in lines[1]
-    assert any(l.startswith("SHA is 82a8fb") for l in lines)
-    assert any("still responding" in l for l in lines)
+    peer = bobstat.read_peer(tmp_path, "ionos")
+    assert bobtalk.peer_talk_lines(peer) == []
+    tray = bobtalk.format_tray_peer_line(peer)
+    assert "repo=SimonBarnett/agentic_build" in tray
+    assert "running=1" in tray
 
 
 def test_briefer_chair_else_first_bob():
@@ -73,9 +76,7 @@ def test_ionos_repo_question_mark_from_job(tmp_path):
         },
     )
     peer = bobstat.read_peer(tmp_path, "ionos")
-    lines = bobtalk.peer_talk_lines(peer)
-    assert not any("Working on ?" in l for l in lines)
-    assert any("SimonBarnett/agentic_irc" in l for l in lines)
+    assert bobtalk.peer_talk_lines(peer) == []
     tray = bobtalk.format_tray_peer_line(peer)
     assert "repo=SimonBarnett/agentic_irc" in tray
 
@@ -140,7 +141,8 @@ def test_mention_ack_when_weekly_zero(tmp_path):
     assert line is not None
     assert line.startswith("@cursor-flamingo ionos here.")
     assert "weekly=0 (cannot grok-talk)" in line
-    assert "idle" in line
+    assert " is idle" not in line.lower()
+    assert " is busy" not in line.lower()
     assert "Heard:" in line
     assert "align shop-channel" in line
 

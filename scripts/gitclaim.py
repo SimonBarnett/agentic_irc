@@ -55,9 +55,10 @@ ID_RE = re.compile(r"^#\d+$")
 NAK_BORED_WAIT = "NAK !BORED wait"
 NAK_BORED_BUSY = "NAK !BORED busy"
 NO_JOBS = "no jobs"
-LIST_RATE_S = 10.0
-LIST_MAX_LINES = 30
-LIST_LINE_MAX = 350  # under Ergo PRIVMSG budget (FR #205)
+# FR #208 (updated Simon 2026-09-25): one line per job, no flood.
+LIST_RATE_S = 30.0
+LIST_MAX_LINES = 10  # job lines; + optional 1 summary + 1 more-hint <= ~12 total
+LIST_LINE_MAX = 400  # bytes budget; only title is truncated
 _LIST_LAST: dict[str, float] = {}
 
 
@@ -109,22 +110,25 @@ def is_list_command(body: str) -> bool:
     return bool(parts) and parts[0].lower() == "!list"
 
 
-def parse_list_command(body: str) -> tuple[str | None, str | None]:
-    """Return (task_filter_upper_or_None, repo_filter_or_None)."""
+def parse_list_command(body: str) -> tuple[str | None, str | None, bool]:
+    """Return (task_filter, repo_filter, list_all)."""
     parts = (body or "").strip().split()
     if not parts or parts[0].lower() != "!list":
-        return None, None
+        return None, None, False
     task_f: str | None = None
     repo_f: str | None = None
+    list_all = False
     for p in parts[1:]:
         up = p.upper()
-        if up in TASK_KINDS:
+        low = p.lower()
+        if low in ("all", "full"):
+            list_all = True
+            continue
+        if up in TASK_KINDS or up in ("FR", "MRB", "UAT", "PR", "FIX", "BUILD"):
             task_f = up
         elif REPO_RE.fullmatch(p) or ("/" in p and len(p) < 120):
             repo_f = p
-        elif up in ("FR", "MRB", "UAT", "PR", "FIX", "BUILD"):
-            task_f = up
-    return task_f, repo_f
+    return task_f, repo_f, list_all
 
 
 def reset_list_rate() -> None:
@@ -132,6 +136,7 @@ def reset_list_rate() -> None:
 
 
 def list_rate_ok(nick: str, now: float) -> bool:
+    """True if nick may receive a full list; stamps last time when True."""
     key = (nick or "").strip().lower()
     if not key:
         return False
@@ -142,7 +147,26 @@ def list_rate_ok(nick: str, now: float) -> bool:
     return True
 
 
+def list_rate_remaining_s(nick: str, now: float) -> float:
+    key = (nick or "").strip().lower()
+    last = _LIST_LAST.get(key)
+    if last is None:
+        return 0.0
+    left = LIST_RATE_S - (float(now) - last)
+    return max(0.0, left)
+
+
+def list_rate_notice(nick: str, now: float) -> str:
+    left = list_rate_remaining_s(nick, now)
+    ago = LIST_RATE_S - left
+    if ago < 0:
+        ago = 0.0
+    return f"(list sent {int(ago)}s ago)"
+
+
 def _job_title(row: dict) -> str:
+    if str(row.get("title") or "").strip():
+        return str(row.get("title")).strip()
     line = str(row.get("line") or "")
     # GIT issues repo opened #N title by user — title is mid tokens
     if " by " in line:
@@ -154,33 +178,64 @@ def _job_title(row: dict) -> str:
     return ""
 
 
-def _job_url(row: dict) -> str:
-    repo = str(row.get("repo") or "").strip()
-    ident = str(row.get("id") or "").strip()
-    if not repo or not ID_RE.fullmatch(ident):
-        return ""
-    n = ident.lstrip("#")
-    task = str(row.get("task") or "")
-    kind = "pull" if task == "MRB" else "issues"
-    return f"https://github.com/{repo}/{kind}/{n}"
+def _job_age(row: dict, *, now: float | None = None) -> str:
+    """Compact age from ts/accepted_ts (e.g. 5m, 2h, 1d)."""
+    import time as _time
+
+    raw = str(row.get("ts") or row.get("accepted_ts") or "").strip()
+    if not raw:
+        return "?"
+    try:
+        # 2026-09-25T12:00:00Z
+        if raw.endswith("Z"):
+            raw = raw[:-1] + "+00:00"
+        from datetime import datetime
+
+        dt = datetime.fromisoformat(raw)
+        ts = dt.timestamp()
+    except ValueError:
+        return "?"
+    now_f = _time.time() if now is None else float(now)
+    sec = max(0, int(now_f - ts))
+    if sec < 60:
+        return f"{sec}s"
+    if sec < 3600:
+        return f"{sec // 60}m"
+    if sec < 86400:
+        return f"{sec // 3600}h"
+    return f"{sec // 86400}d"
 
 
-def format_list_line(index: int, total: int, row: dict, *, line_max: int = LIST_LINE_MAX) -> str:
-    """One PM line: ``1/17 FR SimonBarnett/repo#204 title url``."""
+def format_list_line(
+    index: int,
+    row: dict,
+    *,
+    line_max: int = LIST_LINE_MAX,
+    now: float | None = None,
+) -> str:
+    """One PM line: ``#1 FR owner/repo#n 2h title…`` (title truncated only)."""
     task = str(row.get("task") or "?")
     repo = str(row.get("repo") or "?")
     ident = str(row.get("id") or "?")
+    age = _job_age(row, now=now)
     title = _job_title(row)
-    url = _job_url(row)
-    head = f"{index}/{total} {task} {repo}{ident}"
-    bits = [head]
+    # Fixed prefix must never be truncated away.
+    head = f"#{index} {task} {repo}{ident} {age}"
+    budget = max(8, int(line_max) - len(head.encode("utf-8")) - 1)
     if title:
-        bits.append(title)
-    if url:
-        bits.append(url)
-    line = "  ".join(bits)
-    if len(line) > line_max:
-        line = line[: line_max - 1] + "…"
+        t_bytes = title.encode("utf-8")
+        if len(t_bytes) > budget:
+            # truncate on UTF-8 boundaries
+            cut = title
+            while cut and len(cut.encode("utf-8")) > budget - 1:
+                cut = cut[:-1]
+            title = cut + "…"
+        line = f"{head} {title}"
+    else:
+        line = head
+    # hard cap (should already fit)
+    while len(line.encode("utf-8")) > line_max and len(line) > 1:
+        line = line[:-2] + "…"
     return line
 
 
@@ -189,10 +244,15 @@ def format_unaccepted_list(
     *,
     task_filter: str | None = None,
     repo_filter: str | None = None,
+    list_all: bool = False,
     max_lines: int = LIST_MAX_LINES,
     line_max: int = LIST_LINE_MAX,
+    now: float | None = None,
 ) -> list[str]:
-    """PM lines for !list. Header + rows (claim order) or ``queue empty``."""
+    """PM lines for !list: optional one summary + one line per job + optional more.
+
+    Updated FR #208: no header spam; default max 10 jobs; ``N unaccepted (showing M)``.
+    """
     rows = list(load_unaccepted(home))
     rows.sort(key=_sort_key)
     if task_filter:
@@ -204,13 +264,21 @@ def format_unaccepted_list(
     if not rows:
         return ["queue empty"]
     total = len(rows)
-    show = rows[: max(1, int(max_lines))]
-    out = [f"unaccepted {len(show)}/{total}" if len(show) < total else f"unaccepted {total}"]
+    cap = max(1, int(max_lines))
+    if list_all:
+        cap = max(cap, total)
+    show = rows[:cap]
+    out: list[str] = []
+    if total > len(show):
+        out.append(f"{total} unaccepted (showing {len(show)})")
+    elif total > 1:
+        out.append(f"{total} unaccepted (showing {len(show)})")
+    # single job: no summary spam — just the job line
     for i, row in enumerate(show, start=1):
-        out.append(format_list_line(i, total, row, line_max=line_max))
+        out.append(format_list_line(i, row, line_max=line_max, now=now))
     more = total - len(show)
     if more > 0:
-        out.append(f"... +{more} more (see webhook report)")
+        out.append(f"+{more} more; !list all")
     return out
 
 

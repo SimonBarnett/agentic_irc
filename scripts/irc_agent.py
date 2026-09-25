@@ -1205,13 +1205,19 @@ class Client:
             return False
         now = time.time()
         if not gitclaim.list_rate_ok(src, now):
-            self.whisper(src, "NAK !list rate")
+            # FR #208 updated: one short notice, not NAK spam
+            self.whisper(src, gitclaim.list_rate_notice(src, now))
             info(f"INFO git-list rate nick={src}")
             return True
-        task_f, repo_f = gitclaim.parse_list_command(body)
+        task_f, repo_f, list_all = gitclaim.parse_list_command(body)
         lines = gitclaim.format_unaccepted_list(
-            self.home, task_filter=task_f, repo_filter=repo_f
+            self.home,
+            task_filter=task_f,
+            repo_filter=repo_f,
+            list_all=list_all,
+            now=now,
         )
+        # Pace under Ergo flood/fakelag (one job line per FLOOD_S).
         for ln in lines:
             self.whisper(src, ln)
             time.sleep(FLOOD_S)

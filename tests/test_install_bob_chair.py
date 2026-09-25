@@ -36,3 +36,32 @@ def test_install_bob_chair_clears_stale_quit_request_before_launch():
     assert clear != -1, "stale agent.quit.request is never removed"
     assert stop < clear < launch
     assert "$staleQuit = Join-Path $chairHome 'agent.quit.request'" in text
+
+
+def test_mrb_stale_quit_clear_is_only_agent_quit_request_file():
+    """Hostile: clear targets agent.quit.request only, not the whole chair home."""
+    text = SCRIPT.read_text(encoding="utf-8-sig")
+    assert "Join-Path $chairHome 'agent.quit.request'" in text
+    # Must not wipe home or delete arbitrary files
+    assert "Remove-Item -LiteralPath $chairHome" not in text
+    assert "Remove-Item -Recurse" not in text.split("Stop-PriorChair -Nick $nick", 1)[-1].split(
+        "& python $py", 1
+    )[0]
+
+
+def test_mrb_stale_quit_clear_before_persist_and_launch():
+    """Hostile: clear after Stop-PriorChair and before persist_chair_nick + launch."""
+    text = SCRIPT.read_text(encoding="utf-8-sig")
+    stop = text.index("Stop-PriorChair -Nick $nick")
+    clear = text.index("Remove-Item -LiteralPath $staleQuit")
+    persist = text.index("persist_chair_nick")
+    launch = text.index("& python $py")
+    assert stop < clear < persist < launch
+
+
+def test_mrb_stop_prior_still_writes_quit_request_for_graceful_old_chair():
+    """Graceful path still asks the old chair to quit; only the leftover is cleared."""
+    text = SCRIPT.read_text(encoding="utf-8-sig")
+    req = text[text.index("function Request-ChairQuit") : text.index("function Stop-PriorChair")]
+    assert "agent.quit.request" in req
+    assert "Request-ChairQuit" in text[text.index("function Stop-PriorChair") :]

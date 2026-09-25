@@ -485,6 +485,14 @@ class Client:
             self._pending_joins.discard(ch.lower())
             if not self._pending_joins:
                 self.joined.set()
+            if not bobreport.worker_channel_allowed(self.original_nick, ch):
+                # CAST IRON: workers live in #{machine} only - leave anything else.
+                try:
+                    self.send("PART " + ch + " :workers join #{machine} only")
+                except (OSError, AttributeError):
+                    pass
+                info(f"INFO worker auto-PART {ch} (workers join own #machine only)")
+                return
         if who and who.lower() not in self._mine_nicks() and ch.lower() == bobreport.FLEET_CHANNEL:
             self._maybe_brief_joiner(who)
         if not self._is_digest_operator():

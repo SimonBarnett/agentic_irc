@@ -41,17 +41,25 @@ def test_channels_for_nick():
     assert bobreport.channels_for_nick("w-io-4412", "#bobiverse") == ["#ionos"]
     assert bobreport.channels_for_nick("alice", "#ops") == ["#ops"]
     assert bobreport.normalize_channel("#dev1") == "#ce-priority-dev1"
-    # Talk seats share #{machine} with bob-* and rejoin #bobiverse (issue #108).
+    # CAST IRON (Simon 2026-09-25): talk seats JOIN their own #{machine} only, never #bobiverse.
     assert bobreport.parse_talk_seat_nick("ce-priority-dev1-16948") == "ce-priority-dev1"
     assert bobreport.parse_talk_seat_nick("flamingo-17568") == "flamingo"
     assert bobreport.parse_talk_seat_nick("bob-flamingo") is None
     assert bobreport.channels_for_nick(
         "ce-priority-dev1-16948", "#bobiverse,#ce-priority-dev1,#agentic_irc"
-    ) == ["#bobiverse", "#ce-priority-dev1", "#agentic_irc"]
-    assert bobreport.channels_for_nick("marchhare-20280", "#bobiverse,#marchhare") == [
-        "#bobiverse",
-        "#marchhare",
+    ) == ["#ce-priority-dev1"]
+    assert bobreport.channels_for_nick("marchhare-20280", "#bobiverse,#marchhare") == ["#marchhare"]
+    assert bobreport.channels_for_nick("marchhare-34992", "#bobiverse,#marchhare,#agentic_irc") == [
+        "#marchhare"
     ]
+    assert bobreport.worker_channel_allowed("marchhare-34992", "#marchhare")
+    assert not bobreport.worker_channel_allowed("marchhare-34992", "#bobiverse")
+    assert not bobreport.worker_channel_allowed("marchhare-34992", "#agentic_irc")
+    assert not bobreport.worker_channel_allowed("w-mh-41124", "#bobiverse")
+    assert not bobreport.worker_channel_allowed("flamingo-17568", "#marchhare")
+    assert bobreport.worker_channel_allowed("bob-marchhare", "#bobiverse")
+    assert bobreport.worker_channel_allowed("simon", "#bobiverse")
+    assert bobreport.worker_channel_allowed("Jeeves", "#bobiverse")
     assert bobreport.chair_channels() == [
         "#bobiverse",
         "#flamingo",

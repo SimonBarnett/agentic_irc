@@ -69,7 +69,8 @@ def test_request_shutdown_sends_quit_and_skips_reconnect(tmp_path: Path, monkeyp
     c.request_shutdown(":seat ended")
     assert any(x.startswith("PART ") for x in sent)
     assert any(x.startswith("QUIT ") for x in sent)
-    assert "PART #bobiverse :seat ended" in sent or "PART #ops :seat ended" in sent
+    assert "PART #flamingo :seat ended" in sent  # seats live in #{machine} only (CAST IRON 2026-09-25)
+    assert not any(x.startswith("PART #bobiverse") for x in sent)
     assert c._no_reconnect
     assert c.stop.is_set()
 

@@ -1,4 +1,4 @@
-"""Test-pack for issue #167 — rooms, webhook-only working_on, no Query status."""
+"""Test-pack for issue #167 â€” rooms, webhook-only working_on, no Query status."""
 from __future__ import annotations
 
 import re
@@ -8,6 +8,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 import argparse
 
+import bobreport
 import irc_agent
 import post_working_on as pwo
 
@@ -42,17 +43,32 @@ def test_post_working_on_enqueue_shop_is_noop(tmp_path):
     assert not (tmp_path / "outbox.txt").exists()
 
 
-def test_talk_seat_dual_channel_shop_when_fleet_first(tmp_path, monkeypatch):
+def test_talk_seat_joins_own_shop_only(tmp_path, monkeypatch):
+    # CAST IRON (Simon 2026-09-25): workers/seats JOIN #{machine} only, never #bobiverse.
     monkeypatch.setenv("AGENTIC_IRC_HOME", str(tmp_path))
-    c = irc_agent.Client(_args(tmp_path, "flamingo-17568", channel="#bobiverse,#flamingo"))
-    assert c.chan == "#bobiverse"
-    assert c.channels == ["#bobiverse", "#flamingo"]
-    c.handle_join("flamingo-17568", "#bobiverse")
-    assert not c.joined.is_set()
-    assert "#flamingo" in c._pending_joins
+    c = irc_agent.Client(_args(tmp_path, "flamingo-17568", channel="#bobiverse,#flamingo,#agentic_irc"))
+    assert c.chan == "#flamingo"
+    assert c.channels == ["#flamingo"]
     c.handle_join("flamingo-17568", "#flamingo")
     assert c.joined.is_set()
     assert not c._pending_joins
+
+
+def test_worker_auto_parts_foreign_channel(tmp_path, monkeypatch):
+    monkeypatch.setenv("AGENTIC_IRC_HOME", str(tmp_path))
+    c = irc_agent.Client(_args(tmp_path, "marchhare-34992", channel="#bobiverse,#marchhare"))
+    sent: list[str] = []
+    c.send = lambda line: sent.append(line)  # type: ignore[method-assign]
+    c.handle_join("marchhare-34992", "#bobiverse")
+    assert any(s.startswith("PART #bobiverse :") for s in sent)
+    sent.clear()
+    c.handle_join("marchhare-34992", "#marchhare")
+    assert not sent
+    c2 = irc_agent.Client(_args(tmp_path, "bob-marchhare", channel="#bobiverse,#marchhare"))
+    s2: list[str] = []
+    c2.send = lambda line: s2.append(line)  # type: ignore[method-assign]
+    c2.handle_join("bob-marchhare", "#bobiverse")
+    assert not any(s.startswith("PART") for s in s2)
 
 
 def test_start_talk_seat_refuses_steal_binding():
@@ -62,3 +78,23 @@ def test_start_talk_seat_refuses_steal_binding():
     assert "talk_seat_pid.py" in src
     assert "--bind-home" in src
     assert "LASTEXITCODE -eq 3" in src
+
+def test_mrb_w_star_and_agentic_irc_refused(tmp_path, monkeypatch):
+    """MRB #209: w-* and talk seats never allowed on #bobiverse/#agentic_irc."""
+    assert bobreport.channels_for_nick("w-mh-41124", "#bobiverse,#marchhare") == ["#marchhare"]
+    assert not bobreport.worker_channel_allowed("w-io-1", "#agentic_irc")
+    assert bobreport.worker_channel_allowed("w-io-1", "#ionos")
+    monkeypatch.setenv("AGENTIC_IRC_HOME", str(tmp_path))
+    c = irc_agent.Client(_args(tmp_path, "w-mh-99", channel="#bobiverse,#marchhare"))
+    assert c.channels == ["#marchhare"]
+    sent: list[str] = []
+    c.send = lambda line: sent.append(line)  # type: ignore[method-assign]
+    c.handle_join("w-mh-99", "#bobiverse")
+    assert any(s.startswith("PART #bobiverse :") for s in sent)
+    assert any("workers join" in s for s in sent)
+
+
+def test_mrb_underscore_suffix_still_shop_only():
+    # live_nick may gain _l on collision; original_nick drives allow
+    assert bobreport.worker_channel_allowed("marchhare-34992", "#marchhare")
+    assert not bobreport.worker_channel_allowed("marchhare-34992_", "#bobiverse")

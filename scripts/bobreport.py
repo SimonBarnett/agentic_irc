@@ -352,9 +352,10 @@ def parse_channel_list(raw: str) -> list[str]:
 def channels_for_nick(nick: str, requested: str) -> list[str]:
     """bob-* → fleet + shop; talk seats → fleet + shop (+ extras); w-* → shop only.
 
-    First JOIN creates #{machine} on Ergo. Talk seats ({machine}-{pid}) share the
-    shop with bob-{machine} and always JOIN #bobiverse (issue #108); callers cannot
-    omit fleet via requested channels.
+    First JOIN creates #{machine} on Ergo. CAST IRON (Simon 2026-09-25): worker
+    processes - talk seats ({machine}-{pid}) and w-* - JOIN their own #{machine}
+    ONLY, never #bobiverse or extras (#agentic_irc). Only bob-{machine}, Jeeves and
+    humans belong in #bobiverse. Supersedes issue #108 / PR #107.
     """
     req = parse_channel_list(requested)
     worker = parse_worker_nick(nick)
@@ -366,11 +367,22 @@ def channels_for_nick(nick: str, requested: str) -> list[str]:
         return [FLEET_CHANNEL, shop]
     talk_mid = parse_talk_seat_nick(nick)
     if talk_mid:
-        shop = shop_channel(talk_mid)
-        fleet = FLEET_CHANNEL.lower()
-        extras = [c for c in req if c.lower() not in (fleet, shop.lower())]
-        return [FLEET_CHANNEL, shop] + extras
+        return [shop_channel(talk_mid)]
     return req
+
+
+def worker_channel_allowed(nick: str, channel: str) -> bool:
+    """False when a worker/talk-seat nick is in any channel but its own #{machine}."""
+    n = (nick or "").strip().rstrip("_")
+    mid = None
+    worker = parse_worker_nick(n)
+    if worker:
+        mid = worker[0]
+    else:
+        mid = parse_talk_seat_nick(n)
+    if not mid:
+        return True
+    return normalize_channel(channel).lower() == shop_channel(mid).lower()
 
 
 def expand_join_channels(raw: str) -> list[str]:

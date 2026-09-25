@@ -344,7 +344,12 @@ def load_peers(path: Path | None = None) -> dict:
     path = path or (home() / "peers.json")
     if not path.exists():
         return {}
-    return json.loads(path.read_text(encoding="utf-8"))
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        # Unreadable (ACL from protect.protect_path under another token) or corrupt:
+        # start with no TOFU peers rather than crash-looping the seat (2026-09-25).
+        return {}
 
 
 def save_peers(peers: dict, path: Path | None = None) -> None:

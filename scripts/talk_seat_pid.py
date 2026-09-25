@@ -108,6 +108,53 @@ def coordinator_seat_pid(home: Path | str) -> int | None:
     return _seat_pid_from_doc(doc)
 
 
+def watch_seat_host_ok(nick: str, home: Path | str | None, alive=None) -> bool:
+    """AgentMonitor watch seats name the nick after the live monitor PID (coordinator seat=).
+
+    Since #119 agent= (irc_agent PID) is authoritative, but Watch-AgentHealth writes
+    agent=<irc_agent> AFTER launch, so every irc_agent restart saw suffix != agent= and
+    exited (crash loop, MarchHare 2026-09-25 11:28 BST). Accept the nick when its suffix
+    equals coordinator seat= AND that seat process is alive.
+    """
+    suffix = nick_suffix_pid(nick)
+    if suffix is None or not home:
+        return False
+    path = Path(home) / "coordinator.pid"
+    if not path.is_file():
+        return False
+    try:
+        doc = parse_coordinator_pid(path.read_text(encoding="utf-8"))
+        seat = int((doc.get("seat") or "").strip())
+        have = int(suffix)
+    except (OSError, ValueError):
+        return False
+    if seat != have or seat <= 0:
+        return False
+    if alive is None:
+        alive = _pid_alive
+    return bool(alive(seat))
+
+
+def _pid_alive(pid: int) -> bool:
+    if os.name == "nt":
+        import ctypes
+
+        k32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
+        h = k32.OpenProcess(0x1000, False, int(pid))
+        if not h:
+            return False
+        try:
+            code = ctypes.c_ulong()
+            return bool(k32.GetExitCodeProcess(h, ctypes.byref(code))) and code.value == 259
+        finally:
+            k32.CloseHandle(h)
+    try:
+        os.kill(int(pid), 0)
+    except OSError:
+        return False
+    return True
+
+
 def seat_pid_from_env() -> int | None:
     raw = (os.environ.get(_SEAT_ENV) or "").strip()
     if not raw:

@@ -55,6 +55,10 @@ ID_RE = re.compile(r"^#\d+$")
 NAK_BORED_WAIT = "NAK !BORED wait"
 NAK_BORED_BUSY = "NAK !BORED busy"
 NO_JOBS = "no jobs"
+LIST_RATE_S = 10.0
+LIST_MAX_LINES = 30
+LIST_LINE_MAX = 350  # under Ergo PRIVMSG budget (FR #205)
+_LIST_LAST: dict[str, float] = {}
 
 
 @dataclass(frozen=True)
@@ -97,6 +101,117 @@ def is_bored_command(body: str) -> bool:
 def is_accept_command(body: str) -> bool:
     parts = (body or "").strip().split(None, 1)
     return bool(parts) and parts[0].lower() == "!accept"
+
+
+def is_list_command(body: str) -> bool:
+    """True for !list and optional filters: !list fr|mrb|uat|repo."""
+    parts = (body or "").strip().split()
+    return bool(parts) and parts[0].lower() == "!list"
+
+
+def parse_list_command(body: str) -> tuple[str | None, str | None]:
+    """Return (task_filter_upper_or_None, repo_filter_or_None)."""
+    parts = (body or "").strip().split()
+    if not parts or parts[0].lower() != "!list":
+        return None, None
+    task_f: str | None = None
+    repo_f: str | None = None
+    for p in parts[1:]:
+        up = p.upper()
+        if up in TASK_KINDS:
+            task_f = up
+        elif REPO_RE.fullmatch(p) or ("/" in p and len(p) < 120):
+            repo_f = p
+        elif up in ("FR", "MRB", "UAT", "PR", "FIX", "BUILD"):
+            task_f = up
+    return task_f, repo_f
+
+
+def reset_list_rate() -> None:
+    _LIST_LAST.clear()
+
+
+def list_rate_ok(nick: str, now: float) -> bool:
+    key = (nick or "").strip().lower()
+    if not key:
+        return False
+    last = _LIST_LAST.get(key)
+    if last is not None and (float(now) - last) < LIST_RATE_S:
+        return False
+    _LIST_LAST[key] = float(now)
+    return True
+
+
+def _job_title(row: dict) -> str:
+    line = str(row.get("line") or "")
+    # GIT issues repo opened #N title by user — title is mid tokens
+    if " by " in line:
+        mid = line.rsplit(" by ", 1)[0]
+        parts = mid.split()
+        # drop GIT event repo action #id
+        if len(parts) >= 5 and parts[0] == "GIT":
+            return " ".join(parts[5:]).strip()
+    return ""
+
+
+def _job_url(row: dict) -> str:
+    repo = str(row.get("repo") or "").strip()
+    ident = str(row.get("id") or "").strip()
+    if not repo or not ID_RE.fullmatch(ident):
+        return ""
+    n = ident.lstrip("#")
+    task = str(row.get("task") or "")
+    kind = "pull" if task == "MRB" else "issues"
+    return f"https://github.com/{repo}/{kind}/{n}"
+
+
+def format_list_line(index: int, total: int, row: dict, *, line_max: int = LIST_LINE_MAX) -> str:
+    """One PM line: ``1/17 FR SimonBarnett/repo#204 title url``."""
+    task = str(row.get("task") or "?")
+    repo = str(row.get("repo") or "?")
+    ident = str(row.get("id") or "?")
+    title = _job_title(row)
+    url = _job_url(row)
+    head = f"{index}/{total} {task} {repo}{ident}"
+    bits = [head]
+    if title:
+        bits.append(title)
+    if url:
+        bits.append(url)
+    line = "  ".join(bits)
+    if len(line) > line_max:
+        line = line[: line_max - 1] + "…"
+    return line
+
+
+def format_unaccepted_list(
+    home: Path,
+    *,
+    task_filter: str | None = None,
+    repo_filter: str | None = None,
+    max_lines: int = LIST_MAX_LINES,
+    line_max: int = LIST_LINE_MAX,
+) -> list[str]:
+    """PM lines for !list. Header + rows (claim order) or ``queue empty``."""
+    rows = list(load_unaccepted(home))
+    rows.sort(key=_sort_key)
+    if task_filter:
+        tf = task_filter.upper()
+        rows = [r for r in rows if str(r.get("task") or "").upper() == tf]
+    if repo_filter:
+        rf = repo_filter.lower()
+        rows = [r for r in rows if str(r.get("repo") or "").lower() == rf]
+    if not rows:
+        return ["queue empty"]
+    total = len(rows)
+    show = rows[: max(1, int(max_lines))]
+    out = [f"unaccepted {len(show)}/{total}" if len(show) < total else f"unaccepted {total}"]
+    for i, row in enumerate(show, start=1):
+        out.append(format_list_line(i, total, row, line_max=line_max))
+    more = total - len(show)
+    if more > 0:
+        out.append(f"... +{more} more (see webhook report)")
+    return out
 
 
 def parse_accept(body: str) -> tuple[str, str, str] | None:

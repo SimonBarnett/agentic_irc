@@ -46,3 +46,24 @@ def test_load_peers_unreadable_returns_empty(tmp_path: Path, monkeypatch):
 
     monkeypatch.setattr(type(p), "read_text", _deny)
     assert seal.load_peers(p) == {}
+
+def test_mrb_corrupt_peers_and_seat_mismatch(tmp_path: Path):
+    import seal
+
+    p = tmp_path / "peers.json"
+    p.write_text("{not-json", encoding="utf-8")
+    assert seal.load_peers(p) == {}
+    _coord(tmp_path, 34992, 19864)
+    # seat= does not match suffix
+    assert not talk_seat_pid.watch_seat_host_ok("marchhare-34992", tmp_path, alive=lambda p: p == 1)
+    # agent PID match alone is not this path; watch_seat requires seat=
+    assert talk_seat_pid.watch_seat_host_ok("marchhare-34992", tmp_path, alive=lambda p: p == 34992)
+    # missing coordinator.pid
+    (tmp_path / "coordinator.pid").unlink()
+    assert not talk_seat_pid.watch_seat_host_ok("marchhare-34992", tmp_path, alive=lambda p: True)
+
+
+def test_mrb_load_peers_missing_file(tmp_path: Path):
+    import seal
+
+    assert seal.load_peers(tmp_path / "nope.json") == {}

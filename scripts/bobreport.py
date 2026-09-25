@@ -154,6 +154,76 @@ def looks_like_secret(text: str) -> bool:
     return any(m in lower for m in _SECRET_MARKERS)
 
 
+def secret_marker_hit(text: str) -> str | None:
+    """Return the first marker *name* found in text (never a secret value)."""
+    lower = (text or "").lower()
+    for m in _SECRET_MARKERS:
+        if m in lower:
+            return m
+    return None
+
+
+_GIT_ACTION_WORDS = frozenset(
+    {
+        "opened",
+        "closed",
+        "reopened",
+        "labeled",
+        "unlabeled",
+        "edited",
+        "synchronize",
+        "ready_for_review",
+        "converted_to_draft",
+        "created",
+        "deleted",
+        "assigned",
+        "unassigned",
+    }
+)
+
+
+def redact_git_announce_line(line: str, marker: str | None = None) -> str:
+    """Replace title-bearing announce text when the announce line itself trips a marker.
+
+    Keeps repo/action/number/author; substitutes a fixed redaction token that does not
+    contain any _SECRET_MARKERS substring (do not echo the marker name if it is a marker).
+    """
+    # Never put marker text like "password=" into the redaction token.
+    redacted = "[title redacted: secret marker]"
+    raw = (line or "").strip()
+    if not raw.startswith(GIT_ANNOUNCE_PREFIX):
+        return GIT_ANNOUNCE_PREFIX + redacted
+    rest = raw[len(GIT_ANNOUNCE_PREFIX) :].strip()
+    parts = rest.split()
+    if not parts:
+        return GIT_ANNOUNCE_PREFIX + redacted
+    event = parts[0]
+    repo = parts[1] if len(parts) > 1 else ""
+    actor = ""
+    if " by " in rest:
+        actor = rest.rsplit(" by ", 1)[-1].strip()
+    # Keep action + #N when present (issues/PR); stop before title words.
+    mid: list[str] = []
+    for p in parts[2:]:
+        if p == "by":
+            break
+        if p in _GIT_ACTION_WORDS or p.startswith("#"):
+            mid.append(p)
+            continue
+        break
+    bits = [event]
+    if repo:
+        bits.append(repo)
+    bits.extend(mid)
+    bits.append(redacted)
+    if actor:
+        bits.append(f"by {actor}")
+    out = GIT_ANNOUNCE_PREFIX + " ".join(bits)
+    if len(out) > MAX_GIT_ANNOUNCE:
+        out = out[: MAX_GIT_ANNOUNCE - 1] + "…"
+    return out
+
+
 def reset_dedupe() -> None:
     _DISCONNECT_DEDUPE.clear()
 
@@ -1190,16 +1260,17 @@ def enqueue_chair_fleet_privmsg(home: Path, body: str, channel: str = FLEET_CHAN
 
 
 def apply_git_webhook(home: Path, event: str, payload: dict) -> GitWebhookOutcome:
+    """Announce path only — never secret-scan the full GitHub JSON body (FR #206)."""
     if not (event or "").strip():
         return GitWebhookOutcome(ok=False, err="no event")
     if not isinstance(payload, dict):
         return GitWebhookOutcome(ok=False, err="malformed")
-    blob = json.dumps(payload, separators=(",", ":"))
-    if looks_like_secret(blob):
-        return GitWebhookOutcome(ok=False, err="secret")
     line = format_github_webhook_announce(event, payload)
-    if not line.startswith(GIT_ANNOUNCE_PREFIX) or looks_like_secret(line):
+    if not line.startswith(GIT_ANNOUNCE_PREFIX):
         return GitWebhookOutcome(ok=False, err="announce")
+    hit = secret_marker_hit(line)
+    if hit:
+        line = redact_git_announce_line(line, hit)
     import gitclaim
 
     claim = gitclaim.claim_from_payload(event, payload, line=line)

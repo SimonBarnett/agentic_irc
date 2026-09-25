@@ -39,3 +39,35 @@ def test_task_has_own_log_and_no_password():
     lowered = text.lower()
     assert "-password" not in lowered
     assert "connect.password" not in lowered
+
+
+def test_mrb_defaults_and_principal_are_fleet_chair_safe():
+    """Hostile: fleet Ergo defaults, Highest interactive, no NSSM, missing chair throws."""
+    text = _text()
+    assert "[string]$IrcHost = 'irc.ntsa.uk'" in text
+    assert "[int]$Port = 6697" in text
+    assert "[string]$TaskName = 'BobJeeves-chair'" in text
+    assert "-RunLevel Highest" in text
+    assert "New-ScheduledTaskPrincipal -UserId $user -LogonType Interactive" in text
+    assert "Register-ScheduledTask" in text and "-Force" in text
+    # Body must not shell out to nssm (comment may mention NSSM as the problem)
+    body = text.split("#Requires", 1)[-1]
+    assert "nssm" not in body.lower()
+    assert "missing $chair" in text
+    assert "long-running-background-tasks" in text
+    # Watchdog: logon + repeating Once; IgnoreNew so one chair lifetime per instance
+    assert "New-ScheduledTaskTrigger -AtLogOn" in text
+    assert "New-ScheduledTaskTrigger -Once" in text
+    assert "RepetitionDuration (New-TimeSpan -Days 9999)" in text
+
+
+def test_mrb_start_now_is_opt_in_only():
+    text = _text()
+    assert "[switch]$StartNow" in text
+    assert "if ($StartNow)" in text
+    assert "Start-ScheduledTask -TaskName $TaskName" in text
+    # Default path must not auto-start without the switch (Start-ScheduledTask only inside if)
+    after = text.split("if ($StartNow)", 1)[1]
+    before = text.split("if ($StartNow)", 1)[0]
+    assert "Start-ScheduledTask" in after
+    assert "Start-ScheduledTask" not in before

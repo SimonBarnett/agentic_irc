@@ -66,12 +66,17 @@ def handle_digest_get(home: Path, briefer_nick: str = "") -> tuple[int, bytes]:
     return 200, body
 
 
-def _parse_json_body(body: bytes | str) -> dict | None:
+def _parse_json_body(body: bytes | str, *, scan_secret: bool = True) -> dict | None:
+    """Parse JSON object. scan_secret=True rejects bodies that look like secrets (report path).
+
+    Git webhooks must use scan_secret=False (FR #206): issue bodies may *mention*
+    marker strings without being secrets; only the announce line is checked later.
+    """
     if isinstance(body, bytes):
         raw = body.decode("utf-8", "replace")
     else:
         raw = body or ""
-    if bobreport.looks_like_secret(raw):
+    if scan_secret and bobreport.looks_like_secret(raw):
         return None
     try:
         payload = json.loads(raw or "{}")
@@ -82,6 +87,27 @@ def _parse_json_body(body: bytes | str) -> dict | None:
     return payload
 
 
+def _log_git_reject(
+    reason: str,
+    *,
+    event: str = "",
+    repo: str = "",
+    number: str = "",
+    marker: str = "",
+) -> None:
+    """One-line reject reason; marker *name* only, never a secret value."""
+    bits = [f"reason={reason}"]
+    if event:
+        bits.append(f"event={event}")
+    if repo:
+        bits.append(f"repo={repo}")
+    if number:
+        bits.append(f"number={number}")
+    if marker:
+        bits.append(f"marker={marker}")
+    print("INFO git webhook reject " + " ".join(bits), flush=True)
+
+
 def handle_git_webhook(
     headers: dict[str, str],
     body: bytes | str,
@@ -90,13 +116,29 @@ def handle_git_webhook(
     hdrs = {str(k).lower(): str(v) for k, v in (headers or {}).items()}
     event = (hdrs.get("x-github-event") or "").strip()
     if not event:
+        _log_git_reject("no event")
         return 400, b""
-    payload = _parse_json_body(body)
+    # Do not secret-scan the full JSON (FR #206).
+    payload = _parse_json_body(body, scan_secret=False)
     if payload is None:
+        _log_git_reject("invalid json", event=event)
         return 400, b""
     out = bobreport.apply_git_webhook(home, event, payload)
     if not out.ok:
-        return 400, b""
+        repo = ""
+        number = ""
+        if isinstance(payload, dict):
+            repo = bobreport._github_repo_name(payload)
+            issue = payload.get("issue") if isinstance(payload.get("issue"), dict) else None
+            pr = payload.get("pull_request") if isinstance(payload.get("pull_request"), dict) else None
+            ent = issue or pr
+            if isinstance(ent, dict) and ent.get("number") is not None:
+                number = str(ent.get("number"))
+        _log_git_reject(out.err or "error", event=event, repo=repo, number=number)
+        # 400 only for malformed request shape; other failures are server-side.
+        if out.err in ("no event", "malformed", "announce"):
+            return 400, b""
+        return 500, b""
     return 204, b""
 
 

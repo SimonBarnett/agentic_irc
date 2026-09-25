@@ -42,7 +42,7 @@ def test_parse_allowlist_and_skip_ping():
     assert parsed is not None
     assert (parsed.repo, parsed.task, parsed.id, parsed.event, parsed.action) == (
         "SimonBarnett/agentic_irc",
-        "PR",
+        "FR",
         "#42",
         "issues",
         "opened",
@@ -93,17 +93,16 @@ def test_parse_allowlist_and_skip_ping():
         )
         is None
     )
-    assert (
-        gitclaim.claim_from_payload(
-            "pull_request",
-            {
-                "action": "closed",
-                "pull_request": {"number": 3},
-                "repository": {"full_name": "SimonBarnett/agentic_irc"},
-            },
-        )
-        is None
+    # FR #207: closed PRs still produce a claim for supersede (merged flag)
+    closed = gitclaim.claim_from_payload(
+        "pull_request",
+        {
+            "action": "closed",
+            "pull_request": {"number": 3, "merged": False},
+            "repository": {"full_name": "SimonBarnett/agentic_irc"},
+        },
     )
+    assert closed is not None and closed.action == "closed" and closed.merged is False
     assert gitclaim.parse_accept("FILE v1 ACCEPT abcdef") is None
     assert gitclaim.is_accept_command("FILE v1 ACCEPT abcdef") is False
     assert gitclaim.parse_accept("!ACCEPT SimonBarnett/agentic_irc PR #1") == (
@@ -152,7 +151,7 @@ def test_webhook_queues_issue_not_ping_or_push(tmp_path):
     assert queued.ok
     rows = gitclaim.load_unaccepted(tmp_path)
     assert len(rows) == 1
-    assert rows[0]["task"] == "PR" and rows[0]["id"] == "#42"
+    assert rows[0]["task"] == "FR" and rows[0]["id"] == "#42"
     again = bobreport.apply_git_webhook(tmp_path, "issues", issue)
     assert again.ok
     assert len(gitclaim.load_unaccepted(tmp_path)) == 1
@@ -323,7 +322,8 @@ def _busy(home: Path, text: str) -> None:
     bobreport.save_digest(home, doc)
 
 
-def test_bored_claims_top_via_webhook_accept_is_noop(tmp_path, monkeypatch):
+def test_bored_offers_top_ack_accepts_accept_is_noop(tmp_path, monkeypatch):
+    """FR #207: !BORED offers; ACK accepts; !ACCEPT noop."""
     httpd, thread = _serve(tmp_path, monkeypatch)
     try:
         clock = {"t": 1_000_000.0}
@@ -331,7 +331,13 @@ def test_bored_claims_top_via_webhook_accept_is_noop(tmp_path, monkeypatch):
         assert gitclaim.enqueue_unaccepted(tmp_path, _claim(1)) == "added"
         assert gitclaim.enqueue_unaccepted(tmp_path, _claim(2)) == "added"
         chair.handle_privmsg("w-fl-4412!u@h", "#flamingo", "!BORED")
-        assert sent == ["PRIVMSG #flamingo :SimonBarnett/agentic_irc MRB #1"]
+        assert sent == ["PRIVMSG #flamingo :w-fl-4412: ASSIGN SimonBarnett/agentic_irc MRB #1"]
+        # still unaccepted until ACK
+        assert [row["id"] for row in gitclaim.load_unaccepted(tmp_path)] == ["#1", "#2"]
+        assert gitclaim.load_accepted(tmp_path) == []
+        sent.clear()
+        chair.handle_privmsg("w-fl-4412!u@h", "#flamingo", "ACK starting")
+        assert any("accepted SimonBarnett/agentic_irc MRB #1" in x for x in sent)
         assert [row["id"] for row in gitclaim.load_unaccepted(tmp_path)] == ["#2"]
         assert gitclaim.load_accepted(tmp_path)[0]["id"] == "#1"
         sent.clear()
@@ -345,11 +351,13 @@ def test_bored_claims_top_via_webhook_accept_is_noop(tmp_path, monkeypatch):
         sent.clear()
         chair.handle_privmsg("w-fl-4412!u@h", "#flamingo", "!BORED")
         assert sent == ["PRIVMSG #flamingo :NAK !BORED wait"]
-        assert [row["id"] for row in gitclaim.load_unaccepted(tmp_path)] == ["#2"]
         clock["t"] += gitclaim.IDLE_S + 1
         sent.clear()
         chair.handle_privmsg("w-mh-3!u@h", "#marchhare", "!bored")
-        assert sent == ["PRIVMSG #marchhare :SimonBarnett/agentic_irc MRB #2"]
+        assert sent == ["PRIVMSG #marchhare :w-mh-3: ASSIGN SimonBarnett/agentic_irc MRB #2"]
+        sent.clear()
+        chair.handle_privmsg("w-mh-3!u@h", "#marchhare", "ACK")
+        assert any("accepted" in x and "MRB #2" in x for x in sent)
         assert gitclaim.load_unaccepted(tmp_path) == []
     finally:
         httpd.shutdown()
@@ -361,7 +369,7 @@ def test_bored_filters_and_empty(tmp_path, monkeypatch):
     try:
         clock = {"t": 5_000.0}
         chair, sent = _client(tmp_path, monkeypatch, "Jeeves", True, clock)
-        gitclaim.enqueue_unaccepted(tmp_path, _claim(4, task="PR", event="issues", action="opened"))
+        gitclaim.enqueue_unaccepted(tmp_path, _claim(4, task="FR", event="issues", action="opened"))
         chair.handle_privmsg("w-fl-4412!u@h", "#ionos", "!BORED")
         chair.handle_privmsg("bob-flamingo!u@h", "#flamingo", "!BORED")
         chair.handle_privmsg("w-fl-4412!u@h", "#flamingo", "!BORED please")
@@ -382,7 +390,11 @@ def test_bored_filters_and_empty(tmp_path, monkeypatch):
         clock["t"] += gitclaim.IDLE_S + 1
         sent.clear()
         chair.handle_privmsg("w-mh-3!u@h", "#marchhare", "!BORED")
-        assert sent == ["PRIVMSG #marchhare :SimonBarnett/agentic_irc PR #4"]
+        assert sent == ["PRIVMSG #marchhare :w-mh-3: ASSIGN SimonBarnett/agentic_irc FR #4"]
+        assert len(gitclaim.load_unaccepted(tmp_path)) == 1
+        sent.clear()
+        chair.handle_privmsg("w-mh-3!u@h", "#marchhare", "ACK")
+        assert any("accepted" in x and "FR #4" in x for x in sent)
         assert gitclaim.load_unaccepted(tmp_path) == []
         sent.clear()
         chair.handle_privmsg("w-io-2!u@h", "#ionos", "!BORED")
@@ -392,16 +404,26 @@ def test_bored_filters_and_empty(tmp_path, monkeypatch):
         thread.join(timeout=2)
 
 
-def test_bob_does_not_auto_accept_and_file_accept_is_separate(tmp_path, monkeypatch):
+def test_bob_ear_offers_on_bored_file_accept_is_separate(tmp_path, monkeypatch):
+    """FR #207: bob-* ear may offer on !BORED in shop; FILE ACCEPT / !ACCEPT do not claim."""
     clock = {"t": 80.0}
     bob, sent = _client(tmp_path, monkeypatch, "bob-flamingo", False, clock)
+    # queue is webhook-owned; bob does not enqueue from GIT announce alone
     line = "GIT issues SimonBarnett/agentic_irc opened #9 ship by friday by simon"
     bob.handle_privmsg("Jeeves!u@h", "#bobiverse", line)
-    bob.handle_privmsg("w-fl-4412!u@h", "#flamingo", "!BORED")
-    assert sent == []
     assert not gitclaim.queue_path(tmp_path).exists()
+    gitclaim.enqueue_unaccepted(
+        tmp_path,
+        gitclaim.GitClaim(
+            "SimonBarnett/agentic_irc", "FR", "#9", "issues", "opened", line
+        ),
+    )
+    bob.handle_privmsg("w-fl-4412!u@h", "#flamingo", "!BORED")
+    assert any("ASSIGN" in x and "FR #9" in x for x in sent)
     chair, chair_sent = _client(tmp_path, monkeypatch, "Jeeves", True, clock)
     chair.handle_privmsg("w-fl-4412!u@h", "#flamingo", "FILE v1 ACCEPT abcdef")
-    chair.handle_privmsg("w-fl-4412!u@h", "#flamingo", "!ACCEPT SimonBarnett/agentic_irc PR #9")
+    chair.handle_privmsg("w-fl-4412!u@h", "#flamingo", "!ACCEPT SimonBarnett/agentic_irc FR #9")
     assert chair_sent == []
+    # still unaccepted until ACK
+    assert len(gitclaim.load_unaccepted(tmp_path)) == 1
     assert gitclaim.load_accepted(tmp_path) == []

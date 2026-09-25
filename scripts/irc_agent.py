@@ -76,19 +76,131 @@ REG_FAIL_CMDS = frozenset(
 )
 
 
+_BOM_UTF8 = b"\xef\xbb\xbf"
+_BOM_CHAR = "\ufeff"
+# Pre-wrapped outbox: optional BOM + PRIVMSG target :body
+_PREWRAPPED_PRIVMSG = re.compile(
+    r"^\s*PRIVMSG\s+(\S+)\s+:(.*)$",
+    re.IGNORECASE | re.DOTALL,
+)
+
+
+def normalize_outbox_line(text: str) -> tuple[str, str]:
+    """
+    Normalize one outbox line for send (FR #226).
+
+    Returns (kind, line) where kind is:
+      - ``privmsg`` — ready ``PRIVMSG target :body`` (no double-wrap)
+      - ``bare`` — chat body only (caller may ``say()``)
+      - ``empty`` — skip
+
+    Strips leading BOM. If the line is already ``PRIVMSG …``, keeps a single wrap
+    (unwraps accidental nested ``PRIVMSG`` in the body once).
+    """
+    raw = text or ""
+    # strip all leading BOMs and spaces (keep trailing body spaces after first non-ws)
+    s = raw
+    while s.startswith(_BOM_CHAR):
+        s = s[1:]
+    # lstrip spaces/tabs only at start; BOM may sit after spaces
+    lead = 0
+    while lead < len(s) and s[lead] in " \t\ufeff":
+        lead += 1
+    s = s[lead:]
+    if not s:
+        return "empty", ""
+
+    m = _PREWRAPPED_PRIVMSG.match(s)
+    if m:
+        target = m.group(1).strip()
+        body = m.group(2)
+        # Nested wrap: body itself starts with PRIVMSG (double-wrap artifact)
+        nested = 0
+        while True:
+            m2 = _PREWRAPPED_PRIVMSG.match(body.lstrip(" \t\ufeff"))
+            if not m2:
+                break
+            nested += 1
+            target = m2.group(1).strip()
+            body = m2.group(2)
+            if nested > 5:
+                break
+        if nested:
+            info(f"INFO outbox unwrap nested-PRIVMSG x{nested} target={target}")
+        # body may still have BOM
+        while body.startswith(_BOM_CHAR):
+            body = body[1:]
+        if not target:
+            return "bare", body
+        return "privmsg", f"PRIVMSG {target} :{body}"
+
+    # bare message (preferred worker writer form)
+    return "bare", s
+
+
+def write_outbox_line(path: Path, text: str, *, channel: str | None = None) -> None:
+    """
+    Append one outbox line as UTF-8 **without BOM**.
+
+    Prefer bare message text. If ``channel`` is set, write a single pre-wrapped
+    ``PRIVMSG #chan :text`` line (still no BOM). Never writes utf-8-sig.
+    """
+    body = (text or "").replace("\r", " ").replace("\n", " ")
+    # strip accidental BOM from callers
+    while body.startswith(_BOM_CHAR):
+        body = body[1:]
+    body = body.strip("\n\r")
+    if channel:
+        ch = channel if channel.startswith("#") else f"#{channel}"
+        # if caller already passed PRIVMSG, normalize first
+        kind, norm = normalize_outbox_line(body)
+        if kind == "privmsg":
+            line = norm
+        else:
+            line = f"PRIVMSG {ch} :{body}"
+    else:
+        kind, norm = normalize_outbox_line(body)
+        if kind == "privmsg":
+            line = norm
+        else:
+            line = body
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    # explicit utf-8 no BOM (Python open utf-8 does not write BOM)
+    with path.open("a", encoding="utf-8", newline="\n") as fh:
+        fh.write(line + "\n")
+
+
 def take_outbox_lines(path: Path, last: int) -> tuple[list[str], int]:
     """Complete newline-terminated outbox lines from byte offset `last`.
 
     A poll that lands mid-write must not send a truncated SEAL/FILE line
     (mode-2 flake: first OFFER seen, no DONE). Partial tail stays unconsumed.
+
+    FR #226: strip UTF-8 BOM on the file head and per-line; normalize pre-wrapped
+    PRIVMSG so drain never double-wraps.
     """
     try:
         data = path.read_bytes()
     except OSError:
         return [], last
+    # File-level BOM only affects offset 0
+    data_for_read = data
+    file_bom = 0
+    if data.startswith(_BOM_UTF8):
+        file_bom = len(_BOM_UTF8)
+        if last == 0:
+            data_for_read = data[file_bom:]
+            # logical last still counts full file positions including BOM bytes
     if last > len(data):
         last = 0
-    buf = data[last:]
+    # Slice from last on full data, but skip BOM if last is within BOM
+    if last < file_bom:
+        buf = data[file_bom:]
+        base = file_bom
+    else:
+        buf = data[last:]
+        base = last
     lines: list[str] = []
     consumed = 0
     while True:
@@ -96,12 +208,16 @@ def take_outbox_lines(path: Path, last: int) -> tuple[list[str], int]:
         if nl < 0:
             break
         raw = buf[consumed:nl].rstrip(b"\r")
-        # lstrip only — trailing spaces in PRIVMSG bodies must stay (FR #205 reassembly)
-        text = raw.decode("utf-8", "replace").lstrip(" \t")
-        if text:
-            lines.append(text)
+        # drop per-line BOM bytes
+        if raw.startswith(_BOM_UTF8):
+            raw = raw[len(_BOM_UTF8) :]
+        # decode; replace errors; strip BOM char
+        text = raw.decode("utf-8", "replace")
+        kind, norm = normalize_outbox_line(text)
+        if kind != "empty" and norm:
+            lines.append(norm)
         consumed = nl + 1
-    return lines, last + consumed
+    return lines, base + consumed
 
 
 def outbox_pos_path(outbox: Path) -> Path:
@@ -1643,10 +1759,15 @@ class Client:
         sent: list[str] = []
         gate_fleet = bobreport.chair_mode_active(self.home)
         for line in lines:
+            # FR #226: re-normalize (BOM / pre-wrapped) before classify
+            kind, norm = normalize_outbox_line(line)
+            if kind == "empty":
+                continue
+            line = norm
             if gate_fleet and bobreport.outbox_line_spam_for_fleet_channel(line, default_channel=self.chan):
                 continue
             op = shop_ops.raw_op_line(line, self.original_nick)
-            if line.startswith("PRIVMSG "):
+            if kind == "privmsg" or line.upper().startswith("PRIVMSG "):
                 wire = self.send_privmsg_lines(line)
                 sent.extend(wire)
                 time.sleep(FLOOD_S)

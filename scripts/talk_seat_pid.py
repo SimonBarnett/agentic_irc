@@ -314,6 +314,71 @@ def talk_seat_coordinator_gone(
     return not alive(pid)
 
 
+def coordinator_looks_like_monitor(pid: int, command_line: str | None = None) -> bool:
+    """FR #238: True when coordinator CL looks like Watch-AgentHealth / seat monitor.
+
+    Used only for a one-shot warning when IRC was started outside the monitor.
+    """
+    cl = (command_line or "").lower()
+    if not cl:
+        return True  # unknown CL — do not warn
+    markers = (
+        "watch-agenthealth",
+        "watch-agent-health",
+        "start-bobwatchworker",
+        "agentmonitor",
+    )
+    return any(m in cl.replace("\\", "/") for m in markers)
+
+
+def warn_if_coordinator_not_monitor(
+    home: Path | str,
+    *,
+    command_line_for_pid: Callable[[int], str | None] | None = None,
+) -> str | None:
+    """Return a warning string when seat= PID does not look like a monitor."""
+    path = Path(home) / "coordinator.pid"
+    if not path.is_file():
+        return None
+    try:
+        doc = parse_coordinator_pid(path.read_text(encoding="utf-8"))
+        seat = int((doc.get("seat") or "").strip() or "0")
+    except (OSError, ValueError):
+        return None
+    if seat <= 0:
+        return None
+    getter = command_line_for_pid
+    cl = getter(seat) if getter else _command_line_for_pid(seat)
+    if coordinator_looks_like_monitor(seat, cl):
+        return None
+    return (
+        f"coordinator seat={seat} does not look like Watch-AgentHealth "
+        f"(cl={(cl or '')[:120]!r}); IRC may outlive the seat — prefer monitor irc ensure "
+        "or scripts/Start-IrcPair.ps1 -CoordinatorPid <monitorPid>"
+    )
+
+
+def _command_line_for_pid(pid: int) -> str | None:
+    if os.name != "nt" or pid <= 0:
+        return None
+    try:
+        import subprocess
+
+        out = subprocess.check_output(
+            [
+                "powershell",
+                "-NoProfile",
+                "-Command",
+                f"(Get-CimInstance Win32_Process -Filter \"ProcessId={int(pid)}\").CommandLine",
+            ],
+            text=True,
+            timeout=15,
+        )
+        return (out or "").strip() or None
+    except Exception:
+        return None
+
+
 def check_home_bind(
     home: Path | str,
     expected_nick: str,

@@ -1400,11 +1400,11 @@ class Client:
         return True
 
     def _maybe_git_claim(self, src: str, target: str, body: str) -> bool:
-        """Shop claim path (FR #207): chair or bob-* ear in #{machine}.
+        """Shop claim path (FR #207 / #233): chair or bob-* ear in #{machine}.
 
-        !BORED offers the top unaccepted job (does not accept).
-        Worker ACK in #{machine} marks that offered job accepted.
-        !ACCEPT remains a no-op (legacy).
+        FR #233 / gh-Jeeves #106: bob-* ears no longer OFFER on !bored (Jeeves assigns).
+        Chair path may still offer for local/legacy tests. Worker ACK in #{machine}
+        marks an offered job accepted. !ACCEPT remains a no-op (legacy).
         """
         chair = bool(getattr(self.args, "chair", False))
         fleet_bob = bobtalk.is_fleet_bob_nick(self.original_nick)
@@ -1414,7 +1414,7 @@ class Client:
             return False
         now = time.time()
         if gitclaim.is_bored_command(body):
-            self._git_bored(src, target, now)
+            self._git_bored(src, target, now, chair=chair)
             return True
         if gitclaim.is_accept_command(body):
             self._git_accept(src, target, body)
@@ -1427,7 +1427,11 @@ class Client:
             gitclaim.note_worker_activity(self.home, src, now)
         return False
 
-    def _git_bored(self, src: str, target: str, now: float) -> None:
+    def _git_bored(self, src: str, target: str, now: float, *, chair: bool = False) -> None:
+        # FR #233: ear must not race Jeeves — no OFFER / assign-write from bob-*.
+        if not chair:
+            info(f"INFO git-claim bored ear-noop nick={src} (Jeeves assigns; gh-Jeeves#106)")
+            return
         gate = gitclaim.bored_gate(self.home, src, target, now)
         if gate == "ignore":
             info(f"INFO git-claim bored ignore nick={src}")
@@ -1441,7 +1445,7 @@ class Client:
             self._git_say(target, gitclaim.NAK_BORED_BUSY)
             info(f"INFO git-claim bored nak busy nick={src}")
             return
-        # Offer only — acceptance is ACK (FR #207). Prefer local queue (scripts, no tokens).
+        # Chair-only offer (legacy). Acceptance is ACK (FR #207).
         status, job = gitclaim.offer_top(self.home, src, bobreport.normalize_channel(target))
         if status == "ok" and isinstance(job, dict):
             gitclaim.note_worker_activity(self.home, src, now)

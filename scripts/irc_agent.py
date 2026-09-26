@@ -449,6 +449,14 @@ class Client:
         self.sasl_plus = threading.Event()
         self.sasl_903 = threading.Event()
         self.sasl_fail = threading.Event()
+        # FR #230: nick -> services account (CAP account-notify / extended-join / account-tag)
+        try:
+            from account_map import AccountMap
+
+            self.accounts = AccountMap()
+            self.accounts.load(self.home / "accounts.json")
+        except Exception:
+            self.accounts = None
         self._bobiverse_last_query: dict[str, float] = {}
         self._bobiverse_last_tray: dict[str, float] = {}
         self._bobiverse_pull_last = 0.0
@@ -1130,7 +1138,8 @@ class Client:
         self.sasl_plus.clear()
         self.sasl_903.clear()
         self.sasl_fail.clear()
-        self.send("CAP REQ :sasl")
+        # Request sasl + account caps together; server ACKs what it supports (FR #230).
+        self.send("CAP REQ :sasl account-notify extended-join account-tag")
         if not self.sasl_ack.wait(10):
             info("INFO no-sasl")
             self.send("CAP END")
@@ -1676,13 +1685,71 @@ class Client:
                         except OSError:
                             pass
                         continue
+                    # FR #230: strip IRCv3 tags; keep raw line in irc.log (debug_log above).
+                    tags: dict[str, str] = {}
+                    wire = t
+                    try:
+                        from account_map import account_from_tags, parse_message_tags
+
+                        tags, wire = parse_message_tags(t)
+                    except Exception:
+                        account_from_tags = None  # type: ignore[assignment]
                     prefix = ""
-                    rest = t
-                    if t.startswith(":"):
-                        prefix, _, rest = t[1:].partition(" ")
+                    rest = wire
+                    if wire.startswith(":"):
+                        prefix, _, rest = wire[1:].partition(" ")
                     parts = rest.split(" ")
                     cmd = parts[0] if parts else ""
-                    trailing = t.split(" :", 1)[1] if " :" in t else ""
+                    trailing = wire.split(" :", 1)[1] if " :" in wire else ""
+                    # Track services account for nick (account-tag / ACCOUNT / extended-join).
+                    if self.accounts is not None:
+                        who = prefix.split("!", 1)[0].lstrip(":") if prefix else ""
+                        if cmd == "ACCOUNT" and who:
+                            acct = (parts[1] if len(parts) > 1 else trailing) or ""
+                            acct = acct.lstrip(":")
+                            self.accounts.set(who, None if acct in ("", "*") else acct)
+                            try:
+                                self.accounts.save(self.home / "accounts.json")
+                            except Exception:
+                                pass
+                        elif cmd == "JOIN" and who:
+                            # extended-join: JOIN #chan account :realname
+                            acct = None
+                            if account_from_tags is not None:
+                                acct = account_from_tags(tags)
+                            if acct is None and len(parts) >= 3 and not parts[2].startswith("#"):
+                                # nick JOIN #chan account :gecos
+                                maybe = parts[2].lstrip(":")
+                                if maybe and maybe != "*" and not maybe.startswith("#"):
+                                    acct = maybe
+                            if acct:
+                                self.accounts.set(who, acct)
+                                try:
+                                    self.accounts.save(self.home / "accounts.json")
+                                except Exception:
+                                    pass
+                        elif cmd == "NICK" and who:
+                            new = (trailing or (parts[1] if len(parts) > 1 else "")).lstrip(":")
+                            if new:
+                                self.accounts.rename(who, new)
+                                try:
+                                    self.accounts.save(self.home / "accounts.json")
+                                except Exception:
+                                    pass
+                        elif cmd == "QUIT" and who:
+                            self.accounts.clear_nick(who)
+                            try:
+                                self.accounts.save(self.home / "accounts.json")
+                            except Exception:
+                                pass
+                        elif cmd == "PRIVMSG" and who and account_from_tags is not None:
+                            acct = account_from_tags(tags)
+                            if acct:
+                                self.accounts.set(who, acct)
+                                try:
+                                    self.accounts.save(self.home / "accounts.json")
+                                except Exception:
+                                    pass
                     if not self.ready.is_set() and cmd in REG_FAIL_CMDS:
                         detail = trailing.strip() or (parts[1] if len(parts) > 1 else "")
                         info(f"INFO reg {cmd} {detail}".strip()[:220])
@@ -1747,9 +1814,9 @@ class Client:
                             info(f"INFO nick -> {self.live_nick} (still accept {self.original_nick})")
                     for line in self.sasl_on_line(cmd, parts[1:], trailing):
                         self.send(line)
-                    if cmd == "PRIVMSG" and " :" in t:
+                    if cmd == "PRIVMSG" and " :" in wire:
                         target = parts[1].lstrip(":") if len(parts) > 1 else ""
-                        self.handle_privmsg(prefix, target, t.split(" :", 1)[1])
+                        self.handle_privmsg(prefix, target, wire.split(" :", 1)[1])
         except OSError:
             return
         finally:

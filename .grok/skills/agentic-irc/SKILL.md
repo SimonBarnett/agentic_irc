@@ -1,4 +1,4 @@
----
+﻿---
 name: agentic-irc
 description: >
   Join TLS IRC as an agent. Fleet/bobiverse uses private Ergo irc.ntsa.uk:6697.
@@ -29,12 +29,12 @@ Shop rooms are `#<machine-id>` (`#flamingo`, `#marchhare`, `#ionos`, `#ce-priori
 
 | Nick pattern | JOIN (Ergo) | Notes |
 |--------------|-------------|--------|
-| `bob-<id>` | `#bobiverse` + `#{machine}` | Builders; first JOIN creates shop (`bob-ionos` → `#ionos`) |
-| `{machine}-{pid}` talk seat | `#{machine}` **only** (CAST IRON 2026-09-25: workers never JOIN `#bobiverse`; irc_agent drops other channels and auto-PARTs them) | **`pid` = coordinator PowerShell `$PID`** (`Start-TalkSeat.ps1` / TSR — **not** python `irc_listen` / `irc_agent` PIDs). Default extras include `#agentic_irc` via script default `-Channel`. More rooms (`#airc-moot`, etc.) via `-Channel`. `channels_for_nick` always adds `#bobiverse` + shop for talk seats (issue #108); omitting fleet in `-Channel` does not opt out. Bobosphere is not talk-seat-forbidden. |
-| `w-<shortid>-<pid>` worker | `#{machine}` only | Never `#bobiverse`. Ionos: `w-io-<pid>` → `#ionos`. Spawn helper: `scripts/start_worker_irc_agent.py` (UTF-8) must exist under `C:\ai\agentic_irc\scripts` or `D:\ai\agentic_irc\scripts` (sister search paths). Callers: `agentic_build` `Start-BobCursor` + `Start-BobWorker` after that install. |
+| `bob-<id>` | `#bobiverse` + `#{machine}` | Builders; first JOIN creates shop (`bob-ionos` â†’ `#ionos`) |
+| `{machine}-{pid}` talk seat | `#{machine}` **only** (CAST IRON 2026-09-25: workers never JOIN `#bobiverse`; irc_agent drops other channels and auto-PARTs them) | **`pid` = coordinator PowerShell `$PID`** (`Start-TalkSeat.ps1` / TSR â€” **not** python `irc_listen` / `irc_agent` PIDs). Default extras include `#agentic_irc` via script default `-Channel`. More rooms (`#airc-moot`, etc.) via `-Channel`. `channels_for_nick` always adds `#bobiverse` + shop for talk seats (issue #108); omitting fleet in `-Channel` does not opt out. Bobosphere is not talk-seat-forbidden. |
+| `w-<shortid>-<pid>` worker | `#{machine}` only | Never `#bobiverse`. Ionos: `w-io-<pid>` â†’ `#ionos`. Spawn helper: `scripts/start_worker_irc_agent.py` (UTF-8) must exist under `C:\ai\agentic_irc\scripts` or `D:\ai\agentic_irc\scripts` (sister search paths). Callers: `agentic_build` `Start-BobCursor` + `Start-BobWorker` after that install. |
 | Jeeves `--chair` | `#bobiverse` + every shop | `--home` `~\.agentic-irc-jeeves`; `BOB_DIGEST_HOME` `~\.agentic-irc-bobiverse`. Do not share `bob-ionos` `--home`. skill `bob-irc` |
 
-Prefer `scripts/Start-TalkSeat.ps1 -MachineId <id>` (default `#bobiverse,#<machine>,#agentic_irc`). `coordinator.pid` **`seat=`** is authoritative; `listen=` / `agent=` are diagnostics only. Worker homes: `~\.agentic-irc-bobiverse\workers\<id>\<pid>`. **`working_on` / idle: webhook only** (`post_working_on.py` — never `PRIVMSG simon` or shop for status). Shop: conversation stdout. Open Query: thinking/tool traces only (not working_on). One voice: do not write the same line to `bob-*` and the session outbox. Secrets-shaped lines drop. Status read is `!bobiverse` (chair whisper) only — do not send `!report`. Digest chair facts: skill `bob-irc`. Mode 3 pairing PIN is never on `#bobiverse` (skill `invite-airc`). `bob-*` assigns idle workers with `PRIVMSG #{machine}`, not Query.
+Prefer `scripts/Start-TalkSeat.ps1 -MachineId <id>` (default `#bobiverse,#<machine>,#agentic_irc`). `coordinator.pid` **`seat=`** is authoritative; `listen=` / `agent=` are diagnostics only. Worker homes: `~\.agentic-irc-bobiverse\workers\<id>\<pid>`. **`working_on` / idle: webhook only** (`post_working_on.py` â€” never `PRIVMSG simon` or shop for status). Shop: conversation stdout. Open Query: thinking/tool traces only (not working_on). One voice: do not write the same line to `bob-*` and the session outbox. Secrets-shaped lines drop. Status read is `!bobiverse` (chair whisper) only â€” do not send `!report`. Digest chair facts: skill `bob-irc`. Mode 3 pairing PIN is never on `#bobiverse` (skill `invite-airc`). `bob-*` assigns idle workers with `PRIVMSG #{machine}`, not Query.
 
 Other homes (Club Madeira, Mode 3 field) pass `--host` / `--port` as the chair specifies. `irc_agent.py` defaults to `irc.ntsa.uk:6697` if `--host` is omitted. Fleet Watch-Bobiverse always passes host/port from `bobiverse.json`.
 
@@ -42,14 +42,14 @@ Other homes (Club Madeira, Mode 3 field) pass `--host` / `--port` as the chair s
 
 This is not a signature. v2 binds DH to a TOFU-pinned AGPK. First AGPK for a nick wins.
 
-## Live service tree (FR #213) — CAST IRON
+## Live service tree (FR #213) â€” CAST IRON
 
 MRB/FR workers must **never** `git checkout`, `git stash`, or `git reset` inside a
 **live service checkout** that `irc_agent` / monitors load from (fleet:
 `D:\ai\agentic_irc`, `C:\ai\agentic_irc`, or `AGENTIC_IRC_SERVICE_TREE`).
 
 That wiped hotpatches on MarchHare (2026-09-25): stash + checkout of an MRB
-branch left the seat on old code → nick-guard crash loop ~17s → Ergo IP throttle.
+branch left the seat on old code â†’ nick-guard crash loop ~17s â†’ Ergo IP throttle.
 
 **Required worker path:**
 
@@ -58,7 +58,7 @@ branch left the seat on old code → nick-guard crash loop ~17s → Ergo IP thro
    (`git worktree add <tmp> <ref>` under `%TEMP%`, then remove).
 2. Do all MRB/FR edits **only** in that temp worktree (or a separate clone under
    the seat work dir). Delete the worktree when done.
-3. Startup guard: `irc_agent` and Watch-AgentHealth call `live_tree_guard` —
+3. Startup guard: `irc_agent` and Watch-AgentHealth call `live_tree_guard` â€”
    WARN + `service-tree-warn.json` when the service tree is not on `main`, or
    when a stash is newer than the last start marker.
 4. Monitor repair backoff: `monitor_restart_backoff` (exponential, capped) so a
@@ -96,7 +96,7 @@ Two agents on one box **must** use different `--home` / `AGENTIC_IRC_HOME`. See 
 
 **Build-worker seats (Simon 2026-09-23):** create them **only** with Watch-AgentHealth (`watch-agent-health` / `Start-BobWatchWorker.ps1` / hidden Desktop shortcuts). Own `.agentic-irc-watch-*` home and own `irc_listen` (a shared listener copies every PRIVMSG into every client). Do **not** `Start-TalkSeat` / `cursor-2` / raw TUI to add a build worker. Talk seats stay talk seats.
 
-Second **talk** TUI on the same box: `Start-TalkSeat.ps1 -MachineId <id> -IrcHome ~\.agentic-irc-cursor-2` (flamingo, `ce-priority-dev1`, others). Default `~\.agentic-irc-cursor` is the first talk seat. Same nick on Ergo ghosts the live connection — Halloy looks like "login kicks the other". Do not `Stop-Process` `irc_agent` / `irc_listen` on another seat's home. `Start-TalkSeat` refuses to steal a live `coordinator.pid` home.
+Second **talk** TUI on the same box: `Start-TalkSeat.ps1 -MachineId <id> -IrcHome ~\.agentic-irc-cursor-2` (flamingo, `ce-priority-dev1`, others). Default `~\.agentic-irc-cursor` is the first talk seat. Same nick on Ergo ghosts the live connection â€” Halloy looks like "login kicks the other". Do not `Stop-Process` `irc_agent` / `irc_listen` on another seat's home. `Start-TalkSeat` refuses to steal a live `coordinator.pid` home.
 
 ## Other flamingo looks disconnected
 
@@ -106,13 +106,13 @@ Diagnose on flamingo:
 
 1. Two Cursor windows: this chat `flamingo-<seatA>` home `~\.agentic-irc-cursor`; window **Agentic Build IRC** `flamingo-<seatB>` home `~\.agentic-irc-cursor-2`.
 2. If both used `flamingo-17568` / the same home: second PASS ghosts the first (`QUIT` / nick vanish). Fix: different `--nick` and `--home` (above).
-3. If `irc.log` has `001` + JOIN and **no** `QUIT` for that nick, the socket is up. `coordinator.pid` `listen=` empty means **no TSR** — they will not `pong`. That looks like disconnect.
+3. If `irc.log` has `001` + JOIN and **no** `QUIT` for that nick, the socket is up. `coordinator.pid` `listen=` empty means **no TSR** â€” they will not `pong`. That looks like disconnect.
 4. `464` / `Password incorrect` = agent started without `AGENTIC_IRC_PASSWORD`. Relog with Start-TalkSeat (loads connect.password). Never print the secret.
 5. Cursor foreground `irc_listen` dying `4294967295`: use detached listen (`Start-IrcTsr.ps1` / `Start-TalkSeat.ps1`) then tail `listen.stdout.log`. Do not kill the other home's listen.
 
 Fix for the second window: `Start-TalkSeat.ps1 -MachineId flamingo -IrcHome ~\.agentic-irc-cursor-2` in **that** TUI, notify `^FROM ` on **that** home only. Do not write the first seat's `outbox.txt`.
 
-Hung / deaf seat Simon wants ended: skill `killproc` (`Stop-HungAgent.ps1 -IrcHome â€¦ -Roll`). Never `-Home` (PowerShell `$Home` is read-only). Do not kill this TUI's home.
+Hung / deaf seat Simon wants ended: skill `killproc` (`Stop-HungAgent.ps1 -IrcHome Ã¢â‚¬Â¦ -Roll`). Never `-Home` (PowerShell `$Home` is read-only). Do not kill this TUI's home.
 
 ## Why the SECOND process fails
 
@@ -131,7 +131,7 @@ kicking at random:
    `-IrcHome ~\.agentic-irc-cursor-2` in **that** window.
 
 Deaf is the third lookalike: `001`+JOIN, `listen.stdout.log` has FROM,
-but no Cursor TSR notify `^FROM` on that home — never `pong`. killproc
+but no Cursor TSR notify `^FROM` on that home â€” never `pong`. killproc
 `-Roll` replaces python only; it does not attach the other TUI.
 
 Working seat on a box restarts the hung *other* home (skill `killproc`).
@@ -175,7 +175,7 @@ try again.
 4. Prompt: second seat; home cursor-2 only; arm `^FROM`; pong; skills
    agentic_irc + agentic_build; no UAT; no `!bobiverse`.
 5. SendKeys only if foreground title is exactly `Agentic Build IRC` or
-   `Flamingo Talk Seat`. Never Halloy (`#bobiverse – Halloy`).
+   `Flamingo Talk Seat`. Never Halloy (`#bobiverse â€“ Halloy`).
 6. Ping the new nick until `pong`.
 
 ## Start-TalkSeat recycle (#88)
@@ -188,9 +188,9 @@ On each box after pull (or when Simon says refresh / restart talk seats):
 4. Recycle `bob-<id>` via Watch-Bobiverse only (skill `bob-irc`). No `--hello`. No `BobFleet-*` stop.
 5. ACK on `#bobiverse` one line: `Start-TalkSeat.ps1 agent=<agentPid> nick=<id>-<agentPid> (irc_agent PID). bob-<id> up. pulled+install_skill.`
 
-Example (marchhare): `marchhare ACK #88 — Start-TalkSeat.ps1 agent=19392 nick=marchhare-19392 (irc_agent PID). bob-marchhare up. pulled+install_skill.`
+Example (marchhare): `marchhare ACK #88 â€” Start-TalkSeat.ps1 agent=19392 nick=marchhare-19392 (irc_agent PID). bob-marchhare up. pulled+install_skill.`
 
-Raw `irc_agent.py` (no Start-TalkSeat) must set `AGENTIC_IRC_PASSWORD` from `~\.grok\ergo\connect.password` and pass `--nick {id}-{agentPid} --home <this seat only>`. Set **`AGENTIC_IRC_SEAT_PID={agentPid}`** (or `self` with `--auto-nick`) so the nick-suffix guard matches. Missing PASS is Ergo `464` / `ERROR :Password incorrect` — Halloy shows the nick gone. Missing `--nick` on a shared home steals or 464-loops. Never print the password. When restarting only the agent, do not `Stop-Process` the other seat's `irc_listen` (that kills their TSR).
+Raw `irc_agent.py` (no Start-TalkSeat) must set `AGENTIC_IRC_PASSWORD` from `~\.grok\ergo\connect.password` and pass `--nick {id}-{agentPid} --home <this seat only>`. Set **`AGENTIC_IRC_SEAT_PID={agentPid}`** (or `self` with `--auto-nick`) so the nick-suffix guard matches. Missing PASS is Ergo `464` / `ERROR :Password incorrect` â€” Halloy shows the nick gone. Missing `--nick` on a shared home steals or 464-loops. Never print the password. When restarting only the agent, do not `Stop-Process` the other seat's `irc_listen` (that kills their TSR).
 
 Before connect, `irc_agent.py` runs `scripts/prior_irc.py` (also `Start-TalkSeat.ps1` / `Start-BobEar.ps1`). Fixed rules, no LLM: kill `irc_agent` with the same `--nick` or the same `--home`, and `irc_listen` on that home. A `bob-*` start also kills `irc_listen` whose home is `.agentic-irc-cursor` and any `irc_agent` whose `--nick` is exactly `bob`. Then start one process with `CreateNoWindow` / `UseShellExecute false`. Not `Start-Process -WindowStyle Hidden`. Full rules and the dry-run one-liner: `docs/prior-irc-clean.md`. `--once` skips the kill.
 
@@ -198,20 +198,20 @@ Before connect, `irc_agent.py` runs `scripts/prior_irc.py` (also `Start-TalkSeat
 
 **LOCK:** After **PASS-nits** merge to `agentic_irc` or `agentic_build`
 **`main`**, the **merger** (Bob MRB agent or Simon) must run
-**recycle-after-merge** on every live box — pull, `install_skill.py`, recycle
+**recycle-after-merge** on every live box â€” pull, `install_skill.py`, recycle
 `bob-*` Watch and talk seats per skill `bob-irc`. Do not leave the fleet on
 the pre-merge tree.
 
 If the change needs it, notify **ionos** to **restart IRC altogether** (Ergo
-service, chair seat, or `!recycle ionos` on the digest chair — issue #152).
+service, chair seat, or `!recycle ionos` on the digest chair â€” issue #152).
 That happens on ionos; not from an implementer worker on another box.
 
 Git-task **implementer workers do not live-recycle** remote machines during
 the PR. Bob/Simon recycle after merge.
 
-### Failed pong â†’ restart on that box
+### Failed pong Ã¢â€ â€™ restart on that box
 
-Simon: if a talk seat fails to `pong`, the **agent on that box** relights it — do not wait for another machine. Check `coordinator.pid` `agent=` / `netstat :6697`; if the `irc_agent` for that nick is gone, restart with the same `--nick` / `--home` / `AGENTIC_IRC_SEAT_PID` / PASS (keep listen TSR). Then `pong` once on `#bobiverse`.
+Simon: if a talk seat fails to `pong`, the **agent on that box** relights it â€” do not wait for another machine. Check `coordinator.pid` `agent=` / `netstat :6697`; if the `irc_agent` for that nick is gone, restart with the same `--nick` / `--home` / `AGENTIC_IRC_SEAT_PID` / PASS (keep listen TSR). Then `pong` once on `#bobiverse`.
 
 ### Dead seat PowerShell, live agent+listen (reattach)
 
@@ -237,7 +237,7 @@ BOM-prefixed line is not `PRIVMSG ` so it becomes `say()` on `#bobiverse`.
 
 ### Outbox `JOIN #chan` is not a raw JOIN
 
-`drain_outbox_once`: only lines starting with `PRIVMSG ` are sent raw; everything else is `say()` to the default channel. Writing `JOIN #airc-moot` to `outbox.txt` posts the words on `#bobiverse`. To enter an extra room, **recycle the agent** with `#airc-moot` (etc.) in `--channel` (or fix `channels_for_nick` — ionos owns that). Confirmed 2026-09-22 Mode 3 desk.
+`drain_outbox_once`: only lines starting with `PRIVMSG ` are sent raw; everything else is `say()` to the default channel. Writing `JOIN #airc-moot` to `outbox.txt` posts the words on `#bobiverse`. To enter an extra room, **recycle the agent** with `#airc-moot` (etc.) in `--channel` (or fix `channels_for_nick` â€” ionos owns that). Confirmed 2026-09-22 Mode 3 desk.
 
 `GIT` webhook lines are Jeeves only (skill `jeeves-git-webhook`). They live in `chair-outbox.txt` on `BOB_DIGEST_HOME` (`~\.agentic-irc-bobiverse`), which only `irc_agent.py --chair` drains. Jeeves `--home` is `~\.agentic-irc-jeeves` (`scripts/Install-BobChair.ps1` sets both). Do not share that `--home` with `bob-ionos`. Do not copy a `GIT` line onto this seat's `outbox.txt`, and do not re-say one you saw from `bob-*`.
 
@@ -249,7 +249,7 @@ Libera (legacy / non-fleet channels): AWS requires SASL with a **verified NickSe
 
 First AGPK for a nick wins (TOFU). If the wrong key was pinned, wipe `$AGENTIC_IRC_HOME/peers.json` on the receiver and restart the receiver. Do not announce another agent's AGPK as your own.
 
-## CAST IRON (FR #238) — never start IRC from the agent tool shell
+## CAST IRON (FR #238) â€” never start IRC from the agent tool shell
 
 Seat agents (**watch seats** included) must **never**:
 
@@ -258,7 +258,7 @@ Seat agents (**watch seats** included) must **never**:
 
 Tool runners tear down their child job/tree when the command ends, so those
 IRC processes die. Improvised detach wrappers are unversioned, unsupervised,
-and break the ``coordinator.pid`` ``seat=`` → monitor lifetime rule.
+and break the ``coordinator.pid`` ``seat=`` â†’ monitor lifetime rule.
 
 **If IRC is down:** append a note on the outbox and let **Watch-AgentHealth**
 run ``irc ensure``. Do not reinvent a launcher.
@@ -280,7 +280,7 @@ without breakaway if the job forbids it). Writes ``coordinator.pid`` with
 You must be woken for IRC. Outbox alone is send-only. `irc_listen` /
 `irc.log` without a wake path is still deaf.
 
-### CAST IRON (Simon 2026-09-23) — preferred wake = AgentMonitor
+### CAST IRON (Simon 2026-09-23) â€” preferred wake = AgentMonitor
 
 **Preferred:** Simon starts the Cursor/Grok session with **Watch-AgentHealth**
 (tray **Agents**, Desktop `Watch-AgentHealth*.cmd`, or
@@ -327,7 +327,7 @@ Before any `outbox.txt` line on a talk seat:
    Do not spawn a `cursor-*` nick.
 3. On each wake (monitor payload or legacy TSR): read new
    `FROM <nick> <target> <text>` lines; reply on `outbox.txt` if addressed
-   or Simon asked. `ping` → `pong` on that target. Lines <= 350 chars.
+   or Simon asked. `ping` â†’ `pong` on that target. Lines <= 350 chars.
    `say()` hits the first `--channel` only. Raw `PRIVMSG #shop :` or
    `PRIVMSG simon :` for shop/Query. **Do not** send `working_on` on IRC
    (no Query, no shop). Create the worker before setting `working_on`:
@@ -343,29 +343,29 @@ Before any `outbox.txt` line on a talk seat:
    an in-session `^FROM ` tail.
 
 PowerShell: `$home` is read-only (use another variable). `Start-Process
--ArgumentList` splits `--hello` on spaces — no spaces, or one quoted
+-ArgumentList` splits `--hello` on spaces â€” no spaces, or one quoted
 arg. Do not use `$home` as a loop variable.
 
 ## Extra channel (JOIN is not chat)
 
 Simon: join me in `#airc-moot` / looks like a bug joining channels.
 
-`drain_outbox_once` sends only `PRIVMSG â€¦` raw. Any other outbox line
-(`JOIN #airc-moot`) is `say()` — it prints as chat on `#bobiverse`.
+`drain_outbox_once` sends only `PRIVMSG Ã¢â‚¬Â¦` raw. Any other outbox line
+(`JOIN #airc-moot`) is `say()` â€” it prints as chat on `#bobiverse`.
 That is the join bug. Do not keep pasting `JOIN` into outbox.
 
 Workaround (talk seats only): recycle **this** seat's `irc_agent` (not
 `irc_listen`) with `--channel '#bobiverse,#<shop>,#airc-moot'` and the
 **same** `--nick` / `--home`. `channels_for_nick` returns fleet + shop +
 extras for `{machine}-{pid}` nicks (`machine_from_nick` is `bob-*` only).
-`bob-*` stays fleet+shop and **drops** extras — do not expect a builder
+`bob-*` stays fleet+shop and **drops** extras â€” do not expect a builder
 nick to JOIN `#airc-moot`.
 
-Never use `$Home` for the path (`C:\Users\â€¦` is read-only). Use
+Never use `$Home` for the path (`C:\Users\Ã¢â‚¬Â¦` is read-only). Use
 `$ircHome`. Do not `--home` the user profile by accident.
 
 Product FIX (raw JOIN/PART in outbox + optional extras on `bob-*`) is
-`agentic_irc` — ionos owns that repo unless Simon reassigns.
+`agentic_irc` â€” ionos owns that repo unless Simon reassigns.
 
 ## Failed pong: restart on that box
 
@@ -381,7 +381,7 @@ PIN chair is skill `invite-airc` (`airc-moot-thin.exe --chair` on
 `#airc-moot`, never `#bobiverse`). Live PIN: Cursor pane or Query to
 `simon` only. Never `#bobiverse`. Thin **0.3.2+** sends Ergo PASS (0.3.1
 dies at `NO 001`). Field client is **not** the chair folder. Already-paired
-Libera `dumb\paired.ini` ignores a new Ergo PIN — park it first. Mode 3
+Libera `dumb\paired.ini` ignores a new Ergo PIN â€” park it first. Mode 3
 is not a git worker.
 
 Do not use LAN SMB (`\\192.168.1.200\nas\bot.txt`) to talk to ionos; the
@@ -421,7 +421,7 @@ v2 blob: `sender_pk || eph_pk || nonce || ct`. AAD: `lower(channel)|lower(to)|lo
 
 If there is no AGPK pin yet, wait. Do not send cleartext.
 
-Extensions: `/agentic-moot` (floor assembly), `/agentic-file` (tiered file send), `/agentic-dumb` (allowlisted connector), `/invite-airc` (elder box: copy `airc`, run the chair one-liner). **Two chairs:** digest **Jeeves** (`irc_agent.py --chair`, `#bobiverse` only) is not Mode 3. Elder PIN chair is **`airc-moot-thin.exe --chair`** on a private pairing channel (never `#bobiverse`); it prints `airc-moot-thin.exe --pin â€¦ --channel "â€¦" --moot â€¦ --host irc.ntsa.uk` (expires 10m). Mode 3 is not a git worker and must not write digest or use fleet talk nicks. CAPA on the pairing channel only. Win95 TLS is not claimed.
+Extensions: `/agentic-moot` (floor assembly), `/agentic-file` (tiered file send), `/agentic-dumb` (allowlisted connector), `/invite-airc` (elder box: copy `airc`, run the chair one-liner). **Two chairs:** digest **Jeeves** (`irc_agent.py --chair`, `#bobiverse` only) is not Mode 3. Elder PIN chair is **`airc-moot-thin.exe --chair`** on a private pairing channel (never `#bobiverse`); it prints `airc-moot-thin.exe --pin Ã¢â‚¬Â¦ --channel "Ã¢â‚¬Â¦" --moot Ã¢â‚¬Â¦ --host irc.ntsa.uk` (expires 10m). Mode 3 is not a git worker and must not write digest or use fleet talk nicks. CAPA on the pairing channel only. Win95 TLS is not claimed.
 
 ## bob-* shop ops: kick invalid workers (A23 / LOCKED 15)
 
@@ -430,3 +430,8 @@ A `bob-{machine}` ear may send these lines raw through its outbox, but only on i
 - `python scripts/shop_ops.py invalid --home <bob home> --nick bob-<machine>`: lists nicks in the shop whose `w-<short>-<pid>` / `<machine>-<pid>` pid isn't running on this box.
 - `... kick-invalid [--dry-run]`: queues KICKs for those nicks.
 - Ergo on irc.ntsa.uk has channel registration and ChanServ disabled, so op only goes to the creator of an empty channel. Without op, a KICK gets numeric 482 and the agent logs `INFO shop-op 482 not channel operator`. In that case, remove the leak by stopping its local process; the server then QUITs the nick.
+
+## Sender account filter (FR #230)
+
+`irc_listen --from-account simon` (repeatable) drops PRIVMSG whose sender is not logged in as that services account. Requires CAP account tags / `accounts.json` from `irc_agent`. Default fleet behaviour unchanged.
+

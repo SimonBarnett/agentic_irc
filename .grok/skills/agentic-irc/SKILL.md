@@ -434,6 +434,9 @@ A `bob-{machine}` ear may send these lines raw through its outbox, but only on i
 - `... kick-invalid [--dry-run]`: queues KICKs for those nicks.
 - Ergo on irc.ntsa.uk has channel registration and ChanServ disabled, so op only goes to the creator of an empty channel. Without op, a KICK gets numeric 482 and the agent logs `INFO shop-op 482 not channel operator`. In that case, remove the leak by stopping its local process; the server then QUITs the nick.
 
+## Windows Task Scheduler gotchas (FR #231)
+
+See `docs/windows-task-scheduler-irc-pair-gotchas-fr231.md` (empty DACL home, python.dll beside exe, cmd redirect for hidden tasks, `--stdout-log` age).
 ## Sender account filter (FR #230)
 
 `irc_listen --from-account simon` (repeatable) drops PRIVMSG whose sender is not logged in as that services account. Requires CAP account tags / `accounts.json` from `irc_agent`. Default fleet behaviour unchanged.

@@ -404,8 +404,8 @@ def test_bored_filters_and_empty(tmp_path, monkeypatch):
         thread.join(timeout=2)
 
 
-def test_bob_ear_offers_on_bored_file_accept_is_separate(tmp_path, monkeypatch):
-    """FR #207: bob-* ear may offer on !BORED in shop; FILE ACCEPT / !ACCEPT do not claim."""
+def test_bob_ear_bored_is_noop_jeeves_assigns(tmp_path, monkeypatch):
+    """FR #233 / gh-Jeeves #106: bob-* ear must not OFFER on !BORED (no race with Jeeves)."""
     clock = {"t": 80.0}
     bob, sent = _client(tmp_path, monkeypatch, "bob-flamingo", False, clock)
     # queue is webhook-owned; bob does not enqueue from GIT announce alone
@@ -419,11 +419,13 @@ def test_bob_ear_offers_on_bored_file_accept_is_separate(tmp_path, monkeypatch):
         ),
     )
     bob.handle_privmsg("w-fl-4412!u@h", "#flamingo", "!BORED")
-    assert any("ASSIGN" in x and "FR #9" in x for x in sent)
+    assert sent == []
+    assert not any("ASSIGN" in x for x in sent)
+    # Queue untouched — ear did not offer/accept-write
+    assert len(gitclaim.load_unaccepted(tmp_path)) == 1
+    assert gitclaim.load_accepted(tmp_path) == []
     chair, chair_sent = _client(tmp_path, monkeypatch, "Jeeves", True, clock)
     chair.handle_privmsg("w-fl-4412!u@h", "#flamingo", "FILE v1 ACCEPT abcdef")
     chair.handle_privmsg("w-fl-4412!u@h", "#flamingo", "!ACCEPT SimonBarnett/agentic_irc FR #9")
     assert chair_sent == []
-    # still unaccepted until ACK
     assert len(gitclaim.load_unaccepted(tmp_path)) == 1
-    assert gitclaim.load_accepted(tmp_path) == []

@@ -188,7 +188,9 @@ On each box after pull (or when Simon says refresh / restart talk seats):
 4. Recycle `bob-<id>` via Watch-Bobiverse only (skill `bob-irc`). No `--hello`. No `BobFleet-*` stop.
 5. ACK on `#bobiverse` one line: `Start-TalkSeat.ps1 agent=<agentPid> nick=<id>-<agentPid> (irc_agent PID). bob-<id> up. pulled+install_skill.`
 
-Example (marchhare): `marchhare ACK #88 — Start-TalkSeat.ps1 agent=19392 nick=marchhare-19392 (irc_agent PID). bob-marchhare up. pulled+install_skill.`
+Example (marchhare talk-seat / #88 only — **not** Jeeves shop wire):
+`PRIVMSG #bobiverse :Start-TalkSeat.ps1 agent=19392 nick=marchhare-19392 (irc_agent PID). bob-marchhare up.`
+Shop FR/MRB/UAT ACK/DONE for Jeeves must start with `ACK`/`DONE` and `owner/repo#n` (see AgentMonitor FR #104 / bob-git-accept); never `nick: ACK` or `ACK #88`.
 
 Raw `irc_agent.py` (no Start-TalkSeat) must set `AGENTIC_IRC_PASSWORD` from `~\.grok\ergo\connect.password` and pass `--nick {id}-{agentPid} --home <this seat only>`. Set **`AGENTIC_IRC_SEAT_PID={agentPid}`** (or `self` with `--auto-nick`) so the nick-suffix guard matches. Missing PASS is Ergo `464` / `ERROR :Password incorrect` — Halloy shows the nick gone. Missing `--nick` on a shared home steals or 464-loops. Never print the password. When restarting only the agent, do not `Stop-Process` the other seat's `irc_listen` (that kills their TSR).
 
@@ -248,6 +250,32 @@ SASL is optional and **unproven** until a session log shows numeric 903. Env onl
 Libera (legacy / non-fleet channels): AWS requires SASL with a **verified NickServ** account. Fleet unattended on IONOS uses Ergo, not Libera.
 
 First AGPK for a nick wins (TOFU). If the wrong key was pinned, wipe `$AGENTIC_IRC_HOME/peers.json` on the receiver and restart the receiver. Do not announce another agent's AGPK as your own.
+
+## CAST IRON (FR #238) — never start IRC from the agent tool shell
+
+Seat agents (**watch seats** included) must **never**:
+
+1. Start `irc_agent.py` / `irc_listen.py` from an in-session tool shell, or
+2. Write ad-hoc launchers under `%TEMP%` (e.g. `watch-grok-irc-launch.py`).
+
+Tool runners tear down their child job/tree when the command ends, so those
+IRC processes die. Improvised detach wrappers are unversioned, unsupervised,
+and break the ``coordinator.pid`` ``seat=`` → monitor lifetime rule.
+
+**If IRC is down:** append a note on the outbox and let **Watch-AgentHealth**
+run ``irc ensure``. Do not reinvent a launcher.
+
+**Sanctioned ops/recovery launcher** (coordinator = monitor PID explicitly):
+
+```powershell
+python scripts/start_irc_pair.py --coordinator-pid <monitorPid> --home <IrcHome> --nick <machine>-<monitorPid> --channel '#<machine>'
+# or
+scripts/Start-IrcPair.ps1 -CoordinatorPid <monitorPid> -IrcHome <IrcHome> -Nick <machine>-<monitorPid> -Channel '#<machine>'
+```
+
+Uses Windows ``CREATE_BREAKAWAY_FROM_JOB`` + ``DETACHED_PROCESS`` (falls back
+without breakaway if the job forbids it). Writes ``coordinator.pid`` with
+``seat=<monitorPid>``. Docs: `docs/start-irc-pair-fr238.md`.
 
 ## Listener + wake (required)
 

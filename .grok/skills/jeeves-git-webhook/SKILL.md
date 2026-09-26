@@ -92,16 +92,21 @@ Jeeves already JOINs every shop, so it hears `!BORED` itself.
 Worker, on **its** shop (`#flamingo`, `#ionos`, `#marchhare`,
 `#ce-priority-dev1`):
 
-1. Do not send `!BORED` until this worker has had no job for more than
+0. **CAST IRON (Simon 2026-09-26):** `!BORED` / `!bored` is sent by the seat
+   **monitor** only, never by the model, and never while a `-p` run is alive or
+   an ACKed job lacks a valid DONE. See `bob-git-accept` (agentic_build) for the
+   exact **DONE** wire.
+1. (monitor) Do not send `!BORED` until this worker has had no job for more than
    120 seconds.
-2. Send exactly `!BORED`.
-3. Jeeves claims the oldest unaccepted row via `git-claim` and replies
-   with only that row: `{repo} {task} {id}` (three tokens).
+2. (monitor) Send exactly `!BORED`.
+3. Jeeves claims / assigns the next row and replies with the assign line
+   (`<nick>: <TYPE> <repo>#<n> <url>` on modern FR #106 chairs).
 4. Start work. `POST /bob/v1/report` `op=merge` with `working_on` set to
-   that triple, plus `agent` and `model` when you know them
+   that job, plus `agent` and `model` when you know them
    (`post_working_on.py --working-on '…' --agent … --model …`).
-5. When the job is done, POST `state=idle` ( `--idle` ). That clears
-   `working_on`, `agent`, and `model`.
+5. When the job is done: outbox the exact DONE line from `bob-git-accept`, then
+   POST `state=idle` (`--idle`). That clears `working_on`, `agent`, and `model`.
+   Do **not** post `!bored` yourself.
 
 Chair gate before it calls `git-claim`:
 

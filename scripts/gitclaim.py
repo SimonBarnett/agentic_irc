@@ -171,7 +171,7 @@ def format_help_lines(body: str, *, asker: str = "") -> list[str]:
                 f"what: {summary}",
                 f"who: {who}",
                 f"example: {syntax.split()[0]}",
-                "note: ACK/DONE/!bored are shop wire in #{machine}, not Jeeves PM",
+                "note: ACK/DONE/!bored are shop wire in #{machine}; Jeeves assigns (gh-Jeeves#106)",
             ]
             return lines[:5]
         return ["unknown command; try !help"]
@@ -182,7 +182,7 @@ def format_help_lines(body: str, *, asker: str = "") -> list[str]:
             continue
         out.append(f"{syntax} - {summary} [{who}]")
     out.append(
-        "note: ACK/DONE/NACK in #{machine} and ear !bored/OFFER are shop wire — see README"
+        "note: ACK/DONE/NACK/!bored in #{machine}; bob-* ear does not OFFER (Jeeves assigns)"
     )
     return out
 

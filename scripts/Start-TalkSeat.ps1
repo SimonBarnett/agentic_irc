@@ -83,64 +83,68 @@ function Assert-HomeBind {
     }
 }
 function Start-OneSeatAgent {
-    param([string]$NickToStart)
+    # FR #237: fresh home starts with {machine}-0 --auto-nick so irc_agent rewrites
+    # the suffix to its own PID (AGENTIC_IRC_SEAT_PID=self). Never pass an empty --nick.
+    param(
+        [string]$NickToStart,
+        [switch]$AutoNick
+    )
+    if (-not $NickToStart) {
+        Write-Error 'Start-OneSeatAgent requires a non-empty nick'
+    }
     $prior = Join-Path $Scripts 'prior_irc.py'
     Invoke-PriorIrcClean -Python $py -ScriptPath $prior -Nick $NickToStart -Home $resolved
-    $null = Start-HiddenPython -Python $py -ArgumentList @(
+    $argv = @(
         '-u', $agentPath,
         '--host', $IrcHost,
         '--port', "$Port",
         '--channel', $Channel,
         '--home', $resolved,
         '--nick', $NickToStart
-    ) -WorkingDirectory $Scripts
+    )
+    if ($AutoNick) { $argv += '--auto-nick' }
+    $null = Start-HiddenPython -Python $py -ArgumentList $argv -WorkingDirectory $Scripts
 }
+
 $agent, $listen = Get-HomePythonProcs -HomePath $resolved
-$needStart = $true
+$hasListen = $null -ne $listen
 $agentNick = ''
 if ($agent -and ($agent.CommandLine -match '--nick\s+(\S+)')) {
     $agentNick = $Matches[1]
+}
+$needStart = $true
+$expectedNick = ''
+
+if ($agent) {
+    # Reuse path: nick must be {machine}-{this agent PID}.
+    $expectedNick = "$mid-$($agent.ProcessId)"
+    Assert-HomeBind -HomePath $resolved -ExpectedNick $expectedNick -LiveAgentNick $agentNick -LiveListen:$hasListen
     if ($agentNick -eq $expectedNick) { $needStart = $false }
 }
-$hasListen = $null -ne $listen
-Assert-HomeBind -HomePath $resolved -ExpectedNick $expectedNick -LiveAgentNick $agentNick -LiveListen:$hasListen
+elseif ($hasListen) {
+    # Listen without agent — refuse if coordinator says another seat owns the home.
+    Assert-HomeBind -HomePath $resolved -ExpectedNick "$mid-0" -LiveAgentNick '' -LiveListen:$true
+}
+
 if ($needStart) {
     Stop-CursorHomeAgents -HomePath $resolved
-    Start-OneSeatAgent -NickToStart $expectedNick
+    Start-OneSeatAgent -NickToStart "$mid-0" -AutoNick
     Start-Sleep -Milliseconds 800
-}
-$agent, $listen = Get-HomePythonProcs -HomePath $resolved
-$needStart = $true
-$agentNick = ''
-$expectedNick = ''
-if ($agent) {
-    $agentPid = $agent.ProcessId
-    $expectedNick = "$mid-$agentPid"
-    if ($agent.CommandLine -match '--nick\s+(\S+)') {
-        $agentNick = $Matches[1]
-        if ($agentNick -eq $expectedNick) { $needStart = $false }
-    }
-}
-$hasListen = $null -ne $listen
-if ($expectedNick) {
-    Assert-HomeBind -HomePath $resolved -ExpectedNick $expectedNick -LiveAgentNick $agentNick -LiveListen:$hasListen
-}
-if ($needStart) {
-    Stop-CursorHomeAgents -HomePath $resolved
-    Start-TalkAgent -HomePath $resolved
     $agent, $listen = Get-HomePythonProcs -HomePath $resolved
 }
+
 if (-not $agent) {
     Write-Error "irc_agent did not start for home $resolved"
 }
+
 $agentPid = $agent.ProcessId
 $expectedNick = "$mid-$agentPid"
 $nick = ''
 if ($agent.CommandLine -match '--nick\s+(\S+)') { $nick = $Matches[1] }
+$hasListen = $null -ne $listen
+
 if ($nick -and $nick -ne $expectedNick) {
-    $agentNick = $nick
-    $hasListen = $null -ne $listen
-    Assert-HomeBind -HomePath $resolved -ExpectedNick $expectedNick -LiveAgentNick $agentNick -LiveListen:$hasListen
+    Assert-HomeBind -HomePath $resolved -ExpectedNick $expectedNick -LiveAgentNick $nick -LiveListen:$hasListen
     Write-Output "INFO talk-seat nick=$nick expected=$expectedNick - restarting agent"
     Stop-CursorHomeAgents -HomePath $resolved
     Start-OneSeatAgent -NickToStart $expectedNick
@@ -152,10 +156,15 @@ if ($nick -and $nick -ne $expectedNick) {
     $agentPid = $agent.ProcessId
     $expectedNick = "$mid-$agentPid"
     $nick = $expectedNick
+    $hasListen = $null -ne $listen
 }
+
 if (-not $nick) {
     $nick = $expectedNick
 }
+
+Assert-HomeBind -HomePath $resolved -ExpectedNick $expectedNick -LiveAgentNick $nick -LiveListen:$hasListen
+
 $env:AGENTIC_IRC_DEBUG = '1'
 if (-not $needStart -and $agent) {
     # Keep this seat's agent. Drop same-nick twins and hung listens on this home.

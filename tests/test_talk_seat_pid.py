@@ -38,6 +38,13 @@ def test_auto_talk_seat_nick():
     assert tsp.auto_talk_seat_nick("flamingo-1", 99999) == "flamingo-99999"
 
 
+def test_auto_talk_seat_nick_rewrites_zero_placeholder():
+    # FR #120 / A3: start placeholder {machine}-0 must become {machine}-{seat_pid}
+    assert tsp.parse_talk_seat_placeholder("flamingo-0") == "flamingo"
+    assert tsp.auto_talk_seat_nick("flamingo-0", 19392) == "flamingo-19392"
+    assert tsp.parse_talk_seat_nick("flamingo-0") is None  # 0 is not a live talk-seat pid
+
+
 def test_parse_coordinator_pid_sample():
     text = """
 nick=flamingo-19392
@@ -111,4 +118,5 @@ def test_start_talk_seat_dry_run_includes_auto_nick(capsys):
     assert sts.main(["--machine", "flamingo", "--dry-run"]) == 0
     out = capsys.readouterr().out
     assert "--auto-nick" in out
-    assert "flamingo-0" in out
+    # Argv may still show the -0 placeholder; --auto-nick rewrites at runtime (A3).
+    assert "--nick" in out

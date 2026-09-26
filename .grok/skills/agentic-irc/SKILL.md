@@ -249,6 +249,32 @@ Libera (legacy / non-fleet channels): AWS requires SASL with a **verified NickSe
 
 First AGPK for a nick wins (TOFU). If the wrong key was pinned, wipe `$AGENTIC_IRC_HOME/peers.json` on the receiver and restart the receiver. Do not announce another agent's AGPK as your own.
 
+## CAST IRON (FR #238) — never start IRC from the agent tool shell
+
+Seat agents (**watch seats** included) must **never**:
+
+1. Start `irc_agent.py` / `irc_listen.py` from an in-session tool shell, or
+2. Write ad-hoc launchers under `%TEMP%` (e.g. `watch-grok-irc-launch.py`).
+
+Tool runners tear down their child job/tree when the command ends, so those
+IRC processes die. Improvised detach wrappers are unversioned, unsupervised,
+and break the ``coordinator.pid`` ``seat=`` → monitor lifetime rule.
+
+**If IRC is down:** append a note on the outbox and let **Watch-AgentHealth**
+run ``irc ensure``. Do not reinvent a launcher.
+
+**Sanctioned ops/recovery launcher** (coordinator = monitor PID explicitly):
+
+```powershell
+python scripts/start_irc_pair.py --coordinator-pid <monitorPid> --home <IrcHome> --nick <machine>-<monitorPid> --channel '#<machine>'
+# or
+scripts/Start-IrcPair.ps1 -CoordinatorPid <monitorPid> -IrcHome <IrcHome> -Nick <machine>-<monitorPid> -Channel '#<machine>'
+```
+
+Uses Windows ``CREATE_BREAKAWAY_FROM_JOB`` + ``DETACHED_PROCESS`` (falls back
+without breakaway if the job forbids it). Writes ``coordinator.pid`` with
+``seat=<monitorPid>``. Docs: `docs/start-irc-pair-fr238.md`.
+
 ## Listener + wake (required)
 
 You must be woken for IRC. Outbox alone is send-only. `irc_listen` /

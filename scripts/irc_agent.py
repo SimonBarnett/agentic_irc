@@ -1981,6 +1981,14 @@ def main() -> None:
     if err:
         info(err)
         sys.exit(2)
+    # FR #238: warn once when coordinator seat= is not a monitor-looking process.
+    if home:
+        try:
+            warn = talk_seat_pid.warn_if_coordinator_not_monitor(home)
+            if warn:
+                info(f"WARN {warn}")
+        except Exception as e:  # pragma: no cover
+            info(f"WARN coordinator check skipped {type(e).__name__}")
     # FR #213: warn (do not exit) when service tree is off main or has a fresh stash.
     try:
         import live_tree_guard

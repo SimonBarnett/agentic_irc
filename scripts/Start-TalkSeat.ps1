@@ -86,13 +86,20 @@ function Start-OneSeatAgent {
     param([string]$NickToStart)
     $prior = Join-Path $Scripts 'prior_irc.py'
     Invoke-PriorIrcClean -Python $py -ScriptPath $prior -Nick $NickToStart -Home $resolved
+    # FR #120 / A1-A3: start with {mid}-0 placeholder + --auto-nick so runtime
+    # rewrites to {mid}-{irc_agent PID} (talk_seat_pid.auto_talk_seat_nick).
+    $startNick = $NickToStart
+    if ($startNick -notmatch '-0$') {
+        $startNick = ($mid + '-0')
+    }
     $null = Start-HiddenPython -Python $py -ArgumentList @(
         '-u', $agentPath,
         '--host', $IrcHost,
         '--port', "$Port",
         '--channel', $Channel,
         '--home', $resolved,
-        '--nick', $NickToStart
+        '--nick', $startNick,
+        '--auto-nick'
     ) -WorkingDirectory $Scripts
 }
 $agent, $listen = Get-HomePythonProcs -HomePath $resolved

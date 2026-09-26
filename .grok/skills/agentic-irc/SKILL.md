@@ -189,6 +189,9 @@ On each box after pull (or when Simon says refresh / restart talk seats):
 5. ACK on `#bobiverse` one line: `Start-TalkSeat.ps1 agent=<agentPid> nick=<id>-<agentPid> (irc_agent PID). bob-<id> up. pulled+install_skill.`
 
 Example (marchhare): `marchhare ACK #88 â€” Start-TalkSeat.ps1 agent=19392 nick=marchhare-19392 (irc_agent PID). bob-marchhare up. pulled+install_skill.`
+Example (marchhare talk-seat / #88 only — **not** Jeeves shop wire):
+`PRIVMSG #bobiverse :Start-TalkSeat.ps1 agent=19392 nick=marchhare-19392 (irc_agent PID). bob-marchhare up.`
+Shop FR/MRB/UAT ACK/DONE for Jeeves must start with `ACK`/`DONE` and `owner/repo#n` (see AgentMonitor FR #104 / bob-git-accept); never `nick: ACK` or `ACK #88`.
 
 Raw `irc_agent.py` (no Start-TalkSeat) must set `AGENTIC_IRC_PASSWORD` from `~\.grok\ergo\connect.password` and pass `--nick {id}-{agentPid} --home <this seat only>`. Set **`AGENTIC_IRC_SEAT_PID={agentPid}`** (or `self` with `--auto-nick`) so the nick-suffix guard matches. Missing PASS is Ergo `464` / `ERROR :Password incorrect` â€” Halloy shows the nick gone. Missing `--nick` on a shared home steals or 464-loops. Never print the password. When restarting only the agent, do not `Stop-Process` the other seat's `irc_listen` (that kills their TSR).
 
@@ -434,4 +437,7 @@ A `bob-{machine}` ear may send these lines raw through its outbox, but only on i
 ## Windows Task Scheduler gotchas (FR #231)
 
 See `docs/windows-task-scheduler-irc-pair-gotchas-fr231.md` (empty DACL home, python.dll beside exe, cmd redirect for hidden tasks, `--stdout-log` age).
+## Sender account filter (FR #230)
+
+`irc_listen --from-account simon` (repeatable) drops PRIVMSG whose sender is not logged in as that services account. Requires CAP account tags / `accounts.json` from `irc_agent`. Default fleet behaviour unchanged.
 

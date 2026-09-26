@@ -198,13 +198,39 @@ def check_coordinator_nick(home: Path | str) -> str | None:
     return check_nick_seat_pid(nick, seat)
 
 
+def parse_talk_seat_placeholder(nick: str) -> str | None:
+    """Return machine_id for start placeholder ``{machine}-0``, else None.
+
+    FR #120 / A3: Start-TalkSeat passes ``--nick {mid}-0 --auto-nick``. Suffix 0 is
+    not a talk-seat pid (``parse_talk_seat_nick`` requires pid > 0), so rewrite
+    must special-case the placeholder.
+    """
+    n = (nick or "").strip().lower()
+    if not n or n.startswith("bob-") or n.startswith("w-"):
+        return None
+    for mid in sorted(FLEET_MACHINE_IDS, key=len, reverse=True):
+        if n == f"{mid}-0":
+            norm = normalize_machine_id(mid)
+            return norm or None
+    return None
+
+
 def auto_talk_seat_nick(nick: str, seat_pid: int) -> str:
-    """If nick is a talk-seat for a machine, rewrite suffix to seat_pid."""
+    """If nick is a talk-seat (or ``{machine}-0`` placeholder), rewrite suffix to seat_pid."""
+    try:
+        pid = int(seat_pid)
+    except (TypeError, ValueError):
+        return nick
+    if pid <= 0:
+        return nick
+    mid = parse_talk_seat_placeholder(nick)
+    if mid:
+        return talk_seat_nick(mid, pid)
     parsed = parse_talk_seat_nick(nick)
     if not parsed:
         return nick
     mid, _ = parsed
-    return talk_seat_nick(mid, seat_pid)
+    return talk_seat_nick(mid, pid)
 
 
 def home_bind_refusal(

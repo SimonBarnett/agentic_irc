@@ -1,6 +1,8 @@
 # Start or reuse irc_agent + irc_listen for a talk seat.
 # Nick = {machine-id}-{irc_agent PID} (never irc_listen / PowerShell $PID).
-# Detached irc_listen is started via Start-IrcTsr.ps1; tail $IrcHome/listen.stdout.log for wakes.
+# Fresh homes: start with --auto-nick (AGENTIC_IRC_SEAT_PID=self); never empty --nick.
+# Detached irc_listen via Start-IrcTsr.ps1; tail $IrcHome/listen.stdout.log for wakes.
+# FR #237: first bind/start must not use uninitialised $expectedNick.
 param(
     [Parameter(Mandatory = $true)]
     [string]$MachineId,
@@ -32,6 +34,7 @@ $env:AGENTIC_IRC_SEAT_PID = 'self'
 $py = (Get-Command python -ErrorAction Stop).Source
 $agentPath = Join-Path $Scripts 'irc_agent.py'
 $guardPath = Join-Path $Scripts 'talk_seat_pid.py'
+
 function Get-HomePythonProcs {
     param([string]$HomePath)
     $agentProc = Get-CimInstance Win32_Process -Filter "Name='python.exe'" |
@@ -42,6 +45,7 @@ function Get-HomePythonProcs {
         Select-Object -First 1
     return $agentProc, $listenProc
 }
+
 function Stop-CursorHomeAgents {
     param([string]$HomePath)
     $gracePath = Join-Path $Scripts 'agent_control.py'
@@ -57,6 +61,7 @@ function Stop-CursorHomeAgents {
         }
     Start-Sleep -Milliseconds 400
 }
+
 function Assert-HomeBind {
     param(
         [string]$HomePath,
@@ -64,6 +69,9 @@ function Assert-HomeBind {
         [string]$LiveAgentNick,
         [bool]$LiveListen
     )
+    if (-not $ExpectedNick) {
+        Write-Error "Assert-HomeBind requires a non-empty ExpectedNick (FR #237)"
+    }
     $bindArgs = @(
         $guardPath,
         '--bind-home',
@@ -82,19 +90,18 @@ function Assert-HomeBind {
         Write-Error "talk_seat_pid.py --bind-home failed (exit $LASTEXITCODE): $out"
     }
 }
+
 function Start-OneSeatAgent {
-    # FR #237: fresh home starts with {machine}-0 --auto-nick so irc_agent rewrites
-    # the suffix to its own PID (AGENTIC_IRC_SEAT_PID=self). Never pass an empty --nick.
     param(
         [string]$NickToStart,
         [switch]$AutoNick
     )
     if (-not $NickToStart) {
-        Write-Error 'Start-OneSeatAgent requires a non-empty nick'
+        Write-Error "Start-OneSeatAgent refuses empty --nick (FR #237)"
     }
     $prior = Join-Path $Scripts 'prior_irc.py'
     Invoke-PriorIrcClean -Python $py -ScriptPath $prior -Nick $NickToStart -Home $resolved
-    $argv = @(
+    $argList = @(
         '-u', $agentPath,
         '--host', $IrcHost,
         '--port', "$Port",
@@ -102,32 +109,62 @@ function Start-OneSeatAgent {
         '--home', $resolved,
         '--nick', $NickToStart
     )
-    if ($AutoNick) { $argv += '--auto-nick' }
-    $null = Start-HiddenPython -Python $py -ArgumentList $argv -WorkingDirectory $Scripts
+    if ($AutoNick) {
+        $argList += '--auto-nick'
+    }
+    $null = Start-HiddenPython -Python $py -ArgumentList $argList -WorkingDirectory $Scripts
 }
 
+function Get-CoordNick {
+    param([string]$HomePath)
+    $coordPath = Join-Path $HomePath 'coordinator.pid'
+    if (-not (Test-Path -LiteralPath $coordPath)) { return '' }
+    foreach ($line in Get-Content -LiteralPath $coordPath) {
+        if ($line -match '^nick=(.+)$') { return $Matches[1].Trim() }
+    }
+    return ''
+}
+
+# --- resolve live processes on this home only ---
 $agent, $listen = Get-HomePythonProcs -HomePath $resolved
-$hasListen = $null -ne $listen
 $agentNick = ''
 if ($agent -and ($agent.CommandLine -match '--nick\s+(\S+)')) {
     $agentNick = $Matches[1]
 }
-$needStart = $true
-$expectedNick = ''
+$hasListen = $null -ne $listen
+$coordNick = Get-CoordNick -HomePath $resolved
 
-if ($agent) {
-    # Reuse path: nick must be {machine}-{this agent PID}.
-    $expectedNick = "$mid-$($agent.ProcessId)"
-    Assert-HomeBind -HomePath $resolved -ExpectedNick $expectedNick -LiveAgentNick $agentNick -LiveListen:$hasListen
-    if ($agentNick -eq $expectedNick) { $needStart = $false }
+# Refuse stealing another seat's occupied home (need a concrete expected nick).
+# Fresh empty home: no agent, no listen, no foreign coord → proceed to auto-nick start.
+if ($agentNick -or $hasListen -or $coordNick) {
+    $probeExpected = $agentNick
+    if (-not $probeExpected -and $coordNick) { $probeExpected = $coordNick }
+    if (-not $probeExpected) {
+        # Occupied listen without nick: still refuse empty bind — use machine placeholder
+        # only for the refusal check against foreign coordinator.pid.
+        $probeExpected = "$mid-0"
+    }
+    # If live agent nick is already a valid {mid}-{pid} matching its PID, reuse path below.
+    $reuseOk = $false
+    if ($agent -and $agentNick) {
+        $want = "$mid-$($agent.ProcessId)"
+        if ($agentNick -eq $want) { $reuseOk = $true }
+    }
+    if (-not $reuseOk) {
+        Assert-HomeBind -HomePath $resolved -ExpectedNick $probeExpected `
+            -LiveAgentNick $agentNick -LiveListen:$hasListen
+    }
 }
-elseif ($hasListen) {
-    # Listen without agent — refuse if coordinator says another seat owns the home.
-    Assert-HomeBind -HomePath $resolved -ExpectedNick "$mid-0" -LiveAgentNick '' -LiveListen:$true
+
+$needStart = $true
+if ($agent -and $agentNick) {
+    $want = "$mid-$($agent.ProcessId)"
+    if ($agentNick -eq $want) { $needStart = $false }
 }
 
 if ($needStart) {
     Stop-CursorHomeAgents -HomePath $resolved
+    # Fresh / reclaim: --auto-nick rewrites {mid}-0 → {mid}-{irc_agent PID}
     Start-OneSeatAgent -NickToStart "$mid-0" -AutoNick
     Start-Sleep -Milliseconds 800
     $agent, $listen = Get-HomePythonProcs -HomePath $resolved
@@ -141,10 +178,13 @@ $agentPid = $agent.ProcessId
 $expectedNick = "$mid-$agentPid"
 $nick = ''
 if ($agent.CommandLine -match '--nick\s+(\S+)') { $nick = $Matches[1] }
-$hasListen = $null -ne $listen
 
+# auto-nick should already match; if not, restart once with the concrete nick.
 if ($nick -and $nick -ne $expectedNick) {
-    Assert-HomeBind -HomePath $resolved -ExpectedNick $expectedNick -LiveAgentNick $nick -LiveListen:$hasListen
+    $agentNick = $nick
+    $hasListen = $null -ne $listen
+    Assert-HomeBind -HomePath $resolved -ExpectedNick $expectedNick `
+        -LiveAgentNick $agentNick -LiveListen:$hasListen
     Write-Output "INFO talk-seat nick=$nick expected=$expectedNick - restarting agent"
     Stop-CursorHomeAgents -HomePath $resolved
     Start-OneSeatAgent -NickToStart $expectedNick
@@ -156,14 +196,13 @@ if ($nick -and $nick -ne $expectedNick) {
     $agentPid = $agent.ProcessId
     $expectedNick = "$mid-$agentPid"
     $nick = $expectedNick
-    $hasListen = $null -ne $listen
 }
-
 if (-not $nick) {
     $nick = $expectedNick
 }
-
-Assert-HomeBind -HomePath $resolved -ExpectedNick $expectedNick -LiveAgentNick $nick -LiveListen:$hasListen
+if (-not $nick) {
+    Write-Error "talk-seat nick is empty after start (FR #237)"
+}
 
 $env:AGENTIC_IRC_DEBUG = '1'
 if (-not $needStart -and $agent) {
@@ -175,7 +214,7 @@ if (-not $needStart -and $agent) {
 $listenPid = ''
 $agent, $listen = Get-HomePythonProcs -HomePath $resolved
 if ($listen) { $listenPid = $listen.ProcessId }
-if ($agent) { $agentPid = $agent.ProcessId }
+if ($agent) { $agentPid = $agent.ProcessId; $expectedNick = "$mid-$agentPid"; if (-not $nick) { $nick = $expectedNick } }
 @(
     "nick=$nick"
     "seat=$agentPid"

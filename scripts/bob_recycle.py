@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 import time
 from dataclasses import dataclass, field
@@ -12,6 +13,11 @@ import bobreport
 
 RECYCLE_WIRE_PREFIX = "RECYCLE v1 "
 CHAIR_HOME_MACHINE = "ionos"
+# FR #197 (gh-Jeeves): RECYCLE machine=<id> by=<nick> scope=local|fleet exec=local-bob-seat
+_JEEVES_ROUTE_RE = re.compile(
+    r"^RECYCLE\s+machine=(\S+)\s+by=\S+\s+scope=(\S+)\s+exec=local-bob-seat\s*$",
+    re.I,
+)
 
 
 def format_recycle_wire(machine_id: str) -> str:
@@ -19,8 +25,36 @@ def format_recycle_wire(machine_id: str) -> str:
     return f"{RECYCLE_WIRE_PREFIX}{mid}"
 
 
-def parse_recycle_wire(body: str) -> str | None:
+def parse_jeeves_recycle_route(body: str) -> tuple[str, str] | None:
+    """Parse FR #197 shop wire. Returns ``(machine_id, scope)`` or None."""
     text = (body or "").strip()
+    m = _JEEVES_ROUTE_RE.match(text)
+    if not m:
+        return None
+    raw_mid = (m.group(1) or "").strip().lower()
+    scope = (m.group(2) or "local").strip().lower()
+    if raw_mid in ("bobiverse", "agentic_irc", "unknown", ""):
+        raw_mid = CHAIR_HOME_MACHINE
+    if raw_mid == "fleet" or scope == "fleet":
+        return "fleet", "fleet"
+    if raw_mid == "dev1":
+        raw_mid = "ce-priority-dev1"
+    mid = resolve_recycle_machine(raw_mid)
+    if not mid:
+        return None
+    return mid, scope
+
+
+def parse_recycle_wire(body: str) -> str | None:
+    """Accept legacy ``RECYCLE v1 <machine>`` or FR #197 ``RECYCLE machine=…``."""
+    text = (body or "").strip()
+    jeeves = parse_jeeves_recycle_route(text)
+    if jeeves:
+        mid, scope = jeeves
+        if scope == "fleet" or mid == "fleet":
+            # Caller must expand fleet to local machine id.
+            return "fleet"
+        return mid
     if not text.lower().startswith(RECYCLE_WIRE_PREFIX.lower()):
         return None
     token = text[len(RECYCLE_WIRE_PREFIX) :].strip().split(None, 1)[0]
@@ -418,3 +452,12 @@ def ack_message(machine_id: str, *, local: bool) -> str:
     if local:
         return f"recycle: started {disp} on this box"
     return f"recycle: requested {disp}"
+
+
+def restarting_announce(machine_id: str, nick: str) -> str:
+    """Channel line before host ops — Bob must say this, then actually recycle."""
+    disp = bobreport.SHORT_TO_MACHINE.get(machine_id, machine_id)
+    if machine_id == "ce-priority-dev1":
+        disp = "dev1"
+    who = (nick or "bob").strip() or "bob"
+    return f"{who}: recycling {disp} — restarting Watch-Bobiverse + tray (deterministic)"

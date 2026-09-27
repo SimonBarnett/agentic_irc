@@ -849,17 +849,36 @@ class Client:
             return False
         if not bobtalk.is_fleet_bob_nick(self.original_nick):
             return False
-        mid = bob_recycle.parse_recycle_wire(body)
-        if not mid:
-            return False
         local = self._local_machine_id()
-        if not local or local != mid:
+        if not local:
             return False
+        # FR #197 route or legacy RECYCLE v1
+        jeeves = bob_recycle.parse_jeeves_recycle_route(body)
+        if jeeves:
+            mid, scope = jeeves
+            if scope == "fleet" or mid == "fleet":
+                mid = local
+            elif mid != local:
+                return False
+        else:
+            mid = bob_recycle.parse_recycle_wire(body)
+            if not mid or mid != local:
+                return False
         chair = (bobreport.digest_chair_nick(self.home) or "").strip().lower()
         if not chair or src.strip().lower() != chair:
             return False
+        # CAST IRON: announce restarting on the wire, then actually recycle.
+        ann = bob_recycle.restarting_announce(mid, self.original_nick)
+        try:
+            self.say(ann)
+        except Exception:
+            try:
+                self.send("PRIVMSG " + bobreport.FLEET_CHANNEL + " :" + ann)
+            except Exception:
+                pass
+        info(f"INFO recycle announcing restart machine={mid} from={src}")
         bob_recycle.execute_local_recycle(
-            mid, self.home, ionos_chair=False, hooks=getattr(self, "_recycle_hooks", None)
+            mid, self.home, ionos_chair=(mid == bob_recycle.CHAIR_HOME_MACHINE), hooks=getattr(self, "_recycle_hooks", None)
         )
         info(f"INFO recycle wire accepted machine={mid} from={src}")
         return True

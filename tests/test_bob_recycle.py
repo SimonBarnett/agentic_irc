@@ -26,6 +26,21 @@ def test_recycle_wire_roundtrip():
     assert bob_recycle.format_recycle_wire("ionos") == "RECYCLE v1 ionos"
 
 
+def test_jeeves_fr197_route_parsed_and_bobiverse_mapped_to_ionos():
+    assert bob_recycle.parse_jeeves_recycle_route(
+        "RECYCLE machine=ionos by=simon scope=local exec=local-bob-seat"
+    ) == ("ionos", "local")
+    # Bad machine=bobiverse from old Jeeves builds → chair home
+    assert bob_recycle.parse_jeeves_recycle_route(
+        "RECYCLE machine=bobiverse by=simon scope=local exec=local-bob-seat"
+    ) == ("ionos", "local")
+    assert bob_recycle.parse_recycle_wire(
+        "RECYCLE machine=ionos by=simon scope=local exec=local-bob-seat"
+    ) == "ionos"
+    assert "restarting" in bob_recycle.restarting_announce("ionos", "bob-ionos").lower()
+    assert bob_recycle.restarting_announce("ionos", "bob-ionos").startswith("bob-ionos:")
+
+
 def test_build_plan_includes_tray_and_ionos_chair():
     plan = bob_recycle.build_recycle_plan("flamingo", ionos_chair=False)
     assert "recycle_watch_bobtray" in plan.steps

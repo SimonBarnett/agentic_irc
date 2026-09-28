@@ -147,6 +147,10 @@ def test_fr259_start_ps1_no_psscriptroot_in_param_defaults():
     # #266: do not hard-default to fleet-only C:\ai\ergo\nssm.exe
     assert "Resolve-AircConsoleNssm" in install
     assert "third_party" in install
+    # #273: tear down prior service; nssm stderr must not abort Stop
+    assert "Remove-AircConsoleService" in install
+    assert "Invoke-AircNssm" in install
+    assert "remove" in install and "confirm" in install
     docs = (ROOT / "docs" / "airc-console-fr253.md").read_text(encoding="utf-8")
     assert "FR #259" in docs
     assert "#266" in docs or "issue #266" in docs

@@ -27,6 +27,7 @@ Installable **airc** service on each Windows box:
 | Start on mapped drive / CmdletBinding (FR #259) | `Start-AircConsole.ps1` resolves script dir in body — never `$PSScriptRoot` in `param()` defaults |
 | Bundled NSSM (issue #266) | Release zip includes `third_party/nssm/win64/nssm.exe`; install does **not** require `C:\ai\ergo\nssm.exe` |
 | NickServ GUID (issue #271) | First start mints GUID into `console.password`; reuse next start; Ergo PASS stays separate |
+| Reinstall (issue #273) | `Install-AircConsole` stops+removes any existing `AircConsole` then installs fresh; nssm "not been started" stderr is ignored |
 | Release | `Pack-AircConsoleRelease.ps1` builds `dist/airc-console-*.zip` |
 | Selftest | `airc_console_service.py --selftest` exit 0 |
 

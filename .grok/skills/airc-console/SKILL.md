@@ -34,6 +34,10 @@ Application must be `powershell.exe`, not `Start-AircConsole.ps1`. A mapped
 does not need `C:\ai\ergo\nssm.exe` on the client. Prefer `Install-AircConsole.cmd`
 from the unpacked release (keeps scripts + third_party together).
 
+**Issue #273:** install **removes** any existing `AircConsole` service then
+registers from the current tree. Stopping an already-stopped service must not
+fail the script (`nssm` stderr under `$ErrorActionPreference Stop`).
+
 ```bat
 scripts\Install-AircConsole.cmd
 net start AircConsole

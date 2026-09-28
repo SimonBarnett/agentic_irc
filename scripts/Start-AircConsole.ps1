@@ -48,16 +48,34 @@ if (-not $RepoRoot -or -not (Test-Path -LiteralPath $RepoRoot)) {
 $script = Join-Path $scriptDir 'airc_console_service.py'
 if (-not (Test-Path -LiteralPath $script)) { throw "missing $script" }
 
-if (-not $Python) {
-    $py = Get-Command python.exe -ErrorAction SilentlyContinue
-    if (-not $py) { throw 'python.exe not on PATH' }
-    $Python = $py.Source
-}
-
 if (-not $ConsoleHome) {
     $ConsoleHome = Join-Path $env:USERPROFILE '.airc-console'
 }
 New-Item -ItemType Directory -Force -Path $ConsoleHome | Out-Null
+
+# Issue #282: LocalSystem service has no user PATH — resolve absolute python.exe.
+$resolvePy = Join-Path $scriptDir 'Resolve-AircConsolePython.ps1'
+if (Test-Path -LiteralPath $resolvePy) { . $resolvePy }
+if (-not $Python -or -not (Test-Path -LiteralPath $Python)) {
+    $hint = ''
+    if ($ConsoleHome -match '^(.*)\\\.airc-console\\?$') {
+        $hint = $Matches[1]
+    } elseif ($env:USERPROFILE) {
+        $hint = $env:USERPROFILE
+    }
+    if (Get-Command Resolve-AircConsolePythonPath -ErrorAction SilentlyContinue) {
+        $Python = Resolve-AircConsolePythonPath -Preferred $Python -HintUserProfile $hint
+    }
+}
+if (-not $Python) {
+    $py = Get-Command python.exe -ErrorAction SilentlyContinue
+    if ($py) { $Python = $py.Source }
+}
+if (-not $Python -or -not (Test-Path -LiteralPath $Python)) {
+    throw 'python.exe not found (LocalSystem has no PATH; pass -Python or install Python for all users). Issue #282.'
+}
+$Python = (Resolve-Path -LiteralPath $Python).Path
+Write-Host "INFO python=$Python"
 
 $argsList = @(
     $script,

@@ -43,6 +43,10 @@ fleet `~\.grok\ergo\connect.password` → `~\.airc-console\ergo.password` (for
 LocalSystem), mints NickServ GUID if needed, then `Start-Service`. Use
 `-NoStart` only to skip the start. Never invent the Ergo server secret.
 
+**Issue #282:** LocalSystem has **no** user `PATH`. Install resolves absolute
+`python.exe` and passes `-Python` in NSSM AppParameters. Without that, the
+service loops on `python.exe not on PATH` and never joins IRC.
+
 ```bat
 scripts\Install-AircConsole.cmd
 net start AircConsole

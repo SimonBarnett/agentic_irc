@@ -19,7 +19,9 @@ param(
     [string]$ErgoPasswordFile = '',
     [string[]]$Operators = @('Simon'),
     [string]$ServiceName = 'AircConsole',
-    # #275: default starts the service so Running is the unattended end state.
+    # Absolute python.exe for LocalSystem (#282). Empty = auto-resolve at install.
+    [string]$Python = '',
+    # #277: default starts the service so Running is the unattended end state.
     [switch]$NoStart
 )
 
@@ -212,8 +214,23 @@ if ($inst.ExitCode -ne 0) {
     throw ("nssm install failed: {0} ({1})" -f $inst.ExitCode, ($inst.Output -join ' '))
 }
 
+# Issue #282: bake absolute python.exe into AppParameters (LocalSystem has no PATH).
+$resolvePy = Join-Path $scriptDir 'Resolve-AircConsolePython.ps1'
+if (Test-Path -LiteralPath $resolvePy) { . $resolvePy }
+if (-not $Python -or -not (Test-Path -LiteralPath $Python)) {
+    if (Get-Command Resolve-AircConsolePythonPath -ErrorAction SilentlyContinue) {
+        $Python = Resolve-AircConsolePythonPath -Preferred $Python -HintUserProfile $env:USERPROFILE
+    }
+}
+if (-not $Python -or -not (Test-Path -LiteralPath $Python)) {
+    throw 'python.exe not found for service install. Install Python (all-users) or pass -Python. Issue #282.'
+}
+$Python = (Resolve-Path -LiteralPath $Python).Path
+Write-Host "INFO service python=$Python"
+
 # Application MUST be powershell.exe (never the .ps1 Path — see NSSM GUI / issue #259).
 $appParams = "-NoProfile -ExecutionPolicy Bypass -File `"$Launcher`" -ServiceMode -ConsoleHome `"$ConsoleHome`""
+$appParams += " -Python `"$Python`""
 $appParams += " -PasswordFile `"$PasswordFile`""
 if (Test-Path -LiteralPath $opsFile) { $appParams += " -OperatorsFile `"$opsFile`"" }
 

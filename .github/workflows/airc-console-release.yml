@@ -10,6 +10,7 @@ on:
       - "scripts/Install-AircConsole.ps1"
       - "scripts/Install-AircConsole.cmd"
       - "scripts/Resolve-AircConsoleNssm.ps1"
+      - "scripts/Resolve-AircConsolePython.ps1"
       - "scripts/Fetch-Nssm.ps1"
       - "scripts/Pack-AircConsoleRelease.ps1"
       - "src/airc_console/**"

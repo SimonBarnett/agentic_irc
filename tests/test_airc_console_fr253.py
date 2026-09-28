@@ -157,6 +157,13 @@ def test_fr259_start_ps1_no_psscriptroot_in_param_defaults():
     assert "connect.password" in install
     assert "Start-Service" in install
     assert "-NoStart" in install
+    # #282: bake absolute python for LocalSystem
+    assert "Resolve-AircConsolePython" in install
+    assert '-Python' in install
+    start = (ROOT / "scripts" / "Start-AircConsole.ps1").read_text(encoding="utf-8")
+    assert "Resolve-AircConsolePython" in start
+    assert "Issue #282" in start
+    assert (ROOT / "scripts" / "Resolve-AircConsolePython.ps1").is_file()
     docs = (ROOT / "docs" / "airc-console-fr253.md").read_text(encoding="utf-8")
     assert "FR #259" in docs
     assert "#266" in docs or "issue #266" in docs

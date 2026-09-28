@@ -94,11 +94,22 @@ function Initialize-AircConsoleHomeSecrets {
         [string]$ErgoSourceFile = ''
     )
     $opsFile = Join-Path $ConsoleHomeDir 'operators.txt'
-    if (-not (Test-Path -LiteralPath $opsFile) -and $OperatorNicks.Count -gt 0) {
-        Set-Content -LiteralPath $opsFile -Value ($OperatorNicks -join "`n") -Encoding utf8
-        Write-Host "INFO wrote $opsFile"
+    # Issue #289: never UTF-8 BOM — PS 5.1 Set-Content -Encoding utf8 prefixes U+FEFF
+    # and load used to keep "\ufeffSimon" which never matches nick simon.
+    if ($OperatorNicks.Count -gt 0 -and -not (Test-Path -LiteralPath $opsFile)) {
+        $body = ($OperatorNicks -join "`n") + "`n"
+        [IO.File]::WriteAllText($opsFile, $body, [Text.UTF8Encoding]::new($false))
+        Write-Host "INFO wrote $opsFile (no BOM)"
     } elseif (Test-Path -LiteralPath $opsFile) {
-        Write-Host "INFO keep $opsFile"
+        # Rewrite existing file without BOM if present.
+        $raw = [IO.File]::ReadAllText($opsFile)
+        $clean = $raw.TrimStart([char]0xFEFF)
+        if ($clean -ne $raw) {
+            [IO.File]::WriteAllText($opsFile, $clean, [Text.UTF8Encoding]::new($false))
+            Write-Host "INFO stripped UTF-8 BOM from $opsFile (#289)"
+        } else {
+            Write-Host "INFO keep $opsFile"
+        }
     } else {
         throw 'operators.txt missing and -Operators empty (FR #253)'
     }

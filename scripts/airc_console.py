@@ -305,10 +305,12 @@ class AircConsoleCore:
 def load_operators(path: Path | None, cli: list[str] | None = None) -> set[str]:
     ops: set[str] = set()
     if cli:
-        ops.update(x.strip() for x in cli if x and x.strip())
+        ops.update(x.strip().lstrip("\ufeff") for x in cli if x and x.strip())
     if path and path.is_file():
-        for line in path.read_text(encoding="utf-8").splitlines():
-            s = line.strip()
+        # utf-8-sig strips BOM from PowerShell Set-Content -Encoding utf8 (issue #289).
+        text = path.read_text(encoding="utf-8-sig")
+        for line in text.splitlines():
+            s = line.strip().lstrip("\ufeff")
             if not s or s.startswith("#"):
                 continue
             ops.add(s)

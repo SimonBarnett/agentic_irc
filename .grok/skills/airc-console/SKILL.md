@@ -1,4 +1,4 @@
----
+﻿---
 name: airc-console
 description: >
   Installable airc console Windows service: nick console on #{machinename},
@@ -10,7 +10,7 @@ description: >
 
 # airc console (FR #253)
 
-Foundation: harvest-agent-skills → https://github.com/SimonBarnett/agentic_irc
+Foundation: harvest-agent-skills â†’ https://github.com/SimonBarnett/agentic_irc
 
 ## What it is
 
@@ -25,12 +25,12 @@ Not Mode 3 / DUMB PSK. Not Jeeves. Not a talk seat. No `#bobiverse`.
 
 ## Install
 
-**FR #256:** do not run the `.ps1` by path under Restricted/AllSigned — use the
+**FR #256:** do not run the `.ps1` by path under Restricted/AllSigned â€” use the
 `.cmd` wrapper (Unblock-File + `-ExecutionPolicy Bypass`).
 
 **FR #259:** install from a **local** tree (`C:\ai\airc-console`). NSSM Path /
 Application must be `powershell.exe`, not `Start-AircConsole.ps1`. A mapped
-`P:\download\…` Path reproduces empty `$PSScriptRoot` under `[CmdletBinding()]`.
+`P:\download\â€¦` Path reproduces empty `$PSScriptRoot` under `[CmdletBinding()]`.
 
 **Issue #266:** release zip **bundles** `third_party/nssm/win64/nssm.exe`. Install
 does not need `C:\ai\ergo\nssm.exe` on the client. Prefer `Install-AircConsole.cmd`
@@ -41,7 +41,7 @@ registers from the current tree. Stopping an already-stopped service must not
 fail the script (`nssm` stderr under `$ErrorActionPreference Stop`).
 
 **Issue #277:** unattended end state is **service Running**. Install copies
-fleet `~\.grok\ergo\connect.password` → `~\.airc-console\ergo.password` (for
+fleet `~\.grok\ergo\connect.password` â†’ `~\.airc-console\ergo.password` (for
 LocalSystem), mints NickServ GUID if needed, then `Start-Service`. Use
 `-NoStart` only to skip the start. Never invent the Ergo server secret.
 
@@ -68,13 +68,13 @@ Selftest: `python scripts/airc_console_service.py --selftest`
 
 ## Release
 
-`Pack-AircConsoleRelease.ps1` → `dist/airc-console-<ver>.zip` (+ `.sha256`),
+`Pack-AircConsoleRelease.ps1` â†’ `dist/airc-console-<ver>.zip` (+ `.sha256`),
 including NSSM via `Fetch-Nssm.ps1`. CI workflow `airc-console-release.yml`
 publishes rolling tag `airc-console` and immutable `airc-console-v<ver>`.
 
 ## Auth CAST IRON
 
-Empty operators **and** accounts → refuse start. Prefer account-tag when
+Empty operators **and** accounts â†’ refuse start. Prefer account-tag when
 `--require-account` / `--accounts` set (FR #230 map).
 
 **NickServ (#271):** first start mints a GUID into
@@ -84,3 +84,6 @@ invent one.
 **Ergo server PASS:** `AGENTIC_IRC_PASSWORD` / `AIRC_CONSOLE_SERVER_PASSWORD` /
 `~\.airc-console\ergo.password` / `~\.grok\ergo\connect.password`. Never invent
 the fleet server secret; never send the NickServ GUID as server `PASS`.
+
+**Issue #289:** `operators.txt` must be UTF-8 **without BOM**. PS 5.1 `Set-Content -Encoding utf8` writes BOM and nick `simon` fails auth. Install rewrites; `load_operators` uses utf-8-sig.
+

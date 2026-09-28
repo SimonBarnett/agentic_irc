@@ -19,6 +19,9 @@ from airc_console import (  # noqa: E402
     ensure_nickserv_password,
     load_operators,
     machine_id,
+    nick_matches_pattern,
+    parse_ctcp_ping,
+    parse_ping_command,
     resolve_server_password,
     shop_channel,
 )
@@ -36,6 +39,25 @@ def test_console_nick_machine_scoped():
     assert console_nick("FLAMINGO", "auto") == "console-flamingo"
     assert console_nick("flamingo", "console") == "console"
     assert console_nick("flamingo", "myconsole") == "myconsole"
+
+
+def test_ping_wildcard_and_ctcp():
+    """Issue #298: answer ping / flam* / CTCP PING without operator auth."""
+    assert nick_matches_pattern("flam*", "console-flamingo", "flamingo")
+    assert nick_matches_pattern("flamingo", "console-flamingo", "flamingo")
+    assert nick_matches_pattern("*", "console-flamingo", "flamingo")
+    assert not nick_matches_pattern("ionos*", "console-flamingo", "flamingo")
+    assert parse_ping_command("ping flam*") == "flam*"
+    assert parse_ping_command("PING") == "*"
+    assert parse_ctcp_ping("\x01PING 12345\x01") == "12345"
+    auth = AuthPolicy(operators=set())  # empty ops — ping must still work
+    core = AircConsoleCore(machine="flamingo", auth=auth, nick="console-flamingo")
+    r = core.handle_raw(":simon!s@h PRIVMSG #flamingo :ping flam*")
+    assert r and r.action == "pong" and r.reply == "pong console-flamingo"
+    r2 = core.handle_raw(":simon!s@h PRIVMSG console-flamingo :\x01PING abc\x01")
+    assert r2 and r2.action == "ctcp_pong" and r2.reply == "abc"
+    r3 = core.handle_raw(":simon!s@h PRIVMSG #flamingo :ping ionos*")
+    assert r3 and r3.action == "silent_channel"
 
 
 def test_auth_operators_only():

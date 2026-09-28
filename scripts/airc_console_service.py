@@ -33,6 +33,11 @@ from airc_console import (
 )
 
 FLOOD_S = 0.35
+# Issue #298: half-open / silent link detection + reconnect.
+IDLE_PING_S = 60.0
+IDLE_DEAD_S = 120.0
+RECONNECT_MIN_S = 3.0
+RECONNECT_MAX_S = 60.0
 
 
 def info(msg: str) -> None:
@@ -111,12 +116,20 @@ class AircConsoleService:
         self.sock: ssl.SSLSocket | socket.socket | None = None
         self._send_lock = threading.Lock()
         self._stop = threading.Event()
+        self._registered = False
+        self._last_recv = 0.0
+        self._last_ping_sent = 0.0
+        self._awaiting_pong = False
+        self._force_reconnect = False
 
     def _on_console_out(self, nick: str, line: str) -> None:
         # Reply in Query only — never on shop channel (silent).
         self.send_privmsg(nick, line[:400])
 
     def connect(self) -> None:
+        self._registered = False
+        self._force_reconnect = False
+        self._awaiting_pong = False
         raw = socket.create_connection((self.args.host, int(self.args.port)), timeout=30)
         if self.args.tls:
             ctx = ssl.create_default_context()
@@ -127,14 +140,18 @@ class AircConsoleService:
         else:
             self.sock = raw
         self.sock.settimeout(1.0)
+        self._last_recv = time.monotonic()
         info(f"INFO connected {self.args.host}:{self.args.port} tls={self.args.tls}")
 
     def send(self, line: str) -> None:
         if not self.sock:
-            return
+            raise ConnectionError("send: no socket")
         data = (line.rstrip("\r\n") + "\r\n").encode("utf-8", errors="replace")
         with self._send_lock:
-            self.sock.sendall(data)
+            try:
+                self.sock.sendall(data)
+            except OSError as e:
+                raise ConnectionError(f"send failed: {e}") from e
             time.sleep(FLOOD_S)
 
     def send_privmsg(self, target: str, text: str) -> None:
@@ -144,6 +161,11 @@ class AircConsoleService:
         # IRC line length safety
         safe = text.replace("\n", " ").replace("\r", " ")
         self.send(f"PRIVMSG {target} :{safe}")
+
+    def send_notice(self, target: str, text: str) -> None:
+        """NOTICE — used for ping replies (including channel ping → Query-style NOTICE)."""
+        safe = text.replace("\n", " ").replace("\r", " ")
+        self.send(f"NOTICE {target} :{safe}")
 
     def send_server_pass(self) -> None:
         """Ergo irc.ntsa.uk requires PASS before NICK/USER (same as irc_agent)."""
@@ -221,6 +243,7 @@ class AircConsoleService:
             return
 
     def on_line(self, line: str) -> None:
+        self._last_recv = time.monotonic()
         tags, rest = parse_message_tags(line)
         if rest.startswith("PING "):
             self.send("PONG " + rest[5:])
@@ -241,6 +264,15 @@ class AircConsoleService:
             _, trailing = rest.split(" :", 1)
             args = rest.split(" :", 1)[0].split(" ")[1:]
 
+        if cmd == "ERROR":
+            info(f"INFO server-ERROR {trailing or ' '.join(args)}")
+            self._force_reconnect = True
+            return
+
+        if cmd == "PONG":
+            self._awaiting_pong = False
+            return
+
         if cmd in {"CAP", "AUTHENTICATE", "903", "904", "905", "906", "907"} or (
             cmd == "CAP"
         ):
@@ -248,6 +280,8 @@ class AircConsoleService:
 
         if cmd == "001":
             # Welcome — registration succeeded; JOIN shop channel.
+            self._registered = True
+            self._nick_retries = 0
             self.join_shop()
 
         if cmd == "433":
@@ -255,6 +289,7 @@ class AircConsoleService:
             self._nick_retries += 1
             if self._nick_retries > 5:
                 info(f"INFO nick-collision giving up on {self.nick}")
+                self._force_reconnect = True
                 return
             alt = console_nick(self.machine, None)
             if self.nick.lower() == alt.lower():
@@ -284,17 +319,47 @@ class AircConsoleService:
         hr = self.core.handle_raw(line)
         if not hr:
             return
-        if hr.action == "deny" and hr.nick and hr.reply:
+        if hr.action == "ctcp_pong" and hr.nick is not None:
+            # CTCP PONG via NOTICE (standard); works for client /ping flam*
+            payload = hr.reply if hr.reply is not None else ""
+            body = f"\x01PING {payload}\x01" if payload != "" else "\x01PING\x01"
+            self.send_notice(hr.nick, body)
+            info(f"INFO ctcp-pong to={hr.nick}")
+        elif hr.action == "pong" and hr.nick and hr.reply:
+            # Channel or Query "ping flam*" → NOTICE (not channel PRIVMSG).
+            self.send_notice(hr.nick, hr.reply)
+            info(f"INFO pong to={hr.nick} {hr.reply}")
+        elif hr.action == "deny" and hr.nick and hr.reply:
             self.send_privmsg(hr.nick, hr.reply)
         elif hr.action in {"help", "close"} and hr.nick and hr.reply:
             self.send_privmsg(hr.nick, hr.reply)
         elif hr.action == "pipe":
             info(f"INFO pipe from={hr.nick}")
 
+    def _idle_keepalive(self) -> None:
+        """Detect half-open links: client PING, then force reconnect if no traffic (#298)."""
+        now = time.monotonic()
+        idle = now - self._last_recv
+        if self._awaiting_pong and (now - self._last_ping_sent) >= IDLE_DEAD_S:
+            info("INFO idle-dead (no PONG/traffic); reconnecting")
+            self._force_reconnect = True
+            return
+        if self._registered and idle >= IDLE_PING_S and not self._awaiting_pong:
+            token = str(int(time.time()))
+            try:
+                self.send(f"PING :{token}")
+            except ConnectionError as e:
+                info(f"INFO keepalive-send-err {e}")
+                self._force_reconnect = True
+                return
+            self._last_ping_sent = now
+            self._awaiting_pong = True
+            info("INFO keepalive PING sent")
+
     def read_loop(self) -> None:
         assert self.sock is not None
         buf = b""
-        while not self._stop.is_set():
+        while not self._stop.is_set() and not self._force_reconnect:
             try:
                 chunk = self.sock.recv(4096)
             except (socket.timeout, TimeoutError):
@@ -303,6 +368,11 @@ class AircConsoleService:
                     self.sessions.reap_idle()
                 except Exception as re:
                     info(f"INFO reap-err {re}")
+                try:
+                    self._idle_keepalive()
+                except Exception as ke:
+                    info(f"INFO keepalive-err {ke}")
+                    self._force_reconnect = True
                 continue
             except Exception as e:
                 info(f"INFO recv-err {e}")
@@ -317,17 +387,25 @@ class AircConsoleService:
                 if line:
                     try:
                         self.on_line(line)
+                    except ConnectionError as e:
+                        info(f"INFO on_line-conn-err {e}")
+                        self._force_reconnect = True
+                        break
                     except Exception as e:
                         info(f"INFO on_line-err {e}")
+            if self._force_reconnect:
+                break
 
     def run(self) -> int:
         info(f"INFO airc-console machine={self.machine} channel={self.channel} nick={self.nick}")
-        backoff = 5
+        backoff = RECONNECT_MIN_S
         while not self._stop.is_set():
+            session_ok = False
             try:
                 self.connect()
                 self.handshake()
                 self.read_loop()
+                session_ok = self._registered
             except Exception as e:
                 info(f"INFO session-err {e}")
             finally:
@@ -340,9 +418,11 @@ class AircConsoleService:
                     self.sock = None
             if self._stop.is_set():
                 break
-            info(f"INFO reconnect in {backoff}s")
+            if session_ok:
+                backoff = RECONNECT_MIN_S
+            info(f"INFO reconnect in {backoff:.0f}s (registered={session_ok})")
             time.sleep(backoff)
-            backoff = min(60, backoff * 2)
+            backoff = min(RECONNECT_MAX_S, max(RECONNECT_MIN_S, backoff * 2))
         return 0
 
 

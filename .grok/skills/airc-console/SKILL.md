@@ -91,3 +91,6 @@ the NickServ GUID as server `PASS`.
 
 **Issue #298:** auto-reconnect on connection loss (backoff reset after good session; idle keepalive PING). Answers CTCP PING and `ping flam*` (NOTICE pong) without operator auth.
 
+
+**Issue #302:** any `bob-{machinename}` fleet nick may use the console (machine name varies; already authenticated). Install also seeds `bob-<COMPUTERNAME>` into operators.txt.
+

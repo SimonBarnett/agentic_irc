@@ -22,6 +22,21 @@ from account_map import AccountMap, parse_message_tags
 
 NICK = "console"
 DEFAULT_SHELL = os.environ.get("COMSPEC") or "cmd.exe"
+
+
+def console_nick(machine: str | None = None, explicit: str | None = None) -> str:
+    """IRC nick for the console seat (issue #286).
+
+    Bare ``console`` collides on a shared Ergo (433) when more than one box
+    runs airc-console. Default is ``console-<machine>`` (unique per box).
+    Pass explicit ``console`` only on a single-console network.
+    """
+    if explicit and explicit.strip() and explicit.strip().lower() != "auto":
+        return explicit.strip()
+    mid = machine_id(machine)
+    # IRC nick max 30ish; keep short.
+    nick = f"console-{mid}"
+    return nick[:30]
 _PRIVMSG_RE = re.compile(
     r"^:([^!\s]+)(?:![^@\s]*@\S+)?\s+PRIVMSG\s+(\S+)\s+:?(.*)$",
     re.IGNORECASE,

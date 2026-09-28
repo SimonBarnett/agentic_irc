@@ -14,10 +14,12 @@ Foundation: harvest-agent-skills → https://github.com/SimonBarnett/agentic_irc
 
 ## What it is
 
-Windows service (NSSM `AircConsole`) that keeps IRC nick **`console`** on
-**`#{COMPUTERNAME}`**. Silent in the shop channel. Authenticated users PRIVMSG
-`console`; each line is piped to that user's shell session; stdout returns in
-Query only.
+Windows service (NSSM `AircConsole`) that keeps IRC nick
+**`console-<machinename>`** (e.g. `console-flamingo`) on **`#{COMPUTERNAME}`**.
+Bare nick `console` collides on shared Ergo (433) when another box holds it
+(issue #286). Silent in the shop channel. Authenticated users PRIVMSG the
+console nick; each line is piped to that user's shell session; stdout returns
+in Query only.
 
 Not Mode 3 / DUMB PSK. Not Jeeves. Not a talk seat. No `#bobiverse`.
 

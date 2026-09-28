@@ -6,7 +6,7 @@
 
 Installable **airc** service on each Windows box:
 
-1. Connect as nick **`console`**
+1. Connect as nick **`console-<machinename>`** (issue #286: bare `console` hits 433 on shared Ergo)
 2. JOIN (create if missing) channel **`#{machinename}`**
 3. Register / identify the nick
 4. Stay **silent** in the shop channel
@@ -30,6 +30,7 @@ Installable **airc** service on each Windows box:
 | Reinstall (issue #273) | `Install-AircConsole` stops+removes any existing `AircConsole` then installs fresh; nssm "not been started" stderr is ignored |
 | Unattended (issue #277) | Seeds `ergo.password` from `~\.grok\ergo\connect.password`, mints NickServ GUID, **Start-Service** → Running |
 | LocalSystem Python (issue #282) | Install bakes absolute `python.exe` into NSSM `-Python`; Start resolves when PATH empty |
+| Unique nick (issue #286) | Default nick `console-<machine>`; on IRC 433 retry with suffix then JOIN |
 | Release | `Pack-AircConsoleRelease.ps1` builds `dist/airc-console-*.zip` |
 | Selftest | `airc_console_service.py --selftest` exit 0 |
 

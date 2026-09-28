@@ -15,6 +15,7 @@ from airc_console import (  # noqa: E402
     AircConsoleCore,
     AuthPolicy,
     ConsoleSessionManager,
+    console_nick,
     ensure_nickserv_password,
     load_operators,
     machine_id,
@@ -27,6 +28,14 @@ def test_channel_naming_machinename():
     assert machine_id("IONOS") == "ionos"
     assert shop_channel("IONOS") == "#ionos"
     assert shop_channel("ce-priority-dev1") == "#ce-priority-dev1"
+
+
+def test_console_nick_machine_scoped():
+    """Issue #286: bare console collides (433) on shared Ergo."""
+    assert console_nick("flamingo") == "console-flamingo"
+    assert console_nick("FLAMINGO", "auto") == "console-flamingo"
+    assert console_nick("flamingo", "console") == "console"
+    assert console_nick("flamingo", "myconsole") == "myconsole"
 
 
 def test_auth_operators_only():

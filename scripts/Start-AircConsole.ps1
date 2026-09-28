@@ -17,7 +17,8 @@ param(
     [string]$Python = '',
     [string]$HostName = 'irc.ntsa.uk',
     [int]$Port = 6697,
-    [string]$Nick = 'console',
+    # Empty/auto -> Python console-<machine> (issue #286; bare console hits 433).
+    [string]$Nick = 'auto',
     [Alias('Home')]
     [string]$ConsoleHome = '',
     [string]$PasswordFile = '',

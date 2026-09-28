@@ -23,6 +23,7 @@ from airc_console import (
     AircConsoleCore,
     AuthPolicy,
     ConsoleSessionManager,
+    console_nick,
     ensure_nickserv_password,
     home_dir,
     load_operators,
@@ -56,7 +57,9 @@ class AircConsoleService:
         self.home.mkdir(parents=True, exist_ok=True)
         self.machine = machine_id(args.machine)
         self.channel = shop_channel(self.machine)
-        self.nick = args.nick
+        # #286: default console-<machine> — bare "console" gets 433 on shared Ergo.
+        self.nick = console_nick(self.machine, getattr(args, "nick", None))
+        self._nick_retries = 0
         # #271: NickServ GUID in console.password (mint+reuse). Ergo PASS separate.
         nickserv_path = (
             Path(args.password_file)
@@ -244,7 +247,23 @@ class AircConsoleService:
             self._handle_sasl_line(cmd, args, trailing)
 
         if cmd == "001":
+            # Welcome — registration succeeded; JOIN shop channel.
             self.join_shop()
+
+        if cmd == "433":
+            # Nickname already in use — never get 001/JOIN without recovery (#286).
+            self._nick_retries += 1
+            if self._nick_retries > 5:
+                info(f"INFO nick-collision giving up on {self.nick}")
+                return
+            alt = console_nick(self.machine, None)
+            if self.nick.lower() == alt.lower():
+                alt = f"{alt}-{self._nick_retries}"[:30]
+            info(f"INFO nick-in-use 433 {self.nick} -> {alt}")
+            self.nick = alt
+            self.core.nick = alt
+            self.send(f"NICK {alt}")
+            return
 
         if cmd == "JOIN":
             nick = parse_prefix_nick(":" + prefix) if prefix else None
@@ -278,8 +297,12 @@ class AircConsoleService:
         while not self._stop.is_set():
             try:
                 chunk = self.sock.recv(4096)
-            except socket.timeout:
-                self.sessions.reap_idle()
+                    except (socket.timeout, TimeoutError):
+                # Python 3.10+ ssl may raise TimeoutError; keep the loop alive (#286).
+                try:
+                    self.sessions.reap_idle()
+                except Exception as re:
+                    info(f"INFO reap-err {re}")
                 continue
             except Exception as e:
                 info(f"INFO recv-err {e}")
@@ -330,7 +353,11 @@ def build_arg_parser() -> argparse.ArgumentParser:
     p.add_argument("--tls", action="store_true", default=True)
     p.add_argument("--no-tls", action="store_false", dest="tls")
     p.add_argument("--tls-insecure", action="store_true")
-    p.add_argument("--nick", default="console")
+    p.add_argument(
+        "--nick",
+        default="auto",
+        help="IRC nick (default auto = console-<machine>; bare 'console' collides on shared Ergo #286)",
+    )
     p.add_argument("--machine", default=None, help="override COMPUTERNAME for #{machine}")
     p.add_argument("--home", default=None)
     p.add_argument("--password-file", default=None)
@@ -354,6 +381,9 @@ def build_arg_parser() -> argparse.ArgumentParser:
 def selftest() -> int:
     mid = machine_id("IONOS")
     assert shop_channel(mid) == "#ionos", shop_channel(mid)
+    assert console_nick("IONOS") == "console-ionos"
+    assert console_nick("IONOS", "auto") == "console-ionos"
+    assert console_nick("IONOS", "console") == "console"
     auth = AuthPolicy(operators={"simon"}, accounts=set())
     assert auth.allow("Simon")
     assert not auth.allow("stranger")

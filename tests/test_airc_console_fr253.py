@@ -125,6 +125,27 @@ def test_fr256_cmd_wrappers_bypass_execution_policy():
     assert "Install-AircConsole.cmd" in readme
 
 
+def test_fr259_start_ps1_no_psscriptroot_in_param_defaults():
+    """Issue #259: [CmdletBinding()] + Split-Path $PSScriptRoot in param() defaults crashes."""
+    text = (ROOT / "scripts" / "Start-AircConsole.ps1").read_text(encoding="utf-8")
+    assert "CmdletBinding" in text
+    # Default expression must not call Split-Path on $PSScriptRoot inside param().
+    assert "[string]$RepoRoot = ''" in text or '[string]$RepoRoot = ""' in text
+    assert "Split-Path $PSScriptRoot -Parent)," not in text
+    assert "Get-AircConsoleScriptDir" in text or "PSCommandPath" in text
+    assert "FR #259" in text
+    # $Home is a read-only automatic variable — parameter must be ConsoleHome.
+    assert "[string]$Home" not in text
+    assert "$ConsoleHome" in text
+    install = (ROOT / "scripts" / "Install-AircConsole.ps1").read_text(encoding="utf-8")
+    assert "FR #259" in install
+    assert "[string]$Home" not in install
+    assert "ConsoleHome" in install
+    assert "powershell.exe" in install
+    docs = (ROOT / "docs" / "airc-console-fr253.md").read_text(encoding="utf-8")
+    assert "FR #259" in docs
+
+
 def test_service_selftest_subprocess():
     import subprocess
 

@@ -37,9 +37,14 @@ def info(msg: str) -> None:
 
 
 def read_password(path: Path | None, env_key: str = "AIRC_CONSOLE_PASSWORD") -> str | None:
-    env = os.environ.get(env_key)
-    if env:
-        return env.strip()
+    """Server PASS / optional NickServ secret.
+
+    Prefer AIRC_CONSOLE_PASSWORD, then AGENTIC_IRC_PASSWORD (fleet Ergo), then file.
+    """
+    for key in (env_key, "AGENTIC_IRC_PASSWORD"):
+        env = os.environ.get(key)
+        if env and env.strip():
+            return env.strip()
     if path and path.is_file():
         return path.read_text(encoding="utf-8").strip() or None
     return None
@@ -121,32 +126,50 @@ class AircConsoleService:
         safe = text.replace("\n", " ").replace("\r", " ")
         self.send(f"PRIVMSG {target} :{safe}")
 
-    def sasl_plain(self) -> None:
+    def send_server_pass(self) -> None:
+        """Ergo irc.ntsa.uk requires PASS before NICK/USER (same as irc_agent)."""
         if not self.password:
-            info("INFO no-sasl (no password)")
+            info("INFO no-server-pass (set AIRC_CONSOLE_PASSWORD / password-file)")
             return
-        self.send("CAP REQ :sasl account-notify extended-join account-tag")
-        # Minimal PLAIN: wait handled in read loop via flags
+        self.send("PASS " + self.password)
+        info("INFO sent server PASS")
+
+    def request_caps(self) -> None:
+        # account-tag powers operator account allowlists (FR #230). SASL is best-effort.
+        caps = "account-notify extended-join account-tag"
+        if self.password and self.args.sasl:
+            caps = "sasl " + caps
+            self._want_sasl = True
+        else:
+            self._want_sasl = False
+        self.send(f"CAP REQ :{caps}")
+
+    def sasl_plain(self) -> None:
+        if not self.password or not self.args.sasl:
+            return
+        # Minimal PLAIN; failures must CAP END so registration can proceed.
         self._want_sasl = True
 
     def register_or_identify(self) -> None:
-        """Register nick when new; otherwise identify. Silent — NickServ Query only."""
+        """Best-effort NickServ identify/register. Silent — Query only."""
         if not self.password:
             info("INFO skip nick register/identify (no password)")
             return
-        # Ergo/Atheme style; safe to IDENTIFY if already registered.
+        # Ergo may have services disabled; ignore failures in read loop.
         self.send(f"PRIVMSG NickServ :IDENTIFY {self.nick} {self.password}")
         self.send(f"PRIVMSG NickServ :REGISTER {self.password} console@{self.machine}.local")
 
     def handshake(self) -> None:
         self._want_sasl = False
         self._sasl_done = False
-        if self.password:
-            self.sasl_plain()
+        # Order matches irc_agent: PASS → CAP → NICK/USER → (SASL) → CAP END.
+        self.send_server_pass()
+        self.request_caps()
         for cmd in self.core.register_commands():
             self.send(cmd)
-        # CAP END after optional SASL in read loop; if no sasl, end now
-        if not self.password:
+        if self._want_sasl:
+            self.sasl_plain()
+        else:
             self.send("CAP END")
         self.register_or_identify()
 
@@ -157,18 +180,22 @@ class AircConsoleService:
 
     def _handle_sasl_line(self, cmd: str, args: list[str], trailing: str) -> None:
         tokens = [a.lower() for a in args] + ([trailing.lower()] if trailing else [])
-        if cmd == "CAP" and "ack" in tokens and "sasl" in " ".join(tokens):
+        if cmd == "CAP" and "ack" in tokens and "sasl" in " ".join(tokens) and self.password:
             tok = base64.b64encode(f"{self.nick}\0{self.nick}\0{self.password}".encode()).decode("ascii")
             self.send("AUTHENTICATE PLAIN")
             self.send(f"AUTHENTICATE {tok}")
-        if cmd == "CAP" and args and args[-1].upper() == "ACK" and not self.password:
+            return
+        if cmd == "CAP" and "ack" in tokens and not self._want_sasl:
             self.send("CAP END")
+            return
         if cmd == "903":
             self._sasl_done = True
             self.send("CAP END")
+            return
         if cmd in {"904", "905", "906", "907"}:
-            info(f"INFO sasl-fail {cmd}")
+            info(f"INFO sasl-fail {cmd} (continuing with server PASS)")
             self.send("CAP END")
+            return
 
     def on_line(self, line: str) -> None:
         tags, rest = parse_message_tags(line)
@@ -287,6 +314,12 @@ def build_arg_parser() -> argparse.ArgumentParser:
     p.add_argument("--machine", default=None, help="override COMPUTERNAME for #{machine}")
     p.add_argument("--home", default=None)
     p.add_argument("--password-file", default=None)
+    p.add_argument(
+        "--sasl",
+        action="store_true",
+        default=False,
+        help="attempt SASL PLAIN after server PASS (default off; Ergo fleet uses PASS)",
+    )
     p.add_argument("--operators", nargs="*", default=[])
     p.add_argument("--operators-file", default=None)
     p.add_argument("--accounts", nargs="*", default=[], help="services account allowlist")

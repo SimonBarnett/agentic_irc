@@ -1,0 +1,71 @@
+name: airc-console-release
+on:
+  push:
+    branches: [main]
+    paths:
+      - "scripts/airc_console.py"
+      - "scripts/airc_console_service.py"
+      - "scripts/Start-AircConsole.ps1"
+      - "scripts/Install-AircConsole.ps1"
+      - "scripts/Pack-AircConsoleRelease.ps1"
+      - "src/airc_console/**"
+      - "docs/airc-console-fr253.md"
+      - ".github/workflows/airc-console-release.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Offline tests
+        run: python -m pytest tests/test_airc_console_fr253.py -q
+      - name: Pack zip
+        shell: pwsh
+        run: |
+          powershell -NoProfile -ExecutionPolicy Bypass -File scripts\Pack-AircConsoleRelease.ps1
+          Get-ChildItem dist | Format-Table Name, Length
+      - name: Rolling release airc-console
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: airc-console
+          name: airc-console
+          target_commitish: ${{ github.sha }}
+          body: |
+            Rolling airc console service (FR #253).
+
+            Nick `console` on `#{machinename}`, silent in channel, auth PRIVMSG → shell.
+            Install: `Install-AircConsole.ps1` (NSSM). See `docs/airc-console-fr253.md`.
+
+            Do not attach secrets. Put operators + password beside the install home.
+          files: |
+            dist/airc-console-*.zip
+            dist/airc-console-*.zip.sha256
+          make_latest: false
+      - name: Immutable version tag if new
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: pwsh
+        run: |
+          $ver = (Get-Content src/airc_console/VERSION -Raw).Trim()
+          $tag = "airc-console-v$ver"
+          git fetch --tags --force
+          $exists = git tag -l $tag
+          if ($exists) {
+            Write-Host "tag $tag already exists; leaving immutable"
+            exit 0
+          }
+          $zip = Get-ChildItem dist/airc-console-$ver.zip | Select-Object -First 1
+          $sha = Get-ChildItem dist/airc-console-$ver.zip.sha256 | Select-Object -First 1
+          gh release create $tag $zip.FullName $sha.FullName `
+            --title $tag `
+            --notes "airc console $ver (FR #253). NSSM service. See docs/airc-console-fr253.md." `
+            --target ${{ github.sha }}

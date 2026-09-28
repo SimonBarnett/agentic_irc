@@ -1,0 +1,124 @@
+"""FR #253: airc console service — offline acceptance."""
+from __future__ import annotations
+
+import sys
+import time
+from pathlib import Path
+
+import pytest
+
+ROOT = Path(__file__).resolve().parents[1]
+SCRIPTS = ROOT / "scripts"
+sys.path.insert(0, str(SCRIPTS))
+
+from airc_console import (  # noqa: E402
+    AircConsoleCore,
+    AuthPolicy,
+    ConsoleSessionManager,
+    load_operators,
+    machine_id,
+    shop_channel,
+)
+
+
+def test_channel_naming_machinename():
+    assert machine_id("IONOS") == "ionos"
+    assert shop_channel("IONOS") == "#ionos"
+    assert shop_channel("ce-priority-dev1") == "#ce-priority-dev1"
+
+
+def test_auth_operators_only():
+    auth = AuthPolicy(operators={"Simon", "bob-ionos"})
+    assert auth.allow("simon")
+    assert auth.allow("BOB-IONOS")
+    assert not auth.allow("stranger")
+
+
+def test_auth_account_required():
+    auth = AuthPolicy(operators={"simon"}, accounts={"simonbarnett"}, require_account=True)
+    assert not auth.allow("simon", account=None)
+    assert not auth.allow("simon", account="*")
+    assert auth.allow("simon", account="simonbarnett")
+    assert not auth.allow("simon", account="other")
+
+
+def test_refuse_empty_operators_loader(tmp_path: Path):
+    assert load_operators(tmp_path / "missing.txt") == set()
+    f = tmp_path / "ops.txt"
+    f.write_text("# comment\nSimon\n\n", encoding="utf-8")
+    assert load_operators(f) == {"Simon"}
+
+
+def test_silent_on_channel_no_reply():
+    auth = AuthPolicy(operators={"simon"})
+    core = AircConsoleCore(machine="ionos", auth=auth)
+    assert core.channel == "#ionos"
+    assert core.may_speak_on_channel() is False
+    r = core.handle_raw(":simon!s@h PRIVMSG #ionos :hello channel")
+    assert r is not None
+    assert r.action == "silent_channel"
+    assert r.reply is None
+
+
+def test_unauth_privmsg_denied():
+    auth = AuthPolicy(operators={"simon"})
+    core = AircConsoleCore(machine="ionos", auth=auth)
+    r = core.handle_raw(":evil!e@h PRIVMSG console :whoami")
+    assert r is not None
+    assert r.action == "deny"
+    assert "denied" in (r.reply or "")
+
+
+def test_auth_privmsg_pipes_and_quit():
+    auth = AuthPolicy(operators={"simon"})
+    mgr = ConsoleSessionManager(shell=None, on_output=None, idle_sec=60)
+    core = AircConsoleCore(machine="ionos", auth=auth, sessions=mgr)
+    try:
+        r = core.handle_raw(":simon!s@h PRIVMSG console :echo airc-fr253")
+        assert r is not None
+        assert r.action == "pipe"
+        assert "simon" in mgr.active()
+        r2 = core.handle_raw(":simon!s@h PRIVMSG console :.quit")
+        assert r2 is not None
+        assert r2.action == "close"
+        time.sleep(0.2)
+        assert "simon" not in mgr.active()
+    finally:
+        mgr.close_all()
+
+
+def test_account_tag_line_auth():
+    auth = AuthPolicy(operators={"simon"}, accounts={"simonbarnett"}, require_account=True)
+    core = AircConsoleCore(machine="ionos", auth=auth)
+    # tagged line without matching account map yet — account from tags used in allow()
+    line = "@account=simonbarnett :simon!s@h PRIVMSG console :.help"
+    r = core.handle_raw(line)
+    assert r is not None
+    assert r.action == "help"
+
+
+def test_docs_and_install_scripts_exist():
+    assert (ROOT / "docs" / "airc-console-fr253.md").is_file()
+    assert (ROOT / "scripts" / "Install-AircConsole.ps1").is_file()
+    assert (ROOT / "scripts" / "Start-AircConsole.ps1").is_file()
+    assert (ROOT / "scripts" / "Pack-AircConsoleRelease.ps1").is_file()
+    assert (ROOT / "src" / "airc_console" / "VERSION").is_file()
+    skill = (ROOT / ".grok" / "skills" / "airc-console" / "SKILL.md").read_text(encoding="utf-8")
+    assert "FR #253" in skill
+    assert "silent" in skill.lower()
+
+
+def test_service_selftest_subprocess():
+    import subprocess
+
+    py = sys.executable
+    script = SCRIPTS / "airc_console_service.py"
+    proc = subprocess.run([py, str(script), "--selftest"], capture_output=True, text=True, timeout=30)
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert "selftest ok" in proc.stdout
+
+
+def test_pack_script_mentions_zip():
+    text = (ROOT / "scripts" / "Pack-AircConsoleRelease.ps1").read_text(encoding="utf-8")
+    assert "airc-console-" in text
+    assert "Compress-Archive" in text

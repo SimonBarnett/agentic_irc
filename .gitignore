@@ -26,3 +26,6 @@ src/dumb_dotnet/*.exe
 src/dumb_dotnet/*.pdb
 src/dumb_dotnet/bin/
 src/dumb_dotnet/obj/
+
+dist/
+

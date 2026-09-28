@@ -118,4 +118,7 @@ if ($PasswordFile -and (Test-Path -LiteralPath $PasswordFile)) {
 Write-Host ("Application=" + (& $Nssm get $ServiceName Application))
 Write-Host ("AppParameters=" + (& $Nssm get $ServiceName AppParameters))
 Get-Service $ServiceName | Format-Table Name, Status, StartType -AutoSize
-Write-Host 'INFO Install done. Configure password file + operators before Start-Service.'
+Write-Host 'INFO Install done. Operators: ~\.airc-console\operators.txt (seeded if missing).'
+Write-Host 'INFO NickServ password: auto GUID in ~\.airc-console\console.password on first start (#271).'
+Write-Host 'INFO Ergo server PASS: AGENTIC_IRC_PASSWORD or ~\.airc-console\ergo.password / ~\.grok\ergo\connect.password.'
+Write-Host 'INFO Then: Start-Service AircConsole'

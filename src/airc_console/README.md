@@ -36,7 +36,8 @@ Equivalent PowerShell (explicit Bypass):
 
 ```powershell
 Set-Content $env:USERPROFILE\.airc-console\operators.txt "Simon"
-# optional: console.password for NickServ/SASL
+# NickServ: auto GUID in console.password on first start (issue #271)
+# Ergo PASS: AGENTIC_IRC_PASSWORD or .airc-console\ergo.password / ~/.grok/ergo/connect.password
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\Install-AircConsole.ps1
 Start-Service AircConsole
 ```

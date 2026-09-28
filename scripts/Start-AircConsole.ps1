@@ -66,11 +66,11 @@ $argsList = @(
     '--nick', $Nick,
     '--home', $ConsoleHome
 )
+# #271: always point at console.password — Python mints a GUID if missing.
 if (-not $PasswordFile) {
-    $defaultPw = Join-Path $ConsoleHome 'console.password'
-    if (Test-Path -LiteralPath $defaultPw) { $PasswordFile = $defaultPw }
+    $PasswordFile = Join-Path $ConsoleHome 'console.password'
 }
-if ($PasswordFile) { $argsList += @('--password-file', $PasswordFile) }
+$argsList += @('--password-file', $PasswordFile)
 if ($OperatorsFile) { $argsList += @('--operators-file', $OperatorsFile) }
 elseif (Test-Path -LiteralPath (Join-Path $ConsoleHome 'operators.txt')) {
     $argsList += @('--operators-file', (Join-Path $ConsoleHome 'operators.txt'))

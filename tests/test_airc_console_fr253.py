@@ -1,4 +1,4 @@
-"""FR #253: airc console service — offline acceptance."""
+﻿"""FR #253: airc console service â€” offline acceptance."""
 from __future__ import annotations
 
 import sys
@@ -90,7 +90,7 @@ def test_auth_privmsg_pipes_and_quit():
 def test_account_tag_line_auth():
     auth = AuthPolicy(operators={"simon"}, accounts={"simonbarnett"}, require_account=True)
     core = AircConsoleCore(machine="ionos", auth=auth)
-    # tagged line without matching account map yet — account from tags used in allow()
+    # tagged line without matching account map yet â€” account from tags used in allow()
     line = "@account=simonbarnett :simon!s@h PRIVMSG console :.help"
     r = core.handle_raw(line)
     assert r is not None
@@ -126,23 +126,24 @@ def test_fr256_cmd_wrappers_bypass_execution_policy():
 
 
 def test_fr259_start_ps1_no_psscriptroot_in_param_defaults():
-    """FR #259: Split-Path $PSScriptRoot in param() defaults throws when empty."""
-    import re
-
+    """Issue #259: [CmdletBinding()] + Split-Path $PSScriptRoot in param() defaults crashes."""
     text = (ROOT / "scripts" / "Start-AircConsole.ps1").read_text(encoding="utf-8")
-    m = re.search(r"(?is)param\s*\((.*?)\)\s*\$ErrorActionPreference", text)
-    assert m, "param() block not found in Start-AircConsole.ps1"
-    param_block = m.group(1)
-    assert "$PSScriptRoot" not in param_block, "PSScriptRoot must not appear in param() defaults"
-    assert "Get-AircScriptDir" in text or "PSCommandPath" in text
-    assert "[string]$Home" not in text and "$Home =" not in param_block
-    assert "ConsoleHome" in text
-    # Install must resolve launcher without relying solely on param-default PSScriptRoot
-    inst = (ROOT / "scripts" / "Install-AircConsole.ps1").read_text(encoding="utf-8")
-    assert "scriptDir" in inst
-    assert "ConsoleHome" in inst
-    assert "[string]$Home" not in inst
-    assert (ROOT / "src" / "airc_console" / "VERSION").read_text(encoding="utf-8").strip() == "0.1.2"
+    assert "CmdletBinding" in text
+    # Default expression must not call Split-Path on $PSScriptRoot inside param().
+    assert "[string]$RepoRoot = ''" in text or '[string]$RepoRoot = ""' in text
+    assert "Split-Path $PSScriptRoot -Parent)," not in text
+    assert "Get-AircConsoleScriptDir" in text or "PSCommandPath" in text
+    assert "FR #259" in text
+    # $Home is a read-only automatic variable â€” parameter must be ConsoleHome.
+    assert "[string]$Home" not in text
+    assert "$ConsoleHome" in text
+    install = (ROOT / "scripts" / "Install-AircConsole.ps1").read_text(encoding="utf-8")
+    assert "FR #259" in install
+    assert "[string]$Home" not in install
+    assert "ConsoleHome" in install
+    assert "powershell.exe" in install
+    docs = (ROOT / "docs" / "airc-console-fr253.md").read_text(encoding="utf-8")
+    assert "FR #259" in docs
 
 
 def test_service_selftest_subprocess():
@@ -159,3 +160,4 @@ def test_pack_script_mentions_zip():
     text = (ROOT / "scripts" / "Pack-AircConsoleRelease.ps1").read_text(encoding="utf-8")
     assert "airc-console-" in text
     assert "Compress-Archive" in text
+

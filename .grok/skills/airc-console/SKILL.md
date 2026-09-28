@@ -4,7 +4,8 @@ description: >
   Installable airc console Windows service: nick console on #{machinename},
   silent in channel, authenticated PRIVMSG piped to a per-user shell. Use when
   Simon says airc console service, Install-AircConsole, FR #253, FR #256,
-  FR #259, Start-AircConsole.cmd fails, not digitally signed, or /airc-console.
+  FR #259, PSScriptRoot empty, Start-AircConsole Split-Path, mapped P: download,
+  not digitally signed, or /airc-console.
 ---
 
 # airc console (FR #253)
@@ -23,7 +24,11 @@ Not Mode 3 / DUMB PSK. Not Jeeves. Not a talk seat. No `#bobiverse`.
 ## Install
 
 **FR #256:** do not run the `.ps1` by path under Restricted/AllSigned — use the
-`.cmd` wrapper (Unblock-File + `-ExecutionPolicy Bypass`):
+`.cmd` wrapper (Unblock-File + `-ExecutionPolicy Bypass`).
+
+**FR #259:** install from a **local** tree (`C:\ai\airc-console`). NSSM Path /
+Application must be `powershell.exe`, not `Start-AircConsole.ps1`. A mapped
+`P:\download\…` Path reproduces empty `$PSScriptRoot` under `[CmdletBinding()]`.
 
 ```bat
 scripts\Install-AircConsole.cmd
@@ -41,10 +46,6 @@ Start-Service AircConsole
 Foreground: `Start-AircConsole.cmd -Operators Simon`
 
 Selftest: `python scripts/airc_console_service.py --selftest`
-
-**FR #259:** `Start-AircConsole.ps1` resolves its directory in the script body
-(`PSCommandPath` / `MyInvocation`) — never `Split-Path $PSScriptRoot` inside
-`param()` defaults (empty Path error via `.cmd` on some hosts).
 
 ## Release
 

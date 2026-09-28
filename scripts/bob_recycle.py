@@ -302,9 +302,40 @@ def _default_restart_watch(build_root: Path, machine_id: str) -> None:
 
 
 def _default_recycle_tray(build_root: Path) -> None:
-    _win_kill_matching_ps1("Watch-BobTray.ps1")
+    """Restart TipForm via the same bootstrap as tray Restart (agentic_build#442).
+
+    Prefer ``Start-BobFleetTray.ps1 -ForceNew`` over a raw Watch-BobTray.ps1
+    launch so git update / seat wrapper / tidy stay on one path.
+    """
+    if os.name != "nt":
+        return
+    start = build_root / "tools" / "Start-BobFleetTray.ps1"
     tray = build_root / "tools" / "Watch-BobTray.ps1"
-    if not tray.is_file() or os.name != "nt":
+    if start.is_file():
+        subprocess.Popen(
+            [
+                "powershell.exe",
+                "-NoProfile",
+                "-STA",
+                "-WindowStyle",
+                "Hidden",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                str(start),
+                "-RepoRoot",
+                str(build_root),
+                "-ForceNew",
+            ],
+            cwd=str(build_root),
+            creationflags=subprocess.CREATE_NO_WINDOW
+            if hasattr(subprocess, "CREATE_NO_WINDOW")
+            else 0,
+        )
+        return
+    # Fallback when Start-BobFleetTray is missing (tests / sparse trees).
+    _win_kill_matching_ps1("Watch-BobTray.ps1")
+    if not tray.is_file():
         return
     time.sleep(0.3)
     subprocess.Popen(
@@ -460,4 +491,8 @@ def restarting_announce(machine_id: str, nick: str) -> str:
     if machine_id == "ce-priority-dev1":
         disp = "dev1"
     who = (nick or "bob").strip() or "bob"
-    return f"{who}: recycling {disp} — restarting Watch-Bobiverse + tray (deterministic)"
+    # ASCII hyphen (PS 5.1 / logs). agentic_build#442: announce then tray via Start-BobFleetTray.
+    return (
+        f"{who}: recycling {disp} - logging off IRC then restarting "
+        f"Watch-Bobiverse + TipForm tray (deterministic)"
+    )

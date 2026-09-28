@@ -114,7 +114,7 @@ def test_default_watch_is_stop_then_one_start(monkeypatch, tmp_path):
     assert not any("BobFleet" in r for r in runs)
 
 
-def test_default_tray_kills_old_and_starts_once(monkeypatch, tmp_path):
+def test_default_tray_uses_start_bob_fleet_tray_force_new(monkeypatch, tmp_path):
     pops: list[list[str]] = []
     killed: list[str] = []
     monkeypatch.setattr(bob_recycle.os, "name", "nt")
@@ -129,10 +129,38 @@ def test_default_tray_kills_old_and_starts_once(monkeypatch, tmp_path):
     tools = tmp_path / "tools"
     tools.mkdir()
     (tools / "Watch-BobTray.ps1").write_text("# tray\n", encoding="utf-8")
+    (tools / "Start-BobFleetTray.ps1").write_text("# start\n", encoding="utf-8")
+    bob_recycle._default_recycle_tray(tmp_path)
+    # Shared bootstrap path — ForceNew owns prior-tray teardown.
+    assert killed == []
+    assert len(pops) == 1
+    assert any("Start-BobFleetTray.ps1" in x for x in pops[0])
+    assert any("-ForceNew" in x for x in pops[0])
+
+
+def test_default_tray_falls_back_to_watch_bob_tray(monkeypatch, tmp_path):
+    pops: list[list[str]] = []
+    killed: list[str] = []
+    monkeypatch.setattr(bob_recycle.os, "name", "nt")
+    monkeypatch.setattr(bob_recycle, "_win_kill_matching_ps1", lambda n: killed.append(n) or [11])
+    monkeypatch.setattr(bob_recycle.time, "sleep", lambda _s: None)
+    monkeypatch.setattr(
+        bob_recycle.subprocess, "Popen", lambda cmd, **_k: pops.append([str(x) for x in cmd]) or object()
+    )
+    tools = tmp_path / "tools"
+    tools.mkdir()
+    (tools / "Watch-BobTray.ps1").write_text("# tray\n", encoding="utf-8")
     bob_recycle._default_recycle_tray(tmp_path)
     assert killed == ["Watch-BobTray.ps1"]
-    assert len(pops) == 1
     assert any("Watch-BobTray.ps1" in x for x in pops[0])
+
+
+def test_restarting_announce_mentions_tray_and_logging_off():
+    msg = bob_recycle.restarting_announce("ionos", "bob-ionos")
+    assert msg.startswith("bob-ionos:")
+    assert "logging off IRC" in msg
+    assert "tray" in msg.lower()
+    assert "—" not in msg  # ASCII only
 
 
 def test_default_chair_does_not_wait_on_self(monkeypatch, tmp_path):

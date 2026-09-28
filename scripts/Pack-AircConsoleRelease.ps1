@@ -41,6 +41,7 @@ $files = @(
     'scripts\Start-AircConsole.cmd',
     'scripts\Install-AircConsole.ps1',
     'scripts\Install-AircConsole.cmd',
+    'scripts\Initialize-AircConsoleHome.ps1',
     'scripts\Resolve-AircConsoleNssm.ps1',
     'scripts\Fetch-Nssm.ps1',
     'docs\airc-console-fr253.md',

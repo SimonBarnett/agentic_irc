@@ -186,6 +186,81 @@ def test_resolve_server_password_ignores_console_password_guid(tmp_path: Path, m
     assert resolve_server_password(home=home) == "from-env"
 
 
+def test_fr277_initialize_home_seeds_ergo_and_mints_nickserv(tmp_path: Path):
+    """FR #277: install seeds ergo.password from fleet secret; mints console.password."""
+    import subprocess
+
+    helper = SCRIPTS / "Initialize-AircConsoleHome.ps1"
+    assert helper.is_file()
+    home = tmp_path / "console-home"
+    profile = tmp_path / "profile"
+    (profile / ".grok" / "ergo").mkdir(parents=True)
+    (profile / ".grok" / "ergo" / "connect.password").write_text("fleet-secret\n", encoding="utf-8")
+    ps = (
+        f". '{helper}'; "
+        f"$r = Initialize-AircConsoleHome -ConsoleHome '{home}' -Operators @('Simon') "
+        f"-UserProfile '{profile}' -EnvMap @{{}} -MintNickServ; "
+        "if (-not $r.ErgoPresent) { exit 2 }; "
+        "if (-not $r.NickServPresent) { exit 3 }; "
+        "if (-not $r.OperatorsPresent) { exit 4 }; "
+        "if (-not $r.SeededErgo) { exit 5 }; "
+        "if (-not $r.MintedNickServ) { exit 6 }; "
+        "Write-Output (($r.SeededErgo).ToString() + '|' + (Get-Content -LiteralPath $r.ErgoPassword -Raw).Trim()); "
+        "exit 0"
+    )
+    proc = subprocess.run(
+        ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps],
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert "fleet-secret" in (proc.stdout or "")
+    # Second call: no re-mint invent for ergo; nickserv reused
+    ps2 = (
+        f". '{helper}'; "
+        f"$r = Initialize-AircConsoleHome -ConsoleHome '{home}' -Operators @('Simon') "
+        f"-UserProfile '{profile}' -EnvMap @{{}} -MintNickServ; "
+        "if ($r.SeededErgo) { exit 7 }; "
+        "if ($r.MintedNickServ) { exit 8 }; "
+        "exit 0"
+    )
+    proc2 = subprocess.run(
+        ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps2],
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    assert proc2.returncode == 0, proc2.stdout + proc2.stderr
+    # Never invent ergo when no fleet secret
+    home2 = tmp_path / "empty-home"
+    profile2 = tmp_path / "empty-profile"
+    profile2.mkdir(parents=True)
+    ps3 = (
+        f". '{helper}'; "
+        f"$r = Initialize-AircConsoleHome -ConsoleHome '{home2}' -Operators @('Simon') "
+        f"-UserProfile '{profile2}' -EnvMap @{{}} -MintNickServ; "
+        "if ($r.ErgoPresent) { exit 9 }; "
+        "if (-not $r.NickServPresent) { exit 10 }; "
+        "exit 0"
+    )
+    proc3 = subprocess.run(
+        ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps3],
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    assert proc3.returncode == 0, proc3.stdout + proc3.stderr
+    install = (ROOT / "scripts" / "Install-AircConsole.ps1").read_text(encoding="utf-8")
+    assert "FR #277" in install
+    assert "Start-Service" in install
+    assert "Initialize-AircConsoleHome" in install
+    assert "-NoStart" in install
+    pack = (ROOT / "scripts" / "Pack-AircConsoleRelease.ps1").read_text(encoding="utf-8")
+    assert "Initialize-AircConsoleHome.ps1" in pack
+    assert (ROOT / "src" / "airc_console" / "VERSION").read_text(encoding="utf-8").strip() == "0.1.7"
+
+
 def test_nssm_resolve_prefers_bundled(tmp_path: Path):
     """Issue #266: bundled third_party nssm wins over missing C:\\ai\\ergo."""
     import subprocess

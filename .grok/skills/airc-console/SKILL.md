@@ -40,15 +40,13 @@ fail the script (`nssm` stderr under `$ErrorActionPreference Stop`).
 
 ```bat
 scripts\Install-AircConsole.cmd
-net start AircConsole
+REM FR #277: seeds ergo.password + console.password and Start-Service (Running)
 ```
 
 Or explicit Bypass:
 
 ```powershell
-Set-Content $env:USERPROFILE\.airc-console\operators.txt "Simon"
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\Install-AircConsole.ps1
-Start-Service AircConsole
 ```
 
 Foreground: `Start-AircConsole.cmd -Operators Simon`
@@ -73,3 +71,7 @@ invent one.
 **Ergo server PASS:** `AGENTIC_IRC_PASSWORD` / `AIRC_CONSOLE_SERVER_PASSWORD` /
 `~\.airc-console\ergo.password` / `~\.grok\ergo\connect.password`. Never invent
 the fleet server secret; never send the NickServ GUID as server `PASS`.
+
+**FR #277 unattended install:** `Initialize-AircConsoleHome` seeds `ergo.password`
+from fleet secret (never invent), mints `console.password` if missing, install
+remove+reinstall (#273), then `Start-Service` so end state is **Running**.

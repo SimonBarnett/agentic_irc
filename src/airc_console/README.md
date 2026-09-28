@@ -29,7 +29,7 @@ The release zip includes **`third_party/nssm/win64/nssm.exe`** (issue #266). You
 REM elevated cmd.exe
 Set-Content %USERPROFILE%\.airc-console\operators.txt Simon
 scripts\Install-AircConsole.cmd
-net start AircConsole
+REM FR #277: Install seeds ergo.password + console.password and Start-Service (Running)
 ```
 
 Equivalent PowerShell (explicit Bypass):

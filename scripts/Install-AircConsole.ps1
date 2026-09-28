@@ -2,10 +2,11 @@
 #Requires -RunAsAdministrator
 <#
 .SYNOPSIS
-  Register NSSM service AircConsole (Automatic). FR #253 / #256.
+  Register NSSM service AircConsole (Automatic). FR #253 / #256 / #277.
 .NOTES
   Downloaded zips are unsigned. Prefer Install-AircConsole.cmd (Unblock-File +
   -ExecutionPolicy Bypass). Direct .ps1 invoke fails under AllSigned/Restricted.
+  FR #277: seed ergo.password + mint console.password, then Start-Service (Running).
 #>
 [CmdletBinding()]
 param(
@@ -16,7 +17,8 @@ param(
     [string]$ConsoleHome = '',
     [string]$PasswordFile = '',
     [string[]]$Operators = @('Simon'),
-    [string]$ServiceName = 'AircConsole'
+    [string]$ServiceName = 'AircConsole',
+    [switch]$NoStart
 )
 
 $ErrorActionPreference = 'Stop'
@@ -62,11 +64,18 @@ if ($Launcher -match '^[A-Za-z]:\\' ) {
 if (-not $ConsoleHome) {
     $ConsoleHome = Join-Path $env:USERPROFILE '.airc-console'
 }
-New-Item -ItemType Directory -Force -Path $ConsoleHome | Out-Null
-$opsFile = Join-Path $ConsoleHome 'operators.txt'
-if (-not (Test-Path -LiteralPath $opsFile) -and $Operators.Count -gt 0) {
-    Set-Content -LiteralPath $opsFile -Value ($Operators -join "`n") -Encoding utf8
+$initHelper = Join-Path $scriptDir 'Initialize-AircConsoleHome.ps1'
+if (-not (Test-Path -LiteralPath $initHelper)) {
+    throw "missing $initHelper (FR #277)"
 }
+. $initHelper
+$homeInit = Initialize-AircConsoleHome -ConsoleHome $ConsoleHome -Operators $Operators -MintNickServ
+Write-Host ("INFO home init operators={0} ergo={1}(seeded={2}) nickserv={3}(minted={4})" -f `
+    $homeInit.OperatorsPresent, $homeInit.ErgoPresent, $homeInit.SeededErgo, $homeInit.NickServPresent, $homeInit.MintedNickServ)
+if (-not $homeInit.ErgoPresent) {
+    Write-Host 'WARN no ergo.password seeded — set AGENTIC_IRC_PASSWORD or ~/.grok/ergo/connect.password before start (never invent)'
+}
+$opsFile = $homeInit.OperatorsFile
 
 function Invoke-AircNssm {
     param(
@@ -126,7 +135,7 @@ if ($inst.ExitCode -ne 0) {
     throw ("nssm install failed: {0} ({1})" -f $inst.ExitCode, ($inst.Output -join ' '))
 }
 
-# #271: always wire console.password path (Python mints GUID if missing).
+# #271 / #277: always wire console.password (minted above if missing).
 if (-not $PasswordFile) {
     $PasswordFile = Join-Path $ConsoleHome 'console.password'
 }
@@ -171,14 +180,34 @@ icacls $ConsoleHome /grant 'SYSTEM:(OI)(CI)(M)' /T 2>$null | Out-Null
 if ($PasswordFile -and (Test-Path -LiteralPath $PasswordFile)) {
     icacls $PasswordFile /grant 'SYSTEM:(R)' 2>$null | Out-Null
 }
+$ergoAcl = Join-Path $ConsoleHome 'ergo.password'
+if (Test-Path -LiteralPath $ergoAcl) {
+    icacls $ergoAcl /grant 'SYSTEM:(R)' 2>$null | Out-Null
+}
 
 $appGet = Invoke-AircNssm -Exe $Nssm -NssmArgs @('get', $ServiceName, 'Application')
 $parGet = Invoke-AircNssm -Exe $Nssm -NssmArgs @('get', $ServiceName, 'AppParameters')
 Write-Host ("Application=" + ($appGet.Output -join ' ').Trim())
 Write-Host ("AppParameters=" + ($parGet.Output -join ' ').Trim())
+
+# FR #277: unattended end state is Running (unless -NoStart).
+if (-not $NoStart) {
+    Write-Host "INFO Start-Service $ServiceName (FR #277)"
+    Start-Service -Name $ServiceName -ErrorAction Stop
+    Start-Sleep -Seconds 2
+    $running = Get-Service -Name $ServiceName
+    if ($running.Status -ne 'Running') {
+        throw ("AircConsole not Running after Start-Service (status={0})" -f $running.Status)
+    }
+}
+
 Get-Service $ServiceName | Format-Table Name, Status, StartType -AutoSize
 Write-Host 'INFO Install done (prior service removed if present; #273).'
 Write-Host 'INFO Operators: ~\.airc-console\operators.txt (seeded if missing).'
-Write-Host 'INFO NickServ password: auto GUID in ~\.airc-console\console.password on first start (#271).'
-Write-Host 'INFO Ergo server PASS: AGENTIC_IRC_PASSWORD or ~\.airc-console\ergo.password / ~\.grok\ergo\connect.password.'
-Write-Host 'INFO Then: Start-Service AircConsole'
+Write-Host 'INFO NickServ password: GUID in ~\.airc-console\console.password (#271/#277).'
+Write-Host 'INFO Ergo server PASS: seeded to ~\.airc-console\ergo.password from fleet secret when available (#277).'
+if (-not $NoStart) {
+    Write-Host 'INFO Service Running (FR #277 unattended end state).'
+} else {
+    Write-Host 'INFO -NoStart: service registered but not started.'
+}

@@ -23,6 +23,7 @@ Installable **airc** service on each Windows box:
 | Auth gate | Unknown nick → deny reply in Query; operator → pipe |
 | Session | Per-nick shell; `.quit` closes |
 | Service install | `Install-AircConsole.ps1` registers NSSM `AircConsole` |
+| Unsigned download install (FR #256) | `Install-AircConsole.cmd` uses Unblock-File + `-ExecutionPolicy Bypass` |
 | Release | `Pack-AircConsoleRelease.ps1` builds `dist/airc-console-*.zip` |
 | Selftest | `airc_console_service.py --selftest` exit 0 |
 

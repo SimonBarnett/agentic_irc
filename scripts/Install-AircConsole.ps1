@@ -2,7 +2,10 @@
 #Requires -RunAsAdministrator
 <#
 .SYNOPSIS
-  Register NSSM service AircConsole (Automatic). FR #253.
+  Register NSSM service AircConsole (Automatic). FR #253 / #256.
+.NOTES
+  Downloaded zips are unsigned. Prefer Install-AircConsole.cmd (Unblock-File +
+  -ExecutionPolicy Bypass). Direct .ps1 invoke fails under AllSigned/Restricted.
 #>
 [CmdletBinding()]
 param(

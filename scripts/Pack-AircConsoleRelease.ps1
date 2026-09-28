@@ -38,7 +38,9 @@ $files = @(
     'scripts\airc_console_service.py',
     'scripts\account_map.py',
     'scripts\Start-AircConsole.ps1',
+    'scripts\Start-AircConsole.cmd',
     'scripts\Install-AircConsole.ps1',
+    'scripts\Install-AircConsole.cmd',
     'docs\airc-console-fr253.md',
     'src\airc_console\VERSION',
     'src\airc_console\README.md'

@@ -100,12 +100,29 @@ def test_account_tag_line_auth():
 def test_docs_and_install_scripts_exist():
     assert (ROOT / "docs" / "airc-console-fr253.md").is_file()
     assert (ROOT / "scripts" / "Install-AircConsole.ps1").is_file()
+    assert (ROOT / "scripts" / "Install-AircConsole.cmd").is_file()
     assert (ROOT / "scripts" / "Start-AircConsole.ps1").is_file()
+    assert (ROOT / "scripts" / "Start-AircConsole.cmd").is_file()
     assert (ROOT / "scripts" / "Pack-AircConsoleRelease.ps1").is_file()
     assert (ROOT / "src" / "airc_console" / "VERSION").is_file()
     skill = (ROOT / ".grok" / "skills" / "airc-console" / "SKILL.md").read_text(encoding="utf-8")
     assert "FR #253" in skill
     assert "silent" in skill.lower()
+
+
+def test_fr256_cmd_wrappers_bypass_execution_policy():
+    """Downloaded .ps1 fails AllSigned/Restricted; .cmd must Bypass + Unblock-File."""
+    for name in ("Install-AircConsole.cmd", "Start-AircConsole.cmd"):
+        text = (ROOT / "scripts" / name).read_text(encoding="utf-8", errors="replace")
+        assert "ExecutionPolicy Bypass" in text, name
+        assert "Unblock-File" in text, name
+        assert ".ps1" in text, name
+    pack = (ROOT / "scripts" / "Pack-AircConsoleRelease.ps1").read_text(encoding="utf-8")
+    assert "Install-AircConsole.cmd" in pack
+    assert "Start-AircConsole.cmd" in pack
+    readme = (ROOT / "src" / "airc_console" / "README.md").read_text(encoding="utf-8")
+    assert "not digitally signed" in readme.lower() or "FR #256" in readme
+    assert "Install-AircConsole.cmd" in readme
 
 
 def test_service_selftest_subprocess():

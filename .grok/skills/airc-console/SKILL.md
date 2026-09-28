@@ -3,7 +3,8 @@ name: airc-console
 description: >
   Installable airc console Windows service: nick console on #{machinename},
   silent in channel, authenticated PRIVMSG piped to a per-user shell. Use when
-  Simon says airc console service, Install-AircConsole, FR #253, or /airc-console.
+  Simon says airc console service, Install-AircConsole, FR #253, FR #256,
+  not digitally signed, or /airc-console.
 ---
 
 # airc console (FR #253)
@@ -21,14 +22,23 @@ Not Mode 3 / DUMB PSK. Not Jeeves. Not a talk seat. No `#bobiverse`.
 
 ## Install
 
+**FR #256:** do not run the `.ps1` by path under Restricted/AllSigned — use the
+`.cmd` wrapper (Unblock-File + `-ExecutionPolicy Bypass`):
+
+```bat
+scripts\Install-AircConsole.cmd
+net start AircConsole
+```
+
+Or explicit Bypass:
+
 ```powershell
 Set-Content $env:USERPROFILE\.airc-console\operators.txt "Simon"
-# optional: console.password for NickServ/SASL
-powershell -File C:\ai\agentic_irc\scripts\Install-AircConsole.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\Install-AircConsole.ps1
 Start-Service AircConsole
 ```
 
-Foreground: `Start-AircConsole.ps1 -Operators Simon`
+Foreground: `Start-AircConsole.cmd -Operators Simon`
 
 Selftest: `python scripts/airc_console_service.py --selftest`
 

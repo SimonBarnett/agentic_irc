@@ -12,30 +12,37 @@ Installable Windows service: IRC nick **`console`** on **`#{machinename}`**.
 
 ## Install (Windows + NSSM)
 
+Downloaded zips are **unsigned**. Do **not** double-click / invoke the `.ps1`
+directly under Restricted/AllSigned — that fails with "not digitally signed"
+(FR #256). Use the `.cmd` wrappers (they `Unblock-File` + `-ExecutionPolicy Bypass`):
+
+```bat
+REM elevated cmd.exe
+Set-Content %USERPROFILE%\.airc-console\operators.txt Simon
+scripts\Install-AircConsole.cmd
+net start AircConsole
+```
+
+Equivalent PowerShell (explicit Bypass):
+
 ```powershell
-# operators allowlist
 Set-Content $env:USERPROFILE\.airc-console\operators.txt "Simon"
-
-# optional NickServ / SASL password
-# Set-Content $env:USERPROFILE\.airc-console\console.password "..."
-
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\Install-AircConsole.ps1 `
-  -PasswordFile $env:USERPROFILE\.airc-console\console.password
-
+# optional: console.password for NickServ/SASL
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\Install-AircConsole.ps1
 Start-Service AircConsole
 ```
 
 Foreground smoke:
 
-```powershell
-powershell -File scripts\Start-AircConsole.ps1 -SelfTest
-powershell -File scripts\Start-AircConsole.ps1 -Operators Simon
+```bat
+scripts\Start-AircConsole.cmd -SelfTest
+scripts\Start-AircConsole.cmd -Operators Simon
 ```
 
 ## Release
 
 ```powershell
-powershell -File scripts\Pack-AircConsoleRelease.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\Pack-AircConsoleRelease.ps1
 # -> dist/airc-console-<ver>.zip (+ .sha256)
 ```
 

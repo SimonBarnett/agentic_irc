@@ -399,6 +399,12 @@ class AircConsoleService:
 
     def run(self) -> int:
         info(f"INFO airc-console machine={self.machine} channel={self.channel} nick={self.nick}")
+        if not self.server_password:
+            info(
+                "ERROR no-server-pass: set ConsoleHome/ergo.password or AGENTIC_IRC_PASSWORD. "
+                "irc.ntsa.uk requires PASS; without it TLS ends EOF and the console never registers."
+            )
+            return 2
         backoff = RECONNECT_MIN_S
         while not self._stop.is_set():
             session_ok = False
@@ -439,7 +445,11 @@ def build_arg_parser() -> argparse.ArgumentParser:
         default="auto",
         help="IRC nick (default auto = console-<machine>; bare 'console' collides on shared Ergo #286)",
     )
-    p.add_argument("--machine", default=None, help="override COMPUTERNAME for #{machine}")
+    p.add_argument(
+        "--machine",
+        default=None,
+        help="fleet shop id (ionos/flamingo/…); default AIRC_CONSOLE_MACHINE / BOB_MACHINE_ID / COMPUTERNAME",
+    )
     p.add_argument("--home", default=None)
     p.add_argument("--password-file", default=None)
     p.add_argument(

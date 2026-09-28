@@ -22,11 +22,28 @@ param(
     [string]$ServiceName = 'AircConsole',
     # Absolute python.exe for LocalSystem (#282). Empty = auto-resolve at install.
     [string]$Python = '',
+    # Fleet shop id (ionos/flamingo/…). Empty = BOB_MACHINE_ID / AIRC_CONSOLE_MACHINE.
+    # Required on boxes where COMPUTERNAME is not the fleet id (e.g. WIN-…).
+    [string]$MachineId = '',
     # #277: default starts the service so Running is the unattended end state.
     [switch]$NoStart
 )
 
 $ErrorActionPreference = 'Stop'
+
+# Resolve fleet machine id early (operators seed + NSSM env + Start -MachineId).
+if (-not $MachineId) {
+    $MachineId = ($env:AIRC_CONSOLE_MACHINE, $env:BOB_MACHINE_ID | Where-Object { $_ -and $_.Trim() } | Select-Object -First 1)
+}
+if ($MachineId) {
+    $MachineId = ($MachineId -replace '[^A-Za-z0-9_-]+', '-').Trim('-_').ToLowerInvariant()
+}
+$script:AircConsoleMachineId = $MachineId
+if ($MachineId) {
+    Write-Host "INFO MachineId=$MachineId (console will JOIN #$MachineId)"
+} else {
+    Write-Warning ("Install without -MachineId / BOB_MACHINE_ID uses COMPUTERNAME={0}; console may join #win-… instead of #ionos." -f $env:COMPUTERNAME)
+}
 
 # FR #259: $PSScriptRoot can be empty in param() defaults under [CmdletBinding()];
 # resolve launcher dir in the body (also prefer local disk over mapped P:).
@@ -98,8 +115,16 @@ function Initialize-AircConsoleHomeSecrets {
     )
     $opsFile = Join-Path $ConsoleHomeDir 'operators.txt'
     # Issue #289: never UTF-8 BOM. Issue #302: always include bob-{machinename}.
-    $machineId = ($env:COMPUTERNAME -replace '[^A-Za-z0-9_-]+', '-').Trim('-_').ToLowerInvariant()
+    # Prefer fleet id (BOB_MACHINE_ID) over Windows COMPUTERNAME.
+    $machineId = ($script:AircConsoleMachineId)
+    if (-not $machineId) {
+        $machineId = ($env:AIRC_CONSOLE_MACHINE, $env:BOB_MACHINE_ID | Where-Object { $_ -and $_.Trim() } | Select-Object -First 1)
+    }
+    if (-not $machineId) {
+        $machineId = ($env:COMPUTERNAME -replace '[^A-Za-z0-9_-]+', '-').Trim('-_').ToLowerInvariant()
+    }
     if (-not $machineId) { $machineId = 'unknown' }
+    $machineId = ($machineId -replace '[^A-Za-z0-9_-]+', '-').Trim('-_').ToLowerInvariant()
     $bobNick = "bob-$machineId"
     $seedOps = [System.Collections.Generic.List[string]]::new()
     foreach ($o in @($OperatorNicks)) {
@@ -258,6 +283,7 @@ Write-Host "INFO service python=$Python"
 $appParams = "-NoProfile -ExecutionPolicy Bypass -File `"$Launcher`" -ServiceMode -ConsoleHome `"$ConsoleHome`""
 $appParams += " -Python `"$Python`""
 $appParams += " -PasswordFile `"$PasswordFile`""
+if ($MachineId) { $appParams += " -MachineId `"$MachineId`"" }
 if (Test-Path -LiteralPath $opsFile) { $appParams += " -OperatorsFile `"$opsFile`"" }
 
 $setPairs = @(
@@ -272,6 +298,8 @@ $setPairs = @(
     @('AppThrottle', '1500'),
     @('ObjectName', 'LocalSystem')
 )
+# Fleet id is passed via AppParameters -MachineId (LocalSystem has no user env).
+# Do not set AppEnvironmentExtra here — NSSM MULTI_SZ quoting is fragile on WinPS 5.1.
 $logDir = Join-Path $env:USERPROFILE '.grok\long-running-background-tasks'
 New-Item -ItemType Directory -Force -Path $logDir | Out-Null
 $log = Join-Path $logDir 'airc-console-service.log'

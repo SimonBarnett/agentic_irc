@@ -35,7 +35,21 @@ _BOB_FLEET_NICK_RE = re.compile(r"^bob-[a-z0-9][a-z0-9_-]*$", re.IGNORECASE)
 
 
 def machine_id(override: str | None = None) -> str:
-    raw = (override or os.environ.get("COMPUTERNAME") or os.environ.get("HOSTNAME") or "unknown").strip()
+    """Fleet shop id for ``#{machine}`` / ``console-<machine>``.
+
+    Prefer explicit override, then ``AIRC_CONSOLE_MACHINE`` / ``BOB_MACHINE_ID``
+    (fleet ids like ``ionos``), then Windows ``COMPUTERNAME``. Using bare
+    COMPUTERNAME alone (e.g. ``WIN-MPRE8VI4U6U``) joins the wrong channel and
+    looks like \"does not connect\" on ``#ionos`` / ``#flamingo``.
+    """
+    raw = (
+        override
+        or os.environ.get("AIRC_CONSOLE_MACHINE")
+        or os.environ.get("BOB_MACHINE_ID")
+        or os.environ.get("COMPUTERNAME")
+        or os.environ.get("HOSTNAME")
+        or "unknown"
+    ).strip()
     cleaned = _CHANNEL_SAFE.sub("-", raw).strip("-_")
     return (cleaned or "unknown").lower()
 

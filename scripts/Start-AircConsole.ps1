@@ -19,6 +19,8 @@ param(
     [int]$Port = 6697,
     # Empty/auto -> Python console-<machine> (issue #286; bare console hits 433).
     [string]$Nick = 'auto',
+    # Fleet shop id (ionos/flamingo/…). Prefer BOB_MACHINE_ID over COMPUTERNAME.
+    [string]$MachineId = '',
     [Alias('Home')]
     [string]$ConsoleHome = '',
     [string]$PasswordFile = '',
@@ -54,6 +56,37 @@ if (-not $ConsoleHome) {
 }
 New-Item -ItemType Directory -Force -Path $ConsoleHome | Out-Null
 
+# Fleet machine id: explicit > env > refuse Windows hostname-only for service.
+if (-not $MachineId) {
+    $MachineId = ($env:AIRC_CONSOLE_MACHINE, $env:BOB_MACHINE_ID | Where-Object { $_ -and $_.Trim() } | Select-Object -First 1)
+}
+if ($MachineId) {
+    $MachineId = ($MachineId -replace '[^A-Za-z0-9_-]+', '-').Trim('-_').ToLowerInvariant()
+    $env:BOB_MACHINE_ID = $MachineId
+    $env:AIRC_CONSOLE_MACHINE = $MachineId
+    Write-Host "INFO machineId=$MachineId (fleet shop #${MachineId})"
+} else {
+    Write-Warning ("airc-console: no -MachineId / BOB_MACHINE_ID; falling back to COMPUTERNAME={0}. Pass -MachineId ionos (etc.) so the console joins #ionos, not #win-…" -f $env:COMPUTERNAME)
+}
+
+# Seed Ergo server PASS from release zip when ConsoleHome lacks ergo.password.
+$ergoDest = Join-Path $ConsoleHome 'ergo.password'
+if (-not (Test-Path -LiteralPath $ergoDest) -or -not (Get-Content -LiteralPath $ergoDest -Raw -ErrorAction SilentlyContinue).Trim()) {
+    $packagedErgo = Join-Path $RepoRoot 'config\ergo.password'
+    if (Test-Path -LiteralPath $packagedErgo) {
+        $secret = (Get-Content -LiteralPath $packagedErgo -Raw).Trim()
+        if ($secret) {
+            [IO.File]::WriteAllText($ergoDest, $secret + "`n", [Text.UTF8Encoding]::new($false))
+            Write-Host "INFO seeded ergo.password from package $packagedErgo"
+        }
+    }
+}
+if (-not (Test-Path -LiteralPath $ergoDest) -or -not (Get-Content -LiteralPath $ergoDest -Raw -ErrorAction SilentlyContinue).Trim()) {
+    if (-not $env:AGENTIC_IRC_PASSWORD -and -not $env:AIRC_CONSOLE_SERVER_PASSWORD) {
+        throw 'Ergo server PASS missing: need ConsoleHome\ergo.password or package config\ergo.password (or AGENTIC_IRC_PASSWORD). Without PASS, irc.ntsa.uk drops the TLS link (EOF) — looks like "does not connect".'
+    }
+}
+
 # Issue #282: LocalSystem service has no user PATH — resolve absolute python.exe.
 $resolvePy = Join-Path $scriptDir 'Resolve-AircConsolePython.ps1'
 if (Test-Path -LiteralPath $resolvePy) { . $resolvePy }
@@ -85,6 +118,9 @@ $argsList = @(
     '--nick', $Nick,
     '--home', $ConsoleHome
 )
+if ($MachineId) {
+    $argsList += @('--machine', $MachineId)
+}
 # #271: always point at console.password — Python mints a GUID if missing.
 if (-not $PasswordFile) {
     $PasswordFile = Join-Path $ConsoleHome 'console.password'

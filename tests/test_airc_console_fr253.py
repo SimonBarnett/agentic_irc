@@ -34,6 +34,19 @@ def test_channel_naming_machinename():
     assert shop_channel("ce-priority-dev1") == "#ce-priority-dev1"
 
 
+def test_machine_id_prefers_bob_machine_id_env(monkeypatch):
+    """v0.1.14 joined #win-… when COMPUTERNAME was used; fleet id must win."""
+    monkeypatch.setenv("COMPUTERNAME", "WIN-MPRE8VI4U6U")
+    monkeypatch.setenv("BOB_MACHINE_ID", "ionos")
+    monkeypatch.delenv("AIRC_CONSOLE_MACHINE", raising=False)
+    assert machine_id() == "ionos"
+    assert shop_channel() == "#ionos"
+    assert console_nick() == "console-ionos"
+    monkeypatch.delenv("BOB_MACHINE_ID", raising=False)
+    monkeypatch.setenv("AIRC_CONSOLE_MACHINE", "flamingo")
+    assert machine_id() == "flamingo"
+
+
 def test_console_nick_machine_scoped():
     """Issue #286: bare console collides (433) on shared Ergo."""
     assert console_nick("flamingo") == "console-flamingo"

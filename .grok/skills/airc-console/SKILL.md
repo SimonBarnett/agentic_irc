@@ -61,3 +61,11 @@ publishes rolling tag `airc-console` and immutable `airc-console-v<ver>`.
 
 Empty operators **and** accounts → refuse start. Prefer account-tag when
 `--require-account` / `--accounts` set (FR #230 map).
+
+**NickServ (#271):** first start mints a GUID into
+`~\.airc-console\console.password` and reuses it. Do not ask the operator to
+invent one.
+
+**Ergo server PASS:** `AGENTIC_IRC_PASSWORD` / `AIRC_CONSOLE_SERVER_PASSWORD` /
+`~\.airc-console\ergo.password` / `~\.grok\ergo\connect.password`. Never invent
+the fleet server secret; never send the NickServ GUID as server `PASS`.

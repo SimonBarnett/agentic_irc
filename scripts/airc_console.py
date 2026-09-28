@@ -307,3 +307,75 @@ def home_dir(explicit: str | None = None) -> Path:
     if env:
         return Path(env)
     return Path.home() / ".airc-console"
+
+
+def ensure_nickserv_password(path: Path, *, mint: bool = True) -> str | None:
+    """Load or mint the NickServ password (issue #271).
+
+    First start writes a GUID into ``console.password`` and reuses it later.
+    This is **not** the Ergo server PASS — that comes from env / ergo.password.
+    """
+    import uuid
+
+    if path.is_file():
+        existing = path.read_text(encoding="utf-8").strip()
+        if existing:
+            return existing
+    if not mint:
+        return None
+    path.parent.mkdir(parents=True, exist_ok=True)
+    secret = str(uuid.uuid4())
+    path.write_text(secret + "\n", encoding="utf-8")
+    try:
+        # Best-effort: owner-only on POSIX; Windows ACLs set by install/hotpatch.
+        os.chmod(path, 0o600)
+    except OSError:
+        pass
+    return secret
+
+
+def resolve_server_password(
+    *,
+    home: Path | None = None,
+    password_file: Path | None = None,
+) -> str | None:
+    """Ergo / IRC server PASS — never invent; never use NickServ GUID file alone.
+
+    Order: AIRC_CONSOLE_SERVER_PASSWORD, AGENTIC_IRC_PASSWORD, AIRC_CONSOLE_PASSWORD
+    (legacy), then ``ergo.password`` / ``connect.password`` beside home or
+    ``~/.grok/ergo/connect.password``. Explicit ``password_file`` is **not** used
+    here when it is the NickServ GUID path (``console.password``).
+    """
+    for key in (
+        "AIRC_CONSOLE_SERVER_PASSWORD",
+        "AGENTIC_IRC_PASSWORD",
+        "AIRC_CONSOLE_PASSWORD",
+    ):
+        env = os.environ.get(key)
+        if env and env.strip():
+            return env.strip()
+    candidates: list[Path] = []
+    # Legacy: only treat password_file as server PASS when it is NOT console.password
+    if password_file is not None and password_file.name.lower() != "console.password":
+        candidates.append(password_file)
+    if home is not None:
+        candidates.extend(
+            [
+                home / "ergo.password",
+                home / "connect.password",
+            ]
+        )
+    # Fleet default connect.password — only when using the real user console home
+    # (avoid leaking ~/.grok secrets into hermetic tests with a tmp home).
+    real_home = home_dir()
+    if home is None or Path(home).resolve() == real_home.resolve():
+        candidates.append(Path.home() / ".grok" / "ergo" / "connect.password")
+    for p in candidates:
+        try:
+            if p.is_file():
+                text = p.read_text(encoding="utf-8").strip()
+                if text:
+                    return text
+        except OSError:
+            continue
+    return None

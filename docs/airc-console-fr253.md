@@ -26,6 +26,7 @@ Installable **airc** service on each Windows box:
 | Unsigned download install (FR #256) | `Install-AircConsole.cmd` uses Unblock-File + `-ExecutionPolicy Bypass` |
 | Start on mapped drive / CmdletBinding (FR #259) | `Start-AircConsole.ps1` resolves script dir in body — never `$PSScriptRoot` in `param()` defaults |
 | Bundled NSSM (issue #266) | Release zip includes `third_party/nssm/win64/nssm.exe`; install does **not** require `C:\ai\ergo\nssm.exe` |
+| NickServ GUID (issue #271) | First start mints GUID into `console.password`; reuse next start; Ergo PASS stays separate |
 | Release | `Pack-AircConsoleRelease.ps1` builds `dist/airc-console-*.zip` |
 | Selftest | `airc_console_service.py --selftest` exit 0 |
 
@@ -37,7 +38,14 @@ NSSM **Application** must be `powershell.exe` (not the `.ps1`). Prefer a **local
 
 Do not name a PowerShell parameter `$Home` (automatic read-only) — launchers use `-ConsoleHome`.
 
-Ergo (`irc.ntsa.uk`) needs a server **`PASS`** before `NICK`/`USER`. `airc_console_service.py` sends `PASS` from `AIRC_CONSOLE_PASSWORD` / `AGENTIC_IRC_PASSWORD` / `--password-file` (default `~\.airc-console\console.password`). SASL is optional (`--sasl`) and must not block registration on 904.
+Ergo (`irc.ntsa.uk`) needs a server **`PASS`** before `NICK`/`USER`. That secret
+comes from `AIRC_CONSOLE_SERVER_PASSWORD` / `AGENTIC_IRC_PASSWORD` /
+`~\.airc-console\ergo.password` / `~\.grok\ergo\connect.password` — **never
+invented**.
+
+**NickServ** (issue #271): on first start the client **mints a GUID** into
+`~\.airc-console\console.password` and reuses it for REGISTER/IDENTIFY. Operators
+do not choose this password. SASL (optional `--sasl`) uses the same GUID.
 
 ## Non-goals (this PR)
 

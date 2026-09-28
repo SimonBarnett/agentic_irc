@@ -15,8 +15,10 @@ from airc_console import (  # noqa: E402
     AircConsoleCore,
     AuthPolicy,
     ConsoleSessionManager,
+    ensure_nickserv_password,
     load_operators,
     machine_id,
+    resolve_server_password,
     shop_channel,
 )
 
@@ -148,6 +150,36 @@ def test_fr259_start_ps1_no_psscriptroot_in_param_defaults():
     docs = (ROOT / "docs" / "airc-console-fr253.md").read_text(encoding="utf-8")
     assert "FR #259" in docs
     assert "#266" in docs or "issue #266" in docs
+
+
+def test_ensure_nickserv_password_mints_guid_and_reuses(tmp_path: Path):
+    """Issue #271: first start mints GUID; second start reuses same file."""
+    path = tmp_path / "console.password"
+    first = ensure_nickserv_password(path, mint=True)
+    assert first
+    assert path.is_file()
+    # UUID shape
+    assert len(first) >= 32
+    assert "-" in first
+    second = ensure_nickserv_password(path, mint=True)
+    assert second == first
+
+
+def test_resolve_server_password_ignores_console_password_guid(tmp_path: Path, monkeypatch):
+    """NickServ GUID file must not be sent as Ergo server PASS."""
+    home = tmp_path / "home"
+    home.mkdir()
+    guid = ensure_nickserv_password(home / "console.password", mint=True)
+    assert guid
+    monkeypatch.delenv("AIRC_CONSOLE_SERVER_PASSWORD", raising=False)
+    monkeypatch.delenv("AGENTIC_IRC_PASSWORD", raising=False)
+    monkeypatch.delenv("AIRC_CONSOLE_PASSWORD", raising=False)
+    assert resolve_server_password(home=home, password_file=home / "console.password") is None
+    ergo = home / "ergo.password"
+    ergo.write_text("fleet-secret\n", encoding="utf-8")
+    assert resolve_server_password(home=home, password_file=home / "console.password") == "fleet-secret"
+    monkeypatch.setenv("AGENTIC_IRC_PASSWORD", "from-env")
+    assert resolve_server_password(home=home) == "from-env"
 
 
 def test_nssm_resolve_prefers_bundled(tmp_path: Path):

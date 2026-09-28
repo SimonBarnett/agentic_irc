@@ -39,6 +39,9 @@ scripts\Start-AircConsole.cmd -SelfTest
 scripts\Start-AircConsole.cmd -Operators Simon
 ```
 
+FR #259: `Start-AircConsole.ps1` must not use `$PSScriptRoot` in `param()`
+defaults (empty Path / Split-Path error when launched via `.cmd` on some hosts).
+
 ## Release
 
 ```powershell

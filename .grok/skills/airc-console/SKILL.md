@@ -4,7 +4,7 @@ description: >
   Installable airc console Windows service: nick console on #{machinename},
   silent in channel, authenticated PRIVMSG piped to a per-user shell. Use when
   Simon says airc console service, Install-AircConsole, FR #253, FR #256,
-  not digitally signed, or /airc-console.
+  FR #259, Start-AircConsole.cmd fails, not digitally signed, or /airc-console.
 ---
 
 # airc console (FR #253)
@@ -41,6 +41,10 @@ Start-Service AircConsole
 Foreground: `Start-AircConsole.cmd -Operators Simon`
 
 Selftest: `python scripts/airc_console_service.py --selftest`
+
+**FR #259:** `Start-AircConsole.ps1` resolves its directory in the script body
+(`PSCommandPath` / `MyInvocation`) — never `Split-Path $PSScriptRoot` inside
+`param()` defaults (empty Path error via `.cmd` on some hosts).
 
 ## Release
 

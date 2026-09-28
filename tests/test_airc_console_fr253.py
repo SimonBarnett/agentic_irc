@@ -125,6 +125,26 @@ def test_fr256_cmd_wrappers_bypass_execution_policy():
     assert "Install-AircConsole.cmd" in readme
 
 
+def test_fr259_start_ps1_no_psscriptroot_in_param_defaults():
+    """FR #259: Split-Path $PSScriptRoot in param() defaults throws when empty."""
+    import re
+
+    text = (ROOT / "scripts" / "Start-AircConsole.ps1").read_text(encoding="utf-8")
+    m = re.search(r"(?is)param\s*\((.*?)\)\s*\$ErrorActionPreference", text)
+    assert m, "param() block not found in Start-AircConsole.ps1"
+    param_block = m.group(1)
+    assert "$PSScriptRoot" not in param_block, "PSScriptRoot must not appear in param() defaults"
+    assert "Get-AircScriptDir" in text or "PSCommandPath" in text
+    assert "[string]$Home" not in text and "$Home =" not in param_block
+    assert "ConsoleHome" in text
+    # Install must resolve launcher without relying solely on param-default PSScriptRoot
+    inst = (ROOT / "scripts" / "Install-AircConsole.ps1").read_text(encoding="utf-8")
+    assert "scriptDir" in inst
+    assert "ConsoleHome" in inst
+    assert "[string]$Home" not in inst
+    assert (ROOT / "src" / "airc_console" / "VERSION").read_text(encoding="utf-8").strip() == "0.1.2"
+
+
 def test_service_selftest_subprocess():
     import subprocess
 

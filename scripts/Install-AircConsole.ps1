@@ -11,21 +11,30 @@
 param(
     [string]$Nssm = 'C:\ai\ergo\nssm.exe',
     [string]$Launcher = '',
-    [string]$Home = (Join-Path $env:USERPROFILE '.airc-console'),
+    [string]$ConsoleHome = '',
     [string]$PasswordFile = '',
     [string[]]$Operators = @('Simon'),
     [string]$ServiceName = 'AircConsole'
 )
 
 $ErrorActionPreference = 'Stop'
+# FR #259: resolve script dir in body — $PSScriptRoot may be empty in param defaults.
+# Do not name a parameter $Home (automatic variable is read-only).
+$scriptDir = $PSScriptRoot
+if (-not $scriptDir -and $PSCommandPath) { $scriptDir = Split-Path -Parent $PSCommandPath }
+if (-not $scriptDir -and $MyInvocation.MyCommand.Path) { $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path }
+if (-not $scriptDir) { throw 'cannot resolve Install-AircConsole script directory' }
 if (-not $Launcher) {
-    $Launcher = Join-Path $PSScriptRoot 'Start-AircConsole.ps1'
+    $Launcher = Join-Path $scriptDir 'Start-AircConsole.ps1'
+}
+if (-not $ConsoleHome) {
+    $ConsoleHome = Join-Path $env:USERPROFILE '.airc-console'
 }
 if (-not (Test-Path -LiteralPath $Nssm)) { throw "nssm missing: $Nssm" }
 if (-not (Test-Path -LiteralPath $Launcher)) { throw "launcher missing: $Launcher" }
 
-New-Item -ItemType Directory -Force -Path $Home | Out-Null
-$opsFile = Join-Path $Home 'operators.txt'
+New-Item -ItemType Directory -Force -Path $ConsoleHome | Out-Null
+$opsFile = Join-Path $ConsoleHome 'operators.txt'
 if (-not (Test-Path -LiteralPath $opsFile) -and $Operators.Count -gt 0) {
     Set-Content -LiteralPath $opsFile -Value ($Operators -join "`n") -Encoding utf8
 }
@@ -41,7 +50,7 @@ if ($svc) {
     if ($LASTEXITCODE -ne 0) { throw "nssm install failed: $LASTEXITCODE" }
 }
 
-$appParams = "-NoProfile -ExecutionPolicy Bypass -File `"$Launcher`" -ServiceMode -Home `"$Home`""
+$appParams = "-NoProfile -ExecutionPolicy Bypass -File `"$Launcher`" -ServiceMode -ConsoleHome `"$ConsoleHome`""
 if ($PasswordFile) { $appParams += " -PasswordFile `"$PasswordFile`"" }
 if (Test-Path -LiteralPath $opsFile) { $appParams += " -OperatorsFile `"$opsFile`"" }
 
@@ -66,7 +75,7 @@ $log = Join-Path $logDir 'airc-console-service.log'
 & $Nssm set $ServiceName AppRotateFiles 1
 & $Nssm set $ServiceName AppRotateBytes 1048576
 
-icacls $Home /grant 'SYSTEM:(OI)(CI)(M)' /T 2>$null | Out-Null
+icacls $ConsoleHome /grant 'SYSTEM:(OI)(CI)(M)' /T 2>$null | Out-Null
 if ($PasswordFile -and (Test-Path -LiteralPath $PasswordFile)) {
     icacls $PasswordFile /grant 'SYSTEM:(R)' 2>$null | Out-Null
 }

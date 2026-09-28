@@ -1,6 +1,7 @@
 # airc console (FR #253)
 
-Installable Windows service: IRC nick **`console`** on **`#{machinename}`**.
+Installable Windows service: IRC nick **`console-<machinename>`** on **`#{machinename}`**
+(issue #286 — bare `console` is not unique on shared Ergo).
 
 ## Behaviour
 

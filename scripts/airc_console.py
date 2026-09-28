@@ -290,10 +290,13 @@ class AircConsoleCore:
 def load_operators(path: Path | None, cli: list[str] | None = None) -> set[str]:
     ops: set[str] = set()
     if cli:
-        ops.update(x.strip() for x in cli if x and x.strip())
+        ops.update(x.strip().lstrip("\ufeff") for x in cli if x and x.strip())
     if path and path.is_file():
-        for line in path.read_text(encoding="utf-8").splitlines():
-            s = line.strip()
+        # Windows PowerShell 5.1 Set-Content -Encoding utf8 writes a BOM; strip it
+        # so "Simon" matches nick simon (issue #259 follow-up / Halloy deny).
+        raw = path.read_text(encoding="utf-8-sig")
+        for line in raw.splitlines():
+            s = line.strip().lstrip("\ufeff")
             if not s or s.startswith("#"):
                 continue
             ops.add(s)

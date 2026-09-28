@@ -49,7 +49,12 @@ if (-not $ConsoleHome) {
 New-Item -ItemType Directory -Force -Path $ConsoleHome | Out-Null
 $opsFile = Join-Path $ConsoleHome 'operators.txt'
 if (-not (Test-Path -LiteralPath $opsFile) -and $Operators.Count -gt 0) {
-    Set-Content -LiteralPath $opsFile -Value ($Operators -join "`n") -Encoding utf8
+    # UTF-8 no BOM: PS 5.1 Set-Content -Encoding utf8 prefixes U+FEFF and breaks nick match.
+    [System.IO.File]::WriteAllText(
+        $opsFile,
+        (($Operators -join "`n") + "`n"),
+        [System.Text.UTF8Encoding]::new($false)
+    )
 }
 
 $svc = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue

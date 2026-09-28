@@ -49,6 +49,16 @@ def test_refuse_empty_operators_loader(tmp_path: Path):
     assert load_operators(f) == {"Simon"}
 
 
+def test_operators_loader_strips_utf8_bom(tmp_path: Path):
+    """PS 5.1 Set-Content -Encoding utf8 writes BOM; must still match nick simon."""
+    f = tmp_path / "ops-bom.txt"
+    f.write_bytes(b"\xef\xbb\xbfSimon\r\n")
+    assert load_operators(f) == {"Simon"}
+    auth = AuthPolicy(operators=load_operators(f))
+    assert auth.allow("simon")
+    assert auth.allow("Simon")
+
+
 def test_silent_on_channel_no_reply():
     auth = AuthPolicy(operators={"simon"})
     core = AircConsoleCore(machine="ionos", auth=auth)

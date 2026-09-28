@@ -21,6 +21,10 @@ install. Do not leave NSSM pointed at a mapped download drive such as
 `P:\download\…` (FR #259 / issue #259). NSSM **Application** is `powershell.exe`;
 **Arguments** are `-NoProfile -ExecutionPolicy Bypass -File …\Start-AircConsole.ps1 -ServiceMode …`.
 
+The release zip includes **`third_party/nssm/win64/nssm.exe`** (issue #266). You do
+**not** need `C:\ai\ergo\nssm.exe` on the client. Keep `scripts\` and
+`third_party\` together after unpack.
+
 ```bat
 REM elevated cmd.exe
 Set-Content %USERPROFILE%\.airc-console\operators.txt Simon

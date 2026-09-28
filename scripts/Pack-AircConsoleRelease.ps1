@@ -41,6 +41,8 @@ $files = @(
     'scripts\Start-AircConsole.cmd',
     'scripts\Install-AircConsole.ps1',
     'scripts\Install-AircConsole.cmd',
+    'scripts\Resolve-AircConsoleNssm.ps1',
+    'scripts\Fetch-Nssm.ps1',
     'docs\airc-console-fr253.md',
     'src\airc_console\VERSION',
     'src\airc_console\README.md'
@@ -51,6 +53,22 @@ foreach ($rel in $files) {
     $dest = Join-Path $stage $rel
     New-Item -ItemType Directory -Force -Path (Split-Path $dest -Parent) | Out-Null
     Copy-Item -LiteralPath $src -Destination $dest -Force
+}
+
+# Issue #266: ship win64 nssm.exe so clients need not have C:\ai\ergo\nssm.exe.
+$nssmStage = Join-Path $stage 'third_party\nssm\win64'
+$fetch = Join-Path $RepoRoot 'scripts\Fetch-Nssm.ps1'
+& $fetch -OutDir $nssmStage -CacheDir (Join-Path $RepoRoot 'third_party\nssm')
+if (-not (Test-Path -LiteralPath (Join-Path $nssmStage 'nssm.exe'))) {
+    throw 'pack missing third_party\nssm\win64\nssm.exe after Fetch-Nssm'
+}
+$readmeNssm = Join-Path $stage 'third_party\nssm\README.txt'
+if (-not (Test-Path -LiteralPath $readmeNssm)) {
+    Set-Content -LiteralPath $readmeNssm -Encoding ascii -Value @(
+        'NSSM (Non-Sucking Service Manager) 2.24 win64',
+        'https://nssm.cc/release/nssm-2.24.zip — public domain',
+        'Bundled so Install-AircConsole.ps1 works without C:\ai\ergo\nssm.exe (issue #266).'
+    )
 }
 
 # Selftest before zip

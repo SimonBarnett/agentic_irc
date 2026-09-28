@@ -30,6 +30,10 @@ Not Mode 3 / DUMB PSK. Not Jeeves. Not a talk seat. No `#bobiverse`.
 Application must be `powershell.exe`, not `Start-AircConsole.ps1`. A mapped
 `P:\download\…` Path reproduces empty `$PSScriptRoot` under `[CmdletBinding()]`.
 
+**Issue #266:** release zip **bundles** `third_party/nssm/win64/nssm.exe`. Install
+does not need `C:\ai\ergo\nssm.exe` on the client. Prefer `Install-AircConsole.cmd`
+from the unpacked release (keeps scripts + third_party together).
+
 ```bat
 scripts\Install-AircConsole.cmd
 net start AircConsole
@@ -49,8 +53,9 @@ Selftest: `python scripts/airc_console_service.py --selftest`
 
 ## Release
 
-`Pack-AircConsoleRelease.ps1` → `dist/airc-console-<ver>.zip` (+ `.sha256`).
-CI workflow `airc-console-release.yml` publishes rolling tag `airc-console`.
+`Pack-AircConsoleRelease.ps1` → `dist/airc-console-<ver>.zip` (+ `.sha256`),
+including NSSM via `Fetch-Nssm.ps1`. CI workflow `airc-console-release.yml`
+publishes rolling tag `airc-console` and immutable `airc-console-v<ver>`.
 
 ## Auth CAST IRON
 

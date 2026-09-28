@@ -142,8 +142,41 @@ def test_fr259_start_ps1_no_psscriptroot_in_param_defaults():
     assert "[string]$Home" not in install
     assert "ConsoleHome" in install
     assert "powershell.exe" in install
+    # #266: do not hard-default to fleet-only C:\ai\ergo\nssm.exe
+    assert "Resolve-AircConsoleNssm" in install
+    assert "third_party" in install
     docs = (ROOT / "docs" / "airc-console-fr253.md").read_text(encoding="utf-8")
     assert "FR #259" in docs
+    assert "#266" in docs or "issue #266" in docs
+
+
+def test_nssm_resolve_prefers_bundled(tmp_path: Path):
+    """Issue #266: bundled third_party nssm wins over missing C:\\ai\\ergo."""
+    import subprocess
+
+    scripts = tmp_path / "scripts"
+    bundled = tmp_path / "third_party" / "nssm" / "win64"
+    scripts.mkdir(parents=True)
+    bundled.mkdir(parents=True)
+    fake = bundled / "nssm.exe"
+    fake.write_bytes(b"MZ-fake-nssm")
+    resolve_src = (SCRIPTS / "Resolve-AircConsoleNssm.ps1").read_text(encoding="utf-8")
+    (scripts / "Resolve-AircConsoleNssm.ps1").write_text(resolve_src, encoding="utf-8")
+    ps = (
+        f". '{scripts / 'Resolve-AircConsoleNssm.ps1'}'; "
+        f"$p = Resolve-AircConsoleNssmPath -ScriptDir '{scripts}'; "
+        "if (-not $p) { exit 2 }; Write-Output $p; exit 0"
+    )
+    proc = subprocess.run(
+        ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps],
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    out = (proc.stdout or "").strip().splitlines()[-1]
+    assert out.lower().endswith("nssm.exe")
+    assert "third_party" in out.lower()
 
 
 def test_service_selftest_subprocess():
@@ -160,4 +193,6 @@ def test_pack_script_mentions_zip():
     text = (ROOT / "scripts" / "Pack-AircConsoleRelease.ps1").read_text(encoding="utf-8")
     assert "airc-console-" in text
     assert "Compress-Archive" in text
+    assert "Fetch-Nssm" in text
+    assert "third_party\\nssm\\win64" in text or "third_party/nssm/win64" in text
 

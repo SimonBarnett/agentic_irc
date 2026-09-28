@@ -98,6 +98,7 @@ class AircConsoleService:
             accounts=accts,
             account_map=amap,
             require_account=bool(args.require_account or accts),
+            machine=self.machine,
         )
         if not ops and not accts:
             raise SystemExit("airc console: refuse empty operators/accounts (FR #253)")

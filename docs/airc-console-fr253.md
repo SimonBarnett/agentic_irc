@@ -32,6 +32,7 @@ Installable **airc** service on each Windows box:
 | LocalSystem Python (issue #282) | Install bakes absolute `python.exe` into NSSM `-Python`; Start resolves when PATH empty |
 | Unique nick (issue #286) | Default nick `console-<machine>`; on IRC 433 retry with suffix then JOIN |
 | Reconnect + ping (issue #298) | Auto-reconnect on EOF/ERROR/dead socket; answer CTCP PING and `ping flam*` |
+| Fleet bob-* (issue #302) | Any `bob-{machinename}` nick may drive the console (already Ergo-auth'd) |
 | Release | `Pack-AircConsoleRelease.ps1` builds `dist/airc-console-*.zip` |
 | Selftest | `airc_console_service.py --selftest` exit 0 |
 

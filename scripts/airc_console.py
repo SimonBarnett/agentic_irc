@@ -30,6 +30,8 @@ _PRIVMSG_RE = re.compile(
 _CHANNEL_SAFE = re.compile(r"[^A-Za-z0-9_-]+")
 _CTCP_PING_RE = re.compile(r"^\x01PING(?: (.*))?\x01\s*$", re.IGNORECASE | re.DOTALL)
 _PING_CMD_RE = re.compile(r"^\s*ping(?:\s+(\S+))?\s*$", re.IGNORECASE)
+# Issue #302: fleet ear nicks bob-{machine} are already authenticated; machine varies.
+_BOB_FLEET_NICK_RE = re.compile(r"^bob-[a-z0-9][a-z0-9_-]*$", re.IGNORECASE)
 
 
 def machine_id(override: str | None = None) -> str:
@@ -102,6 +104,11 @@ def parse_ping_command(text: str) -> str | None:
     return (m.group(1) or "*").strip()
 
 
+def is_bob_fleet_nick(nick: str) -> bool:
+    """True for fleet ear nicks ``bob-{machinename}`` (issue #302)."""
+    return bool(_BOB_FLEET_NICK_RE.match((nick or "").strip()))
+
+
 @dataclass
 class AuthPolicy:
     """Only authenticated operators may drive the console via PRIVMSG."""
@@ -110,12 +117,20 @@ class AuthPolicy:
     accounts: set[str] = field(default_factory=set)
     account_map: AccountMap | None = None
     require_account: bool = False
+    # When set, also allow bob-<machine> for this box; bob-* fleet nicks always allowed (#302).
+    machine: str | None = None
 
     def allow(self, nick: str, account: str | None = None) -> bool:
         n = (nick or "").strip().lower()
         if not n:
             return False
+        # Fleet bob-{machine} seats are already authenticated on Ergo (#302).
+        if is_bob_fleet_nick(n):
+            return True
         ops = {x.lower() for x in self.operators}
+        mid = machine_id(self.machine) if self.machine is not None else None
+        if mid:
+            ops.add(f"bob-{mid}")
         accts = {x.lower() for x in self.accounts}
         if self.account_map is not None and account is None:
             account = self.account_map.get(n)

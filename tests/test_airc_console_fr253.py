@@ -17,6 +17,7 @@ from airc_console import (  # noqa: E402
     ConsoleSessionManager,
     console_nick,
     ensure_nickserv_password,
+    is_bob_fleet_nick,
     load_operators,
     machine_id,
     nick_matches_pattern,
@@ -65,6 +66,23 @@ def test_auth_operators_only():
     assert auth.allow("simon")
     assert auth.allow("BOB-IONOS")
     assert not auth.allow("stranger")
+
+
+def test_auth_bob_fleet_nick_any_machine():
+    """Issue #302: bob-{machinename} is fleet-auth'd; machine name varies."""
+    assert is_bob_fleet_nick("bob-flamingo")
+    assert is_bob_fleet_nick("bob-ionos")
+    assert is_bob_fleet_nick("bob-ce-priority-dev1")
+    assert not is_bob_fleet_nick("flamingo")
+    assert not is_bob_fleet_nick("bob")
+    auth = AuthPolicy(operators={"Simon"}, machine="flamingo")
+    assert auth.allow("bob-flamingo")
+    assert auth.allow("bob-ionos")  # any bob-* fleet nick
+    assert auth.allow("simon")
+    assert not auth.allow("eveildrop")
+    core = AircConsoleCore(machine="flamingo", auth=auth, nick="console-flamingo")
+    r = core.handle_raw(":bob-flamingo!b@h PRIVMSG console-flamingo :hostname")
+    assert r and r.action == "pipe"
 
 
 def test_auth_account_required():

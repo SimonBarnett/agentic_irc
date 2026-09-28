@@ -9,6 +9,7 @@ Live IRC loop lives in ``airc_console_service.py``.
 """
 from __future__ import annotations
 
+import fnmatch
 import os
 import re
 import subprocess
@@ -22,26 +23,13 @@ from account_map import AccountMap, parse_message_tags
 
 NICK = "console"
 DEFAULT_SHELL = os.environ.get("COMSPEC") or "cmd.exe"
-
-
-def console_nick(machine: str | None = None, explicit: str | None = None) -> str:
-    """IRC nick for the console seat (issue #286).
-
-    Bare ``console`` collides on a shared Ergo (433) when more than one box
-    runs airc-console. Default is ``console-<machine>`` (unique per box).
-    Pass explicit ``console`` only on a single-console network.
-    """
-    if explicit and explicit.strip() and explicit.strip().lower() != "auto":
-        return explicit.strip()
-    mid = machine_id(machine)
-    # IRC nick max 30ish; keep short.
-    nick = f"console-{mid}"
-    return nick[:30]
 _PRIVMSG_RE = re.compile(
     r"^:([^!\s]+)(?:![^@\s]*@\S+)?\s+PRIVMSG\s+(\S+)\s+:?(.*)$",
     re.IGNORECASE,
 )
 _CHANNEL_SAFE = re.compile(r"[^A-Za-z0-9_-]+")
+_CTCP_PING_RE = re.compile(r"^\x01PING(?: (.*))?\x01\s*$", re.IGNORECASE | re.DOTALL)
+_PING_CMD_RE = re.compile(r"^\s*ping(?:\s+(\S+))?\s*$", re.IGNORECASE)
 
 
 def machine_id(override: str | None = None) -> str:
@@ -55,9 +43,63 @@ def shop_channel(machine: str | None = None) -> str:
     return f"#{mid}"
 
 
+def console_nick(machine: str | None = None, explicit: str | None = None) -> str:
+    """IRC nick for the console seat (issue #286).
+
+    Bare ``console`` collides on a shared Ergo (433) when more than one box
+    runs airc-console. Default is ``console-<machine>`` (unique per box).
+    Pass explicit ``console`` only on a single-console network.
+    """
+    if explicit and explicit.strip() and explicit.strip().lower() != "auto":
+        return explicit.strip()
+    mid = machine_id(machine)
+    nick = f"console-{mid}"
+    return nick[:30]
+
+
 def is_channel_target(target: str) -> bool:
     t = (target or "").strip()
     return bool(t) and t[0] in "#&+"
+
+
+def nick_matches_pattern(pattern: str, nick: str, machine: str | None = None) -> bool:
+    """True if IRC/client ping pattern matches this console (#298).
+
+    Examples: ``*``, ``flam*``, ``console-flam*``, ``flamingo``, ``console-flamingo``.
+    """
+    pat = (pattern or "").strip()
+    if not pat or pat == "*":
+        return True
+    n = (nick or "").strip().lower()
+    mid = machine_id(machine)
+    candidates = {n, mid, f"console-{mid}", f"#{mid}"}
+    p = pat.lower()
+    # Allow #channel-style patterns too.
+    for c in candidates:
+        if not c:
+            continue
+        if fnmatch.fnmatchcase(c, p) or fnmatch.fnmatchcase(c.lstrip("#"), p.lstrip("#")):
+            return True
+        # Prefix match without wildcard: "flam" matches flamingo / console-flamingo
+        if "*" not in p and "?" not in p and (c.startswith(p) or c.lstrip("#").startswith(p)):
+            return True
+    return False
+
+
+def parse_ctcp_ping(text: str) -> str | None:
+    """Return CTCP PING payload (possibly empty string) or None if not CTCP PING."""
+    m = _CTCP_PING_RE.match(text or "")
+    if not m:
+        return None
+    return m.group(1) if m.group(1) is not None else ""
+
+
+def parse_ping_command(text: str) -> str | None:
+    """Return ping pattern (``*`` if bare ``ping``) or None if not a ping command."""
+    m = _PING_CMD_RE.match(text or "")
+    if not m:
+        return None
+    return (m.group(1) or "*").strip()
 
 
 @dataclass
@@ -268,6 +310,32 @@ class AircConsoleCore:
         if self.auth.account_map is not None and account:
             self.auth.account_map.set(nick, account)
 
+        # Issue #298: CTCP PING / "ping [pattern]" — no operator auth; presence only.
+        ctcp_payload = parse_ctcp_ping(text or "")
+        if ctcp_payload is not None:
+            return HandleResult(
+                action="ctcp_pong",
+                nick=nick,
+                target=target,
+                text=text,
+                reply=ctcp_payload,
+            )
+        ping_pat = parse_ping_command(text or "")
+        if ping_pat is not None:
+            if nick_matches_pattern(ping_pat, self.nick, self.machine):
+                return HandleResult(
+                    action="pong",
+                    nick=nick,
+                    target=target,
+                    text=text,
+                    reply=f"pong {self.nick}",
+                )
+            if is_channel_target(target):
+                self.channel_traffic.append(text)
+                return HandleResult(action="silent_channel", nick=nick, target=target, text=text)
+            # Direct ping that does not match us — ignore quietly.
+            return HandleResult(action="ping_miss", nick=nick, target=target, text=text)
+
         if is_channel_target(target):
             # Silent in channel: ignore public traffic (do not reply on channel).
             self.channel_traffic.append(text)
@@ -295,7 +363,7 @@ class AircConsoleCore:
                 nick=nick,
                 target=target,
                 text=text,
-                reply="airc console: PRIVMSG lines pipe to your shell; .quit closes; silent on channel",
+                reply="airc console: PRIVMSG lines pipe to your shell; .quit closes; silent on channel; answers ping",
             )
 
         self.sessions.pipe(nick, cmd)

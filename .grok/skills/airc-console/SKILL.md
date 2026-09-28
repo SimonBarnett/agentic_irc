@@ -88,3 +88,6 @@ the NickServ GUID as server `PASS`.
 
 **Issue #289:** `operators.txt` must be UTF-8 **without BOM**. PS 5.1 `Set-Content -Encoding utf8` writes BOM and nick `simon` fails auth. Install rewrites; `load_operators` uses utf-8-sig.
 
+
+**Issue #298:** auto-reconnect on connection loss (backoff reset after good session; idle keepalive PING). Answers CTCP PING and `ping flam*` (NOTICE pong) without operator auth.
+

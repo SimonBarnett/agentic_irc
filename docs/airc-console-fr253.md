@@ -31,6 +31,7 @@ Installable **airc** service on each Windows box:
 | Unattended (issue #277/#294) | Seeds `ergo.password` from **release** `config/ergo.password` (not target `~\.grok`), mints NickServ GUID, **Start-Service** → Running |
 | LocalSystem Python (issue #282) | Install bakes absolute `python.exe` into NSSM `-Python`; Start resolves when PATH empty |
 | Unique nick (issue #286) | Default nick `console-<machine>`; on IRC 433 retry with suffix then JOIN |
+| Reconnect + ping (issue #298) | Auto-reconnect on EOF/ERROR/dead socket; answer CTCP PING and `ping flam*` |
 | Release | `Pack-AircConsoleRelease.ps1` builds `dist/airc-console-*.zip` |
 | Selftest | `airc_console_service.py --selftest` exit 0 |
 

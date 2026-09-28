@@ -9,6 +9,8 @@ on:
       - "scripts/Start-AircConsole.cmd"
       - "scripts/Install-AircConsole.ps1"
       - "scripts/Install-AircConsole.cmd"
+      - "scripts/Resolve-AircConsoleNssm.ps1"
+      - "scripts/Fetch-Nssm.ps1"
       - "scripts/Pack-AircConsoleRelease.ps1"
       - "src/airc_console/**"
       - "docs/airc-console-fr253.md"
@@ -45,7 +47,7 @@ jobs:
             Rolling airc console service (FR #253).
 
             Nick `console` on `#{machinename}`, silent in channel, auth PRIVMSG → shell.
-            Install: `Install-AircConsole.ps1` (NSSM). See `docs/airc-console-fr253.md`.
+            Install: `Install-AircConsole.cmd` (bundles NSSM under third_party/nssm). See `docs/airc-console-fr253.md`.
 
             Do not attach secrets. Put operators + password beside the install home.
           files: |
@@ -69,5 +71,5 @@ jobs:
           $sha = Get-ChildItem dist/airc-console-$ver.zip.sha256 | Select-Object -First 1
           gh release create $tag $zip.FullName $sha.FullName `
             --title $tag `
-            --notes "airc console $ver (FR #253). NSSM service. See docs/airc-console-fr253.md." `
+            --notes "airc console $ver (FR #253 / #266). Bundled NSSM in zip. See docs/airc-console-fr253.md." `
             --target ${{ github.sha }}

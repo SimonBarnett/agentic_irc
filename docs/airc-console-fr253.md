@@ -25,12 +25,15 @@ Installable **airc** service on each Windows box:
 | Service install | `Install-AircConsole.ps1` registers NSSM `AircConsole` |
 | Unsigned download install (FR #256) | `Install-AircConsole.cmd` uses Unblock-File + `-ExecutionPolicy Bypass` |
 | Start on mapped drive / CmdletBinding (FR #259) | `Start-AircConsole.ps1` resolves script dir in body — never `$PSScriptRoot` in `param()` defaults |
+| Bundled NSSM (issue #266) | Release zip includes `third_party/nssm/win64/nssm.exe`; install does **not** require `C:\ai\ergo\nssm.exe` |
 | Release | `Pack-AircConsoleRelease.ps1` builds `dist/airc-console-*.zip` |
 | Selftest | `airc_console_service.py --selftest` exit 0 |
 
-## Install notes (FR #259)
+## Install notes (FR #259 / #266)
 
 NSSM **Application** must be `powershell.exe` (not the `.ps1`). Prefer a **local** install tree (`C:\ai\airc-console\scripts\…`) over a mapped download drive (`P:\download\…`). Mapped drives + `[CmdletBinding()]` left `$PSScriptRoot` empty in param defaults and crashed `Start-AircConsole.ps1` before Python ran.
+
+**NSSM binary:** the release zip ships `third_party/nssm/win64/nssm.exe` (public domain, https://nssm.cc). `Install-AircConsole.ps1` resolves that path first, then legacy `C:\ai\ergo\nssm.exe`, then `PATH`. Pass `-Nssm` only to override.
 
 Do not name a PowerShell parameter `$Home` (automatic read-only) — launchers use `-ConsoleHome`.
 

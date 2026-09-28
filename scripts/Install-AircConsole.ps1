@@ -85,12 +85,13 @@ function Write-AircSecretFile {
 
 function Initialize-AircConsoleHomeSecrets {
     param(
-        [Parameter(Mandatory)][string]$Home,
+        # Never name this $Home — PowerShell automatic $Home is read-only (FR #259).
+        [Parameter(Mandatory)][string]$ConsoleHomeDir,
         [string[]]$OperatorNicks,
         [string]$NickServPasswordFile = '',
         [string]$ErgoSourceFile = ''
     )
-    $opsFile = Join-Path $Home 'operators.txt'
+    $opsFile = Join-Path $ConsoleHomeDir 'operators.txt'
     if (-not (Test-Path -LiteralPath $opsFile) -and $OperatorNicks.Count -gt 0) {
         Set-Content -LiteralPath $opsFile -Value ($OperatorNicks -join "`n") -Encoding utf8
         Write-Host "INFO wrote $opsFile"
@@ -102,7 +103,7 @@ function Initialize-AircConsoleHomeSecrets {
 
     # #271 NickServ GUID — mint here so first service start is unattended.
     if (-not $NickServPasswordFile) {
-        $NickServPasswordFile = Join-Path $Home 'console.password'
+        $NickServPasswordFile = Join-Path $ConsoleHomeDir 'console.password'
     }
     if (-not (Test-Path -LiteralPath $NickServPasswordFile) -or -not (Get-Content -LiteralPath $NickServPasswordFile -Raw -ErrorAction SilentlyContinue).Trim()) {
         $guid = [guid]::NewGuid().ToString()
@@ -115,7 +116,7 @@ function Initialize-AircConsoleHomeSecrets {
     # #277: Ergo server PASS is the fleet secret at ~/.grok/ergo/connect.password
     # (same file Start-TalkSeat / ears use). Copy into home\ergo.password for
     # LocalSystem — never invent, never print the value.
-    $ergoDest = Join-Path $Home 'ergo.password'
+    $ergoDest = Join-Path $ConsoleHomeDir 'ergo.password'
     $fleetConnect = Join-Path $env:USERPROFILE '.grok\ergo\connect.password'
     $secret = $null
     $source = $null
@@ -147,7 +148,7 @@ function Initialize-AircConsoleHomeSecrets {
     }
 }
 
-$secrets = Initialize-AircConsoleHomeSecrets -Home $ConsoleHome -OperatorNicks $Operators `
+$secrets = Initialize-AircConsoleHomeSecrets -ConsoleHomeDir $ConsoleHome -OperatorNicks $Operators `
     -NickServPasswordFile $PasswordFile -ErgoSourceFile $ErgoPasswordFile
 $opsFile = $secrets.OperatorsFile
 $PasswordFile = $secrets.NickServPasswordFile

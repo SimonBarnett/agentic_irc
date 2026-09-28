@@ -2,14 +2,15 @@
 #Requires -RunAsAdministrator
 <#
 .SYNOPSIS
-  Register NSSM service AircConsole (Automatic). FR #253 / #256.
+  Register NSSM service AircConsole (Automatic). FR #253 / #256 / #266.
 .NOTES
   Downloaded zips are unsigned. Prefer Install-AircConsole.cmd (Unblock-File +
   -ExecutionPolicy Bypass). Direct .ps1 invoke fails under AllSigned/Restricted.
+  FR #266: resolve bundled third_party/nssm before legacy C:\ai\ergo\nssm.exe.
 #>
 [CmdletBinding()]
 param(
-    [string]$Nssm = 'C:\ai\ergo\nssm.exe',
+    [string]$Nssm = '',
     [string]$Launcher = '',
     [Alias('Home')]
     [string]$ConsoleHome = '',
@@ -19,6 +20,32 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+
+function Resolve-AircNssm {
+    param([string]$Explicit, [string]$ScriptsDir)
+    if ($Explicit -and (Test-Path -LiteralPath $Explicit)) {
+        return (Resolve-Path -LiteralPath $Explicit).Path
+    }
+    $candidates = @()
+    if ($ScriptsDir) {
+        $root = Split-Path -Parent $ScriptsDir
+        $candidates += (Join-Path $root 'third_party\nssm\win64\nssm.exe')
+        # Unpacked zip may place third_party next to scripts/
+        $candidates += (Join-Path $ScriptsDir '..\third_party\nssm\win64\nssm.exe')
+    }
+    $candidates += 'C:\ai\ergo\nssm.exe'
+    $onPath = Get-Command nssm.exe -ErrorAction SilentlyContinue
+    if ($onPath) { $candidates += $onPath.Source }
+    foreach ($c in $candidates) {
+        try {
+            $full = [IO.Path]::GetFullPath($c)
+        } catch { continue }
+        if (Test-Path -LiteralPath $full) {
+            return $full
+        }
+    }
+    return $null
+}
 
 # FR #259: $PSScriptRoot can be empty in param() defaults under [CmdletBinding()];
 # resolve launcher dir in the body (also prefer local disk over mapped P:).
@@ -31,7 +58,11 @@ if (-not $Launcher) {
     if (-not $scriptDir) { throw 'cannot resolve Install-AircConsole.ps1 directory (FR #259)' }
     $Launcher = Join-Path $scriptDir 'Start-AircConsole.ps1'
 }
-if (-not (Test-Path -LiteralPath $Nssm)) { throw "nssm missing: $Nssm" }
+$Nssm = Resolve-AircNssm -Explicit $Nssm -ScriptsDir $scriptDir
+if (-not $Nssm) {
+    throw 'nssm missing: expected third_party/nssm/win64/nssm.exe (release zip), C:\ai\ergo\nssm.exe, or nssm on PATH (FR #266)'
+}
+Write-Host ("INFO using nssm={0}" -f $Nssm)
 if (-not (Test-Path -LiteralPath $Launcher)) { throw "launcher missing: $Launcher" }
 $Launcher = (Resolve-Path -LiteralPath $Launcher).Path
 if ($Launcher -match '^[A-Za-z]:\\' ) {

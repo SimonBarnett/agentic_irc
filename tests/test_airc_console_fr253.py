@@ -142,6 +142,24 @@ def test_fr259_start_ps1_no_psscriptroot_in_param_defaults():
     assert "[string]$Home" not in install
     assert "ConsoleHome" in install
     assert "powershell.exe" in install
+
+
+def test_fr266_bundled_nssm_in_release_and_install_resolver():
+    """FR #266: pack ships third_party/nssm; install prefers it over C:\\ai\\ergo."""
+    nssm = ROOT / "third_party" / "nssm" / "win64" / "nssm.exe"
+    assert nssm.is_file(), "bundled nssm.exe missing from repo"
+    assert nssm.stat().st_size > 10000
+    pack = (ROOT / "scripts" / "Pack-AircConsoleRelease.ps1").read_text(encoding="utf-8")
+    assert r"third_party\nssm\win64\nssm.exe" in pack
+    install = (ROOT / "scripts" / "Install-AircConsole.ps1").read_text(encoding="utf-8")
+    assert "Resolve-AircNssm" in install
+    assert "third_party" in install
+    assert "FR #266" in install
+    # Default param must not hard-require C:\\ai\\ergo only
+    assert "[string]$Nssm = 'C:\\ai\\ergo\\nssm.exe'" not in install
+    assert (ROOT / "src" / "airc_console" / "VERSION").read_text(encoding="utf-8").strip() == "0.1.4"
+    readme = (ROOT / "src" / "airc_console" / "README.md").read_text(encoding="utf-8")
+    assert "FR #266" in readme
     docs = (ROOT / "docs" / "airc-console-fr253.md").read_text(encoding="utf-8")
     assert "FR #259" in docs
 

@@ -43,7 +43,9 @@ $files = @(
     'scripts\Install-AircConsole.cmd',
     'docs\airc-console-fr253.md',
     'src\airc_console\VERSION',
-    'src\airc_console\README.md'
+    'src\airc_console\README.md',
+    'third_party\nssm\win64\nssm.exe',
+    'third_party\nssm\README.md'
 )
 foreach ($rel in $files) {
     $src = Join-Path $RepoRoot $rel
@@ -52,6 +54,10 @@ foreach ($rel in $files) {
     New-Item -ItemType Directory -Force -Path (Split-Path $dest -Parent) | Out-Null
     Copy-Item -LiteralPath $src -Destination $dest -Force
 }
+# FR #266: refuse to ship a zip without bundled NSSM
+$bundledNssm = Join-Path $stage 'third_party\nssm\win64\nssm.exe'
+if (-not (Test-Path -LiteralPath $bundledNssm)) { throw "pack missing bundled nssm: $bundledNssm" }
+if ((Get-Item -LiteralPath $bundledNssm).Length -lt 10000) { throw "bundled nssm looks empty: $bundledNssm" }
 
 # Selftest before zip
 $py = (Get-Command python.exe).Source

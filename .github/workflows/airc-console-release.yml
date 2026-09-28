@@ -11,6 +11,7 @@ on:
       - "scripts/Install-AircConsole.cmd"
       - "scripts/Pack-AircConsoleRelease.ps1"
       - "src/airc_console/**"
+      - "third_party/nssm/**"
       - "docs/airc-console-fr253.md"
       - ".github/workflows/airc-console-release.yml"
   workflow_dispatch:

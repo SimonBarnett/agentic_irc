@@ -4,8 +4,8 @@ description: >
   Installable airc console Windows service: nick console on #{machinename},
   silent in channel, authenticated PRIVMSG piped to a per-user shell. Use when
   Simon says airc console service, Install-AircConsole, FR #253, FR #256,
-  FR #259, PSScriptRoot empty, Start-AircConsole Split-Path, mapped P: download,
-  not digitally signed, or /airc-console.
+  FR #259, FR #266, nssm missing, PSScriptRoot empty, Start-AircConsole
+  Split-Path, mapped P: download, not digitally signed, or /airc-console.
 ---
 
 # airc console (FR #253)
@@ -29,6 +29,9 @@ Not Mode 3 / DUMB PSK. Not Jeeves. Not a talk seat. No `#bobiverse`.
 **FR #259:** install from a **local** tree (`C:\ai\airc-console`). NSSM Path /
 Application must be `powershell.exe`, not `Start-AircConsole.ps1`. A mapped
 `P:\download\…` Path reproduces empty `$PSScriptRoot` under `[CmdletBinding()]`.
+
+**FR #266:** release zip bundles `third_party/nssm/win64/nssm.exe`. Install
+resolves bundled → `C:\ai\ergo\nssm.exe` → PATH. Do not require fleet-only paths.
 
 ```bat
 scripts\Install-AircConsole.cmd

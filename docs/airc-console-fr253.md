@@ -25,6 +25,7 @@ Installable **airc** service on each Windows box:
 | Service install | `Install-AircConsole.ps1` registers NSSM `AircConsole` |
 | Unsigned download install (FR #256) | `Install-AircConsole.cmd` uses Unblock-File + `-ExecutionPolicy Bypass` |
 | Start on mapped drive / CmdletBinding (FR #259) | `Start-AircConsole.ps1` resolves script dir in body — never `$PSScriptRoot` in `param()` defaults |
+| Bundled NSSM (FR #266) | Zip ships `third_party/nssm/win64/nssm.exe`; install prefers it over `C:\ai\ergo\nssm.exe` |
 | Release | `Pack-AircConsoleRelease.ps1` builds `dist/airc-console-*.zip` |
 | Selftest | `airc_console_service.py --selftest` exit 0 |
 

@@ -12,6 +12,10 @@ Installable Windows service: IRC nick **`console`** on **`#{machinename}`**.
 
 ## Install (Windows + NSSM)
 
+**FR #266:** the release zip includes `third_party/nssm/win64/nssm.exe`. Install
+resolves that path first, then legacy `C:\ai\ergo\nssm.exe`, then `nssm` on PATH.
+Field boxes no longer need a pre-installed NSSM.
+
 Downloaded zips are **unsigned**. Do **not** double-click / invoke the `.ps1`
 directly under Restricted/AllSigned — that fails with "not digitally signed"
 (FR #256). Use the `.cmd` wrappers (they `Unblock-File` + `-ExecutionPolicy Bypass`).

@@ -14,7 +14,12 @@ Installable Windows service: IRC nick **`console`** on **`#{machinename}`**.
 
 Downloaded zips are **unsigned**. Do **not** double-click / invoke the `.ps1`
 directly under Restricted/AllSigned — that fails with "not digitally signed"
-(FR #256). Use the `.cmd` wrappers (they `Unblock-File` + `-ExecutionPolicy Bypass`):
+(FR #256). Use the `.cmd` wrappers (they `Unblock-File` + `-ExecutionPolicy Bypass`).
+
+Copy the unzipped tree to a **local** path (e.g. `C:\ai\airc-console`) before
+install. Do not leave NSSM pointed at a mapped download drive such as
+`P:\download\…` (FR #259 / issue #259). NSSM **Application** is `powershell.exe`;
+**Arguments** are `-NoProfile -ExecutionPolicy Bypass -File …\Start-AircConsole.ps1 -ServiceMode …`.
 
 ```bat
 REM elevated cmd.exe
@@ -38,9 +43,6 @@ Foreground smoke:
 scripts\Start-AircConsole.cmd -SelfTest
 scripts\Start-AircConsole.cmd -Operators Simon
 ```
-
-FR #259: `Start-AircConsole.ps1` must not use `$PSScriptRoot` in `param()`
-defaults (empty Path / Split-Path error when launched via `.cmd` on some hosts).
 
 ## Release
 

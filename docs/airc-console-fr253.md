@@ -24,8 +24,17 @@ Installable **airc** service on each Windows box:
 | Session | Per-nick shell; `.quit` closes |
 | Service install | `Install-AircConsole.ps1` registers NSSM `AircConsole` |
 | Unsigned download install (FR #256) | `Install-AircConsole.cmd` uses Unblock-File + `-ExecutionPolicy Bypass` |
+| Start on mapped drive / CmdletBinding (FR #259) | `Start-AircConsole.ps1` resolves script dir in body — never `$PSScriptRoot` in `param()` defaults |
 | Release | `Pack-AircConsoleRelease.ps1` builds `dist/airc-console-*.zip` |
 | Selftest | `airc_console_service.py --selftest` exit 0 |
+
+## Install notes (FR #259)
+
+NSSM **Application** must be `powershell.exe` (not the `.ps1`). Prefer a **local** install tree (`C:\ai\airc-console\scripts\…`) over a mapped download drive (`P:\download\…`). Mapped drives + `[CmdletBinding()]` left `$PSScriptRoot` empty in param defaults and crashed `Start-AircConsole.ps1` before Python ran.
+
+Do not name a PowerShell parameter `$Home` (automatic read-only) — launchers use `-ConsoleHome`.
+
+Ergo (`irc.ntsa.uk`) needs a server **`PASS`** before `NICK`/`USER`. `airc_console_service.py` sends `PASS` from `AIRC_CONSOLE_PASSWORD` / `AGENTIC_IRC_PASSWORD` / `--password-file` (default `~\.airc-console\console.password`). SASL is optional (`--sasl`) and must not block registration on 904.
 
 ## Non-goals (this PR)
 

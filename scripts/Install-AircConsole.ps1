@@ -11,6 +11,7 @@
 param(
     [string]$Nssm = 'C:\ai\ergo\nssm.exe',
     [string]$Launcher = '',
+    [Alias('Home')]
     [string]$ConsoleHome = '',
     [string]$PasswordFile = '',
     [string[]]$Operators = @('Simon'),
@@ -18,21 +19,33 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-# FR #259: resolve script dir in body — $PSScriptRoot may be empty in param defaults.
-# Do not name a parameter $Home (automatic variable is read-only).
+
+# FR #259: $PSScriptRoot can be empty in param() defaults under [CmdletBinding()];
+# resolve launcher dir in the body (also prefer local disk over mapped P:).
 $scriptDir = $PSScriptRoot
-if (-not $scriptDir -and $PSCommandPath) { $scriptDir = Split-Path -Parent $PSCommandPath }
-if (-not $scriptDir -and $MyInvocation.MyCommand.Path) { $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path }
-if (-not $scriptDir) { throw 'cannot resolve Install-AircConsole script directory' }
-if (-not $Launcher) {
-    $Launcher = Join-Path $scriptDir 'Start-AircConsole.ps1'
+if (-not $scriptDir) {
+    if ($PSCommandPath) { $scriptDir = Split-Path -Parent $PSCommandPath }
+    elseif ($MyInvocation.MyCommand.Path) { $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path }
 }
-if (-not $ConsoleHome) {
-    $ConsoleHome = Join-Path $env:USERPROFILE '.airc-console'
+if (-not $Launcher) {
+    if (-not $scriptDir) { throw 'cannot resolve Install-AircConsole.ps1 directory (FR #259)' }
+    $Launcher = Join-Path $scriptDir 'Start-AircConsole.ps1'
 }
 if (-not (Test-Path -LiteralPath $Nssm)) { throw "nssm missing: $Nssm" }
 if (-not (Test-Path -LiteralPath $Launcher)) { throw "launcher missing: $Launcher" }
+$Launcher = (Resolve-Path -LiteralPath $Launcher).Path
+if ($Launcher -match '^[A-Za-z]:\\' ) {
+    # Warn when launcher is on a mapped network drive (issue #259 repro on P:).
+    $root = ($Launcher.Substring(0, 2))
+    $drive = Get-PSDrive -Name $root.TrimEnd(':') -ErrorAction SilentlyContinue
+    if ($drive -and $drive.DisplayRoot) {
+        Write-Host ("WARN launcher on mapped drive {0} -> {1}; prefer a local copy under C:\\ai\\airc-console (FR #259)" -f $root, $drive.DisplayRoot)
+    }
+}
 
+if (-not $ConsoleHome) {
+    $ConsoleHome = Join-Path $env:USERPROFILE '.airc-console'
+}
 New-Item -ItemType Directory -Force -Path $ConsoleHome | Out-Null
 $opsFile = Join-Path $ConsoleHome 'operators.txt'
 if (-not (Test-Path -LiteralPath $opsFile) -and $Operators.Count -gt 0) {
@@ -50,6 +63,12 @@ if ($svc) {
     if ($LASTEXITCODE -ne 0) { throw "nssm install failed: $LASTEXITCODE" }
 }
 
+if (-not $PasswordFile) {
+    $defaultPw = Join-Path $ConsoleHome 'console.password'
+    if (Test-Path -LiteralPath $defaultPw) { $PasswordFile = $defaultPw }
+}
+
+# Application MUST be powershell.exe (never the .ps1 Path — see NSSM GUI / issue #259).
 $appParams = "-NoProfile -ExecutionPolicy Bypass -File `"$Launcher`" -ServiceMode -ConsoleHome `"$ConsoleHome`""
 if ($PasswordFile) { $appParams += " -PasswordFile `"$PasswordFile`"" }
 if (Test-Path -LiteralPath $opsFile) { $appParams += " -OperatorsFile `"$opsFile`"" }

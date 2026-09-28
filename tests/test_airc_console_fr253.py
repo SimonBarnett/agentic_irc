@@ -61,16 +61,19 @@ def test_refuse_empty_operators_loader(tmp_path: Path):
 
 
 def test_load_operators_strips_utf8_bom(tmp_path: Path):
-    """Issue #289: PowerShell utf8 Set-Content writes BOM; must still match simon."""
+    """Issue #289 / #293: PowerShell utf8 Set-Content writes BOM; must still match simon."""
     f = tmp_path / "ops-bom.txt"
-    f.write_bytes("\xef\xbb\xbfSimon\r\n".encode("ascii") + b"")
-    # Also write real UTF-8 BOM + Simon via utf-8-sig
-    f.write_text("Simon\n", encoding="utf-8-sig")
+    # FR #293: write real UTF-8 BOM bytes (do not .encode("ascii") a unicode BOM string).
+    f.write_bytes(b"\xef\xbb\xbfSimon\r\n")
     ops = load_operators(f)
     assert ops == {"Simon"}
     auth = AuthPolicy(operators=ops)
     assert auth.allow("simon") is True
     assert auth.allow("Simon") is True
+    # utf-8-sig path (same BOM semantics via text API)
+    f2 = tmp_path / "ops-bom-sig.txt"
+    f2.write_text("Simon\n", encoding="utf-8-sig")
+    assert load_operators(f2) == {"Simon"}
 
 
 def test_silent_on_channel_no_reply():

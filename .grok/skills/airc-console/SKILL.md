@@ -81,9 +81,10 @@ Empty operators **and** accounts â†’ refuse start. Prefer account-tag when
 `~\.airc-console\console.password` and reuses it. Do not ask the operator to
 invent one.
 
-**Ergo server PASS:** `AGENTIC_IRC_PASSWORD` / `AIRC_CONSOLE_SERVER_PASSWORD` /
-`~\.airc-console\ergo.password` / `~\.grok\ergo\connect.password`. Never invent
-the fleet server secret; never send the NickServ GUID as server `PASS`.
+**Ergo server PASS (#294):** shipped in the zip as `config/ergo.password`, then
+`~\.airc-console\ergo.password` after Install. Packer uses
+`AIRC_PACK_ERGO_PASSWORD` / packer `connect.password`. Never invent; never send
+the NickServ GUID as server `PASS`.
 
 **Issue #289:** `operators.txt` must be UTF-8 **without BOM**. PS 5.1 `Set-Content -Encoding utf8` writes BOM and nick `simon` fails auth. Install rewrites; `load_operators` uses utf-8-sig.
 

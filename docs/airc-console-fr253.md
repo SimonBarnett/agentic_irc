@@ -28,7 +28,7 @@ Installable **airc** service on each Windows box:
 | Bundled NSSM (issue #266) | Release zip includes `third_party/nssm/win64/nssm.exe`; install does **not** require `C:\ai\ergo\nssm.exe` |
 | NickServ GUID (issue #271) | First start mints GUID into `console.password`; reuse next start; Ergo PASS stays separate |
 | Reinstall (issue #273) | `Install-AircConsole` stops+removes any existing `AircConsole` then installs fresh; nssm "not been started" stderr is ignored |
-| Unattended (issue #277) | Seeds `ergo.password` from `~\.grok\ergo\connect.password`, mints NickServ GUID, **Start-Service** → Running |
+| Unattended (issue #277/#294) | Seeds `ergo.password` from **release** `config/ergo.password` (not target `~\.grok`), mints NickServ GUID, **Start-Service** → Running |
 | LocalSystem Python (issue #282) | Install bakes absolute `python.exe` into NSSM `-Python`; Start resolves when PATH empty |
 | Unique nick (issue #286) | Default nick `console-<machine>`; on IRC 433 retry with suffix then JOIN |
 | Release | `Pack-AircConsoleRelease.ps1` builds `dist/airc-console-*.zip` |
@@ -43,9 +43,9 @@ NSSM **Application** must be `powershell.exe` (not the `.ps1`). Prefer a **local
 Do not name a PowerShell parameter `$Home` (automatic read-only) — launchers use `-ConsoleHome`.
 
 Ergo (`irc.ntsa.uk`) needs a server **`PASS`** before `NICK`/`USER`. That secret
-comes from `AIRC_CONSOLE_SERVER_PASSWORD` / `AGENTIC_IRC_PASSWORD` /
-`~\.airc-console\ergo.password` / `~\.grok\ergo\connect.password` — **never
-invented**.
+is **packed into the release zip** as `config/ergo.password` (issue #294) and
+copied by Install into `~\.airc-console\ergo.password`. Target clients do **not**
+need `~\.grok`. Never invent the secret.
 
 **NickServ** (issue #271): on first start the client **mints a GUID** into
 `~\.airc-console\console.password` and reuses it for REGISTER/IDENTIFY. Operators

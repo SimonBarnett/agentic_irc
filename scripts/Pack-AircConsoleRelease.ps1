@@ -72,6 +72,40 @@ if (-not (Test-Path -LiteralPath $readmeNssm)) {
     )
 }
 
+# Issue #294: embed Ergo server PASS in the zip. Target clients have no ~/.grok.
+$configStage = Join-Path $stage 'config'
+New-Item -ItemType Directory -Force -Path $configStage | Out-Null
+$readmeCfg = Join-Path $RepoRoot 'config\README.txt'
+if (Test-Path -LiteralPath $readmeCfg) {
+    Copy-Item -LiteralPath $readmeCfg -Destination (Join-Path $configStage 'README.txt') -Force
+}
+$ergoSecret = $null
+$ergoSource = $null
+foreach ($key in @('AIRC_PACK_ERGO_PASSWORD', 'AGENTIC_IRC_PASSWORD', 'AIRC_CONSOLE_SERVER_PASSWORD')) {
+    $v = [Environment]::GetEnvironmentVariable($key)
+    if ($v -and $v.Trim()) { $ergoSecret = $v.Trim(); $ergoSource = "env:$key"; break }
+}
+if (-not $ergoSecret) {
+    $packerConnect = Join-Path $env:USERPROFILE '.grok\ergo\connect.password'
+    if (Test-Path -LiteralPath $packerConnect) {
+        $ergoSecret = (Get-Content -LiteralPath $packerConnect -Raw).Trim()
+        $ergoSource = $packerConnect
+    }
+}
+if (-not $ergoSecret) {
+    $localCfg = Join-Path $RepoRoot 'config\ergo.password'
+    if (Test-Path -LiteralPath $localCfg) {
+        $ergoSecret = (Get-Content -LiteralPath $localCfg -Raw).Trim()
+        $ergoSource = $localCfg
+    }
+}
+if (-not $ergoSecret) {
+    throw 'Pack requires Ergo server PASS for config/ergo.password (issue #294): set AIRC_PACK_ERGO_PASSWORD / AGENTIC_IRC_PASSWORD, or pack on a box with ~/.grok/ergo/connect.password'
+}
+$ergoOut = Join-Path $configStage 'ergo.password'
+[IO.File]::WriteAllText($ergoOut, $ergoSecret + "`n", [Text.UTF8Encoding]::new($false))
+Write-Host "INFO embedded config/ergo.password from $ergoSource (len=$($ergoSecret.Length); value not printed)"
+
 # Selftest before zip
 $py = (Get-Command python.exe).Source
 & $py (Join-Path $stage 'scripts\airc_console_service.py') --selftest

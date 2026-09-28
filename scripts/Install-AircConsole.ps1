@@ -91,7 +91,9 @@ function Initialize-AircConsoleHomeSecrets {
         [Parameter(Mandatory)][string]$ConsoleHomeDir,
         [string[]]$OperatorNicks,
         [string]$NickServPasswordFile = '',
-        [string]$ErgoSourceFile = ''
+        [string]$ErgoSourceFile = '',
+        # Issue #294: packaged release config\ergo.password (not target ~/.grok).
+        [string]$PackagedErgoFile = ''
     )
     $opsFile = Join-Path $ConsoleHomeDir 'operators.txt'
     # Issue #289: never UTF-8 BOM — PS 5.1 Set-Content -Encoding utf8 prefixes U+FEFF
@@ -126,34 +128,28 @@ function Initialize-AircConsoleHomeSecrets {
         Write-Host "INFO keep $NickServPasswordFile"
     }
 
-    # #277: Ergo server PASS is the fleet secret at ~/.grok/ergo/connect.password
-    # (same file Start-TalkSeat / ears use). Copy into home\ergo.password for
-    # LocalSystem — never invent, never print the value.
+    # #294: Ergo server PASS comes from the *release zip* (config\ergo.password),
+    # not from the target machine's ~/.grok (most clients have none).
     $ergoDest = Join-Path $ConsoleHomeDir 'ergo.password'
-    $fleetConnect = Join-Path $env:USERPROFILE '.grok\ergo\connect.password'
     $secret = $null
     $source = $null
     if ($ErgoSourceFile -and (Test-Path -LiteralPath $ErgoSourceFile)) {
         $secret = (Get-Content -LiteralPath $ErgoSourceFile -Raw).Trim()
         $source = $ErgoSourceFile
     }
-    if (-not $secret -and (Test-Path -LiteralPath $fleetConnect)) {
-        $secret = (Get-Content -LiteralPath $fleetConnect -Raw).Trim()
-        $source = $fleetConnect
-    }
-    if (-not $secret -and $env:AGENTIC_IRC_PASSWORD) {
-        $secret = $env:AGENTIC_IRC_PASSWORD.Trim()
-        $source = 'AGENTIC_IRC_PASSWORD'
+    if (-not $secret -and $PackagedErgoFile -and (Test-Path -LiteralPath $PackagedErgoFile)) {
+        $secret = (Get-Content -LiteralPath $PackagedErgoFile -Raw).Trim()
+        $source = $PackagedErgoFile
     }
     if (-not $secret -and (Test-Path -LiteralPath $ergoDest)) {
         $secret = (Get-Content -LiteralPath $ergoDest -Raw).Trim()
         $source = $ergoDest
     }
     if (-not $secret) {
-        throw "Ergo server PASS missing: expected $fleetConnect (fleet connect.password). Issue #277."
+        throw "Ergo server PASS missing in release: expected config\ergo.password beside the unpack tree (issue #294). Re-download airc-console zip packed with the fleet secret."
     }
     Write-AircSecretFile -Path $ergoDest -Secret $secret
-    Write-Host "INFO seeded ergo.password from $source -> $ergoDest"
+    Write-Host "INFO seeded ergo.password from package ($source) -> $ergoDest"
     return [pscustomobject]@{
         OperatorsFile       = $opsFile
         NickServPasswordFile = $NickServPasswordFile
@@ -161,8 +157,11 @@ function Initialize-AircConsoleHomeSecrets {
     }
 }
 
+# Packaged secret lives at <unpack>\config\ergo.password (scripts\.. = unpack root).
+$packRoot = Split-Path -Parent $scriptDir
+$packagedErgo = Join-Path $packRoot 'config\ergo.password'
 $secrets = Initialize-AircConsoleHomeSecrets -ConsoleHomeDir $ConsoleHome -OperatorNicks $Operators `
-    -NickServPasswordFile $PasswordFile -ErgoSourceFile $ErgoPasswordFile
+    -NickServPasswordFile $PasswordFile -ErgoSourceFile $ErgoPasswordFile -PackagedErgoFile $packagedErgo
 $opsFile = $secrets.OperatorsFile
 $PasswordFile = $secrets.NickServPasswordFile
 $ergoFile = $secrets.ErgoPasswordFile
@@ -315,4 +314,4 @@ if ($NoStart) {
 
 Get-Service $ServiceName | Format-Table Name, Status, StartType -AutoSize
 Write-Host 'INFO Install complete (unattended #277).'
-Write-Host "INFO home=$ConsoleHome operators + console.password (NickServ GUID) + ergo.password (from ~/.grok/ergo/connect.password)"
+Write-Host "INFO home=$ConsoleHome operators + console.password (NickServ GUID) + ergo.password (from release config\\ergo.password)"

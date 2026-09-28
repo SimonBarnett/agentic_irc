@@ -31,4 +31,7 @@ dist/
 # Cached NSSM binary for offline Pack-AircConsoleRelease (issue #266); release zip still ships it.
 third_party/nssm/win64/
 third_party/nssm/*.exe
+# Ergo server PASS embedded into release zips only — never commit (issue #294).
+config/ergo.password
+**/connect.password
 

@@ -31,11 +31,12 @@ REM elevated cmd.exe — unattended (#277): seeds secrets + starts service
 scripts\Install-AircConsole.cmd
 ```
 
-Install copies fleet `%\USERPROFILE%\.grok\ergo\connect.password` →
-`%\USERPROFILE%\.airc-console\ergo.password`, mints NickServ GUID
-`console.password` if missing, resolves absolute `python.exe` into NSSM
-`-Python` (LocalSystem has no PATH — issue #282), removes any prior service,
-installs, and **starts** `AircConsole` (Running). Pass `-NoStart` only to skip start.
+Install copies **release** `config\ergo.password` →
+`%\USERPROFILE%\.airc-console\ergo.password` (issue #294 — clients need no
+`\.grok`), mints NickServ GUID `console.password` if missing, resolves absolute
+`python.exe` into NSSM `-Python` (LocalSystem has no PATH — issue #282), removes
+any prior service, installs, and **starts** `AircConsole` (Running). Pass
+`-NoStart` only to skip start.
 
 Equivalent PowerShell (explicit Bypass):
 

@@ -35,9 +35,27 @@ jobs:
         run: python -m pytest tests/test_airc_console_fr253.py -q
       - name: Pack zip
         shell: pwsh
+        env:
+          # Issue #294: embed Ergo PASS into zip (clients have no ~/.grok).
+          AIRC_PACK_ERGO_PASSWORD: ${{ secrets.AIRC_PACK_ERGO_PASSWORD || secrets.AGENTIC_IRC_PASSWORD }}
+          AGENTIC_IRC_PASSWORD: ${{ secrets.AGENTIC_IRC_PASSWORD }}
         run: |
+          if (-not $env:AIRC_PACK_ERGO_PASSWORD -and -not $env:AGENTIC_IRC_PASSWORD) {
+            Write-Error 'Missing GitHub secret AIRC_PACK_ERGO_PASSWORD or AGENTIC_IRC_PASSWORD for config/ergo.password (issue #294)'
+          }
           powershell -NoProfile -ExecutionPolicy Bypass -File scripts\Pack-AircConsoleRelease.ps1
           Get-ChildItem dist | Format-Table Name, Length
+          if (-not (Test-Path dist/airc-console-*/config/ergo.password) -and -not (Get-ChildItem dist -Filter 'airc-console-*.zip')) {
+            Write-Error 'pack did not produce zip'
+          }
+          # Confirm secret file is inside staged tree before zip (stage dir may be cleaned)
+          $z = Get-ChildItem dist/airc-console-*.zip | Select-Object -First 1
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $zip = [IO.Compression.ZipFile]::OpenRead($z.FullName)
+          $hit = $zip.Entries | Where-Object { $_.FullName -replace '\\','/' -match 'config/ergo\.password$' }
+          $zip.Dispose()
+          if (-not $hit) { Write-Error 'release zip missing config/ergo.password' }
+          Write-Host 'INFO zip contains config/ergo.password'
       - name: Rolling release airc-console
         uses: softprops/action-gh-release@v2
         with:

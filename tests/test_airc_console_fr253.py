@@ -173,12 +173,18 @@ def test_fr259_start_ps1_no_psscriptroot_in_param_defaults():
     assert "Remove-AircConsoleService" in install
     assert "Invoke-AircNssm" in install
     assert "remove" in install and "confirm" in install
-    # #277: seed ergo.password from fleet connect.password + Start-Service
+    # #277/#294: seed ergo.password from *release* config\ergo.password + Start-Service
     assert "Initialize-AircConsoleHomeSecrets" in install
     assert "ergo.password" in install
-    assert "connect.password" in install
+    assert "PackagedErgoFile" in install
+    assert "config\\ergo.password" in install or "config/ergo.password" in install
     assert "Start-Service" in install
     assert "-NoStart" in install
+    # Must not require target-machine ~/.grok for install seed (#294).
+    assert "expected config\\ergo.password" in install or "issue #294" in install
+    pack = (ROOT / "scripts" / "Pack-AircConsoleRelease.ps1").read_text(encoding="utf-8")
+    assert "config/ergo.password" in pack or "config\\ergo.password" in pack
+    assert "AIRC_PACK_ERGO_PASSWORD" in pack
     # #282: bake absolute python for LocalSystem
     assert "Resolve-AircConsolePython" in install
     assert '-Python' in install

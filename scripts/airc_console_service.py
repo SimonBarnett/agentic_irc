@@ -297,7 +297,7 @@ class AircConsoleService:
         while not self._stop.is_set():
             try:
                 chunk = self.sock.recv(4096)
-                    except (socket.timeout, TimeoutError):
+            except (socket.timeout, TimeoutError):
                 # Python 3.10+ ssl may raise TimeoutError; keep the loop alive (#286).
                 try:
                     self.sessions.reap_idle()

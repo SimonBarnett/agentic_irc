@@ -307,3 +307,87 @@ def home_dir(explicit: str | None = None) -> Path:
     if env:
         return Path(env)
     return Path.home() / ".airc-console"
+
+
+def nickserv_password_path(console_home: Path | None = None) -> Path:
+    """Client NickServ secret file (FR #271). Not the Ergo server PASS."""
+    base = console_home or home_dir()
+    return Path(base) / "console.password"
+
+
+def ensure_nickserv_password(
+    path: Path | None = None,
+    *,
+    console_home: Path | None = None,
+    mint: bool = True,
+) -> tuple[str, bool]:
+    """Load or mint a GUID NickServ password under console.password.
+
+    Returns (password, minted). Never used as Ergo server PASS.
+    """
+    import uuid
+
+    p = Path(path) if path else nickserv_password_path(console_home)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    if p.is_file():
+        existing = p.read_text(encoding="utf-8").strip()
+        if existing:
+            return existing, False
+    if not mint:
+        raise FileNotFoundError(str(p))
+    guid = str(uuid.uuid4())
+    p.write_text(guid + "\n", encoding="utf-8")
+    try:
+        os.chmod(p, 0o600)
+    except Exception:
+        pass
+    return guid, True
+
+
+def resolve_server_pass(
+    *,
+    password_file: Path | str | None = None,
+    env: dict[str, str] | None = None,
+    home: Path | str | None = None,
+) -> str | None:
+    """Ergo server PASS only (FR #271). Never invent; never use console.password GUID.
+
+    Order:
+      AIRC_CONSOLE_SERVER_PASSWORD
+      AGENTIC_IRC_PASSWORD
+      AIRC_CONSOLE_PASSWORD (legacy fleet alias for server PASS — not NickServ GUID file)
+      explicit --server-password-file / ergo.password
+      ~/.grok/ergo/connect.password
+    """
+    environ = env if env is not None else os.environ
+    for key in (
+        "AIRC_CONSOLE_SERVER_PASSWORD",
+        "AGENTIC_IRC_PASSWORD",
+        "AIRC_CONSOLE_PASSWORD",
+    ):
+        val = (environ.get(key) or "").strip()
+        if val:
+            return val
+    candidates: list[Path] = []
+    if password_file:
+        candidates.append(Path(password_file))
+    base = Path(home) if home is not None else Path.home()
+    candidates.extend(
+        [
+            base / ".airc-console" / "ergo.password",
+            base / "ergo.password",
+            base / ".grok" / "ergo" / "connect.password",
+        ]
+    )
+    for c in candidates:
+        try:
+            # FR #271 CAST IRON: never treat NickServ GUID file as server PASS.
+            if c.name.lower() == "console.password":
+                continue
+            if c.is_file():
+                text = c.read_text(encoding="utf-8").strip()
+                if text:
+                    return text
+        except Exception:
+            continue
+    return None

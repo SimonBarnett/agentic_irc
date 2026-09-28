@@ -4,8 +4,9 @@ description: >
   Installable airc console Windows service: nick console on #{machinename},
   silent in channel, authenticated PRIVMSG piped to a per-user shell. Use when
   Simon says airc console service, Install-AircConsole, FR #253, FR #256,
-  FR #259, PSScriptRoot empty, Start-AircConsole Split-Path, mapped P: download,
-  not digitally signed, or /airc-console.
+  FR #259, FR #266, FR #271, NickServ GUID, console.password, PSScriptRoot empty,
+  Start-AircConsole Split-Path, mapped P: download, not digitally signed, or
+  /airc-console.
 ---
 
 # airc console (FR #253)
@@ -50,6 +51,10 @@ Start-Service AircConsole
 Foreground: `Start-AircConsole.cmd -Operators Simon`
 
 Selftest: `python scripts/airc_console_service.py --selftest`
+
+**FR #271:** auto-mint GUID NickServ password to `~\.airc-console\console.password`
+(reuse on later starts). Ergo server PASS stays separate — never invent; never
+read `console.password` as server PASS.
 
 ## Release
 

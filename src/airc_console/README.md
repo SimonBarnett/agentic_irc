@@ -36,10 +36,15 @@ Equivalent PowerShell (explicit Bypass):
 
 ```powershell
 Set-Content $env:USERPROFILE\.airc-console\operators.txt "Simon"
-# optional: console.password for NickServ/SASL
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\Install-AircConsole.ps1
 Start-Service AircConsole
 ```
+
+**FR #271 passwords:** first start auto-mints a GUID into
+`~\.airc-console\console.password` for NickServ REGISTER/IDENTIFY and reuses it.
+Ergo **server PASS** is separate (`AGENTIC_IRC_PASSWORD` /
+`AIRC_CONSOLE_SERVER_PASSWORD` / `~\.airc-console\ergo.password` /
+`~\.grok\ergo\connect.password`) — never invented from the GUID file.
 
 Foreground smoke:
 

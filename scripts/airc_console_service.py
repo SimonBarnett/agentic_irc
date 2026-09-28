@@ -23,9 +23,12 @@ from airc_console import (
     AircConsoleCore,
     AuthPolicy,
     ConsoleSessionManager,
+    ensure_nickserv_password,
     home_dir,
     load_operators,
     machine_id,
+    nickserv_password_path,
+    resolve_server_pass,
     shop_channel,
 )
 
@@ -36,20 +39,6 @@ def info(msg: str) -> None:
     print(msg, flush=True)
 
 
-def read_password(path: Path | None, env_key: str = "AIRC_CONSOLE_PASSWORD") -> str | None:
-    """Server PASS / optional NickServ secret.
-
-    Prefer AIRC_CONSOLE_PASSWORD, then AGENTIC_IRC_PASSWORD (fleet Ergo), then file.
-    """
-    for key in (env_key, "AGENTIC_IRC_PASSWORD"):
-        env = os.environ.get(key)
-        if env and env.strip():
-            return env.strip()
-    if path and path.is_file():
-        return path.read_text(encoding="utf-8").strip() or None
-    return None
-
-
 class AircConsoleService:
     def __init__(self, args: argparse.Namespace) -> None:
         self.args = args
@@ -58,7 +47,23 @@ class AircConsoleService:
         self.machine = machine_id(args.machine)
         self.channel = shop_channel(self.machine)
         self.nick = args.nick
-        self.password = read_password(Path(args.password_file) if args.password_file else None)
+        # FR #271: split Ergo server PASS from auto-minted NickServ GUID.
+        server_file = getattr(args, "server_password_file", None)
+        self.server_pass = resolve_server_pass(
+            password_file=Path(server_file) if server_file else None,
+        )
+        ns_path = Path(args.password_file) if args.password_file else nickserv_password_path(self.home)
+        # Guard: never treat the NickServ GUID file as server PASS source via resolve_server_pass.
+        self.nickserv_password, minted = ensure_nickserv_password(ns_path, console_home=self.home)
+        self.nickserv_password_file = ns_path
+        if minted:
+            info(f"INFO minted NickServ GUID -> {ns_path}")
+        else:
+            info(f"INFO reused NickServ password file {ns_path}")
+        if self.server_pass and self.server_pass == self.nickserv_password:
+            # Same string only if operator deliberately set both equal — still OK to send,
+            # but warn so GUID file is not mistaken as the only Ergo secret source.
+            info("INFO server PASS equals NickServ password string (unusual)")
         ops = load_operators(
             Path(args.operators_file) if args.operators_file else self.home / "operators.txt",
             args.operators,
@@ -128,16 +133,19 @@ class AircConsoleService:
 
     def send_server_pass(self) -> None:
         """Ergo irc.ntsa.uk requires PASS before NICK/USER (same as irc_agent)."""
-        if not self.password:
-            info("INFO no-server-pass (set AIRC_CONSOLE_PASSWORD / password-file)")
+        if not self.server_pass:
+            info(
+                "INFO no-server-pass (set AIRC_CONSOLE_SERVER_PASSWORD / "
+                "AGENTIC_IRC_PASSWORD / ergo.password — never invent; FR #271)"
+            )
             return
-        self.send("PASS " + self.password)
+        self.send("PASS " + self.server_pass)
         info("INFO sent server PASS")
 
     def request_caps(self) -> None:
         # account-tag powers operator account allowlists (FR #230). SASL is best-effort.
         caps = "account-notify extended-join account-tag"
-        if self.password and self.args.sasl:
+        if self.nickserv_password and self.args.sasl:
             caps = "sasl " + caps
             self._want_sasl = True
         else:
@@ -145,19 +153,21 @@ class AircConsoleService:
         self.send(f"CAP REQ :{caps}")
 
     def sasl_plain(self) -> None:
-        if not self.password or not self.args.sasl:
+        if not self.nickserv_password or not self.args.sasl:
             return
         # Minimal PLAIN; failures must CAP END so registration can proceed.
         self._want_sasl = True
 
     def register_or_identify(self) -> None:
-        """Best-effort NickServ identify/register. Silent — Query only."""
-        if not self.password:
-            info("INFO skip nick register/identify (no password)")
+        """Best-effort NickServ identify/register with auto GUID (FR #271). Silent — Query only."""
+        if not self.nickserv_password:
+            info("INFO skip nick register/identify (no NickServ password)")
             return
         # Ergo may have services disabled; ignore failures in read loop.
-        self.send(f"PRIVMSG NickServ :IDENTIFY {self.nick} {self.password}")
-        self.send(f"PRIVMSG NickServ :REGISTER {self.password} console@{self.machine}.local")
+        self.send(f"PRIVMSG NickServ :IDENTIFY {self.nick} {self.nickserv_password}")
+        self.send(
+            f"PRIVMSG NickServ :REGISTER {self.nickserv_password} console@{self.machine}.local"
+        )
 
     def handshake(self) -> None:
         self._want_sasl = False
@@ -180,8 +190,15 @@ class AircConsoleService:
 
     def _handle_sasl_line(self, cmd: str, args: list[str], trailing: str) -> None:
         tokens = [a.lower() for a in args] + ([trailing.lower()] if trailing else [])
-        if cmd == "CAP" and "ack" in tokens and "sasl" in " ".join(tokens) and self.password:
-            tok = base64.b64encode(f"{self.nick}\0{self.nick}\0{self.password}".encode()).decode("ascii")
+        if (
+            cmd == "CAP"
+            and "ack" in tokens
+            and "sasl" in " ".join(tokens)
+            and self.nickserv_password
+        ):
+            tok = base64.b64encode(
+                f"{self.nick}\0{self.nick}\0{self.nickserv_password}".encode()
+            ).decode("ascii")
             self.send("AUTHENTICATE PLAIN")
             self.send(f"AUTHENTICATE {tok}")
             return
@@ -313,12 +330,21 @@ def build_arg_parser() -> argparse.ArgumentParser:
     p.add_argument("--nick", default="console")
     p.add_argument("--machine", default=None, help="override COMPUTERNAME for #{machine}")
     p.add_argument("--home", default=None)
-    p.add_argument("--password-file", default=None)
+    p.add_argument(
+        "--password-file",
+        default=None,
+        help="NickServ GUID file (default ~/.airc-console/console.password; auto-mint FR #271)",
+    )
+    p.add_argument(
+        "--server-password-file",
+        default=None,
+        help="Ergo server PASS file (never auto-mint; also AGENTIC_IRC_PASSWORD / ergo.password)",
+    )
     p.add_argument(
         "--sasl",
         action="store_true",
         default=False,
-        help="attempt SASL PLAIN after server PASS (default off; Ergo fleet uses PASS)",
+        help="attempt SASL PLAIN with NickServ GUID after server PASS (default off)",
     )
     p.add_argument("--operators", nargs="*", default=[])
     p.add_argument("--operators-file", default=None)
@@ -332,6 +358,8 @@ def build_arg_parser() -> argparse.ArgumentParser:
 
 
 def selftest() -> int:
+    import tempfile
+
     mid = machine_id("IONOS")
     assert shop_channel(mid) == "#ionos", shop_channel(mid)
     auth = AuthPolicy(operators={"simon"}, accounts=set())
@@ -343,6 +371,16 @@ def selftest() -> int:
     assert r and r.action == "silent_channel"
     r2 = core.handle_raw(":evil!e@h PRIVMSG console :whoami")
     assert r2 and r2.action == "deny"
+    with tempfile.TemporaryDirectory() as td:
+        home = Path(td)
+        p1, minted1 = ensure_nickserv_password(console_home=home)
+        assert minted1 and len(p1) >= 32
+        p2, minted2 = ensure_nickserv_password(console_home=home)
+        assert not minted2 and p2 == p1
+        assert resolve_server_pass(env={}, home=home) is None
+        assert resolve_server_pass(env={"AGENTIC_IRC_PASSWORD": "ergo-secret"}, home=home) == "ergo-secret"
+        # GUID file must not satisfy server PASS resolver
+        assert resolve_server_pass(password_file=nickserv_password_path(home), env={}, home=home) is None
     info("INFO selftest ok")
     return 0
 

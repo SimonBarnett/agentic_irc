@@ -66,11 +66,17 @@ $argsList = @(
     '--nick', $Nick,
     '--home', $ConsoleHome
 )
+# FR #271: always point at console.password so Python can mint a GUID if missing.
+# Never pass this file as Ergo server PASS.
 if (-not $PasswordFile) {
-    $defaultPw = Join-Path $ConsoleHome 'console.password'
-    if (Test-Path -LiteralPath $defaultPw) { $PasswordFile = $defaultPw }
+    $PasswordFile = Join-Path $ConsoleHome 'console.password'
 }
-if ($PasswordFile) { $argsList += @('--password-file', $PasswordFile) }
+$argsList += @('--password-file', $PasswordFile)
+$serverPw = Join-Path $ConsoleHome 'ergo.password'
+if (Test-Path -LiteralPath $serverPw) {
+    $argsList += @('--server-password-file', $serverPw)
+}
+
 if ($OperatorsFile) { $argsList += @('--operators-file', $OperatorsFile) }
 elseif (Test-Path -LiteralPath (Join-Path $ConsoleHome 'operators.txt')) {
     $argsList += @('--operators-file', (Join-Path $ConsoleHome 'operators.txt'))

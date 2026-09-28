@@ -150,6 +150,37 @@ def test_fr259_start_ps1_no_psscriptroot_in_param_defaults():
     assert "#266" in docs or "issue #266" in docs
 
 
+def test_fr271_auto_mint_nickserv_guid_separate_from_server_pass(tmp_path: Path):
+    """FR #271: mint GUID to console.password; reuse; never use as Ergo PASS."""
+    from airc_console import (
+        ensure_nickserv_password,
+        nickserv_password_path,
+        resolve_server_pass,
+    )
+
+    home = tmp_path / "airc-home"
+    p1, minted1 = ensure_nickserv_password(console_home=home)
+    assert minted1
+    assert len(p1) >= 32
+    path = nickserv_password_path(home)
+    assert path.is_file()
+    assert path.read_text(encoding="utf-8").strip() == p1
+    p2, minted2 = ensure_nickserv_password(console_home=home)
+    assert not minted2
+    assert p2 == p1
+    assert resolve_server_pass(env={}, home=home) is None
+    assert resolve_server_pass(password_file=path, env={}, home=home) is None
+    assert resolve_server_pass(env={"AGENTIC_IRC_PASSWORD": "fleet-ergo"}, home=home) == "fleet-ergo"
+    assert resolve_server_pass(env={"AIRC_CONSOLE_SERVER_PASSWORD": "srv"}, home=home) == "srv"
+    ergo = home / "ergo.password"
+    ergo.write_text("from-file\n", encoding="utf-8")
+    assert resolve_server_pass(password_file=ergo, env={}, home=home) == "from-file"
+    assert (ROOT / "src" / "airc_console" / "VERSION").read_text(encoding="utf-8").strip() == "0.1.5"
+    start = (ROOT / "scripts" / "Start-AircConsole.ps1").read_text(encoding="utf-8")
+    assert "FR #271" in start
+    assert "--server-password-file" in start or "server-password-file" in start
+
+
 def test_nssm_resolve_prefers_bundled(tmp_path: Path):
     """Issue #266: bundled third_party nssm wins over missing C:\\ai\\ergo."""
     import subprocess

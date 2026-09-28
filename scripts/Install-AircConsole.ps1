@@ -298,11 +298,8 @@ $setPairs = @(
     @('AppThrottle', '1500'),
     @('ObjectName', 'LocalSystem')
 )
-if ($MachineId) {
-    # LocalSystem does not inherit the interactive user's BOB_MACHINE_ID.
-    $envExtra = "BOB_MACHINE_ID=$MachineId`nAIRC_CONSOLE_MACHINE=$MachineId"
-    $setPairs += @(@('AppEnvironmentExtra', $envExtra))
-}
+# Fleet id is passed via AppParameters -MachineId (LocalSystem has no user env).
+# Do not set AppEnvironmentExtra here — NSSM MULTI_SZ quoting is fragile on WinPS 5.1.
 $logDir = Join-Path $env:USERPROFILE '.grok\long-running-background-tasks'
 New-Item -ItemType Directory -Force -Path $logDir | Out-Null
 $log = Join-Path $logDir 'airc-console-service.log'

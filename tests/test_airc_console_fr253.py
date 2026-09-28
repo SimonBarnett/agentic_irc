@@ -151,6 +151,12 @@ def test_fr259_start_ps1_no_psscriptroot_in_param_defaults():
     assert "Remove-AircConsoleService" in install
     assert "Invoke-AircNssm" in install
     assert "remove" in install and "confirm" in install
+    # #277: seed ergo.password from fleet connect.password + Start-Service
+    assert "Initialize-AircConsoleHomeSecrets" in install
+    assert "ergo.password" in install
+    assert "connect.password" in install
+    assert "Start-Service" in install
+    assert "-NoStart" in install
     docs = (ROOT / "docs" / "airc-console-fr253.md").read_text(encoding="utf-8")
     assert "FR #259" in docs
     assert "#266" in docs or "issue #266" in docs

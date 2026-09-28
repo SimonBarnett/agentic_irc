@@ -199,6 +199,25 @@ def test_resolve_server_password_ignores_console_password_guid(tmp_path: Path, m
     assert resolve_server_password(home=home) == "from-env"
 
 
+def test_fr286_default_nick_and_433_recovery():
+    """FR #286: console-<machine> default; 433 → machine suffix / unique retry."""
+    from airc_console import default_console_nick, nick_after_433
+
+    assert default_console_nick("flamingo") == "console-flamingo"
+    assert default_console_nick("IONOS") == "console-ionos"
+    assert nick_after_433("console", "flamingo") == "console-flamingo"
+    alt = nick_after_433("console-flamingo", "flamingo")
+    assert alt.startswith("console-flamingo-")
+    assert alt != "console-flamingo"
+    svc = (ROOT / "scripts" / "airc_console_service.py").read_text(encoding="utf-8")
+    assert "nick_after_433" in svc
+    assert 'cmd == "433"' in svc
+    assert "default_console_nick" in svc
+    start = (ROOT / "scripts" / "Start-AircConsole.ps1").read_text(encoding="utf-8")
+    assert "FR #286" in start
+    assert (ROOT / "src" / "airc_console" / "VERSION").read_text(encoding="utf-8").strip() == "0.1.10"
+
+
 def test_nssm_resolve_prefers_bundled(tmp_path: Path):
     """Issue #266: bundled third_party nssm wins over missing C:\\ai\\ergo."""
     import subprocess

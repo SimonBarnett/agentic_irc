@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """airc console service core (FR #253).
 
-Installable Windows service presence nick ``console`` on ``#{machinename}``.
-Silent in channel. Authenticated PRIVMSG sessions get a per-user console pipe.
+Installable Windows service presence nick ``console-<machinename>`` (FR #286)
+on ``#{machinename}``. Silent in channel. Authenticated PRIVMSG sessions get a
+per-user console pipe.
 
 Offline-testable: auth, channel naming, session lifecycle, silent policy.
 Live IRC loop lives in ``airc_console_service.py``.
@@ -20,8 +21,9 @@ from typing import Callable
 
 from account_map import AccountMap, parse_message_tags
 
-NICK = "console"
+NICK = "console"  # legacy bare nick — prefer default_console_nick(machine)
 DEFAULT_SHELL = os.environ.get("COMSPEC") or "cmd.exe"
+_IRC_NICK_MAX = 30
 _PRIVMSG_RE = re.compile(
     r"^:([^!\s]+)(?:![^@\s]*@\S+)?\s+PRIVMSG\s+(\S+)\s+:?(.*)$",
     re.IGNORECASE,
@@ -38,6 +40,31 @@ def machine_id(override: str | None = None) -> str:
 def shop_channel(machine: str | None = None) -> str:
     mid = machine_id(machine)
     return f"#{mid}"
+
+
+def default_console_nick(machine: str | None = None) -> str:
+    """Per-machine nick ``console-<machine>`` (FR #286). Avoid bare ``console`` 433."""
+    mid = machine_id(machine)
+    nick = f"console-{mid}"
+    if len(nick) > _IRC_NICK_MAX:
+        nick = nick[:_IRC_NICK_MAX]
+    return nick
+
+
+def nick_after_433(current: str, machine: str | None = None) -> str:
+    """Next nick when server returns 433 Nickname is already in use (FR #286)."""
+    mid = machine_id(machine)
+    cur = (current or "").strip()
+    base = default_console_nick(mid)
+    if not cur or cur.lower() == "console" or cur.lower() == NICK:
+        return base
+    if cur.lower() == base.lower():
+        # Already machine-unique — add short numeric suffix.
+        suffix = f"-{int(time.time()) % 10000}"
+        nick = (base[: max(1, _IRC_NICK_MAX - len(suffix))] + suffix)
+        return nick
+    # Unknown collision — fall back to machine nick.
+    return base
 
 
 def is_channel_target(target: str) -> bool:

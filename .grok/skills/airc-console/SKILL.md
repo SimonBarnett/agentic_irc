@@ -14,10 +14,11 @@ Foundation: harvest-agent-skills → https://github.com/SimonBarnett/agentic_irc
 
 ## What it is
 
-Windows service (NSSM `AircConsole`) that keeps IRC nick **`console`** on
+Windows service (NSSM `AircConsole`) that keeps IRC nick
+**`console-<machine>`** (FR #286; bare `console` remapped) on
 **`#{COMPUTERNAME}`**. Silent in the shop channel. Authenticated users PRIVMSG
-`console`; each line is piped to that user's shell session; stdout returns in
-Query only.
+the console nick; each line is piped to that user's shell session; stdout
+returns in Query only. On IRC **433**, retry a unique nick then JOIN on **001**.
 
 Not Mode 3 / DUMB PSK. Not Jeeves. Not a talk seat. No `#bobiverse`.
 

@@ -30,6 +30,7 @@ Installable **airc** service on each Windows box:
 | Reinstall (issue #273) | `Install-AircConsole` stops+removes any existing `AircConsole` then installs fresh; nssm "not been started" stderr is ignored |
 | Unattended (issue #277) | Seeds `ergo.password` from `~\.grok\ergo\connect.password`, mints NickServ GUID, **Start-Service** → Running |
 | LocalSystem Python (issue #282) | Install bakes absolute `python.exe` into NSSM `-Python`; Start resolves when PATH empty |
+| Unique nick / 433 (FR #286) | Default `console-<machine>`; on 433 retry then JOIN on 001 |
 | Release | `Pack-AircConsoleRelease.ps1` builds `dist/airc-console-*.zip` |
 | Selftest | `airc_console_service.py --selftest` exit 0 |
 

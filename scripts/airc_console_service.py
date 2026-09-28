@@ -23,10 +23,12 @@ from airc_console import (
     AircConsoleCore,
     AuthPolicy,
     ConsoleSessionManager,
+    default_console_nick,
     ensure_nickserv_password,
     home_dir,
     load_operators,
     machine_id,
+    nick_after_433,
     resolve_server_password,
     shop_channel,
 )
@@ -56,7 +58,14 @@ class AircConsoleService:
         self.home.mkdir(parents=True, exist_ok=True)
         self.machine = machine_id(args.machine)
         self.channel = shop_channel(self.machine)
-        self.nick = args.nick
+        # FR #286: default console-<machine> so bare "console" does not 433 forever.
+        raw_nick = (args.nick or "").strip()
+        if not raw_nick or raw_nick.lower() == "console":
+            self.nick = default_console_nick(self.machine)
+        else:
+            self.nick = raw_nick
+        self._433_attempts = 0
+        self._joined = False
         # #271: NickServ GUID in console.password (mint+reuse). Ergo PASS separate.
         nickserv_path = (
             Path(args.password_file)
@@ -243,8 +252,26 @@ class AircConsoleService:
         ):
             self._handle_sasl_line(cmd, args, trailing)
 
+        if cmd == "433":
+            # Nickname already in use — recover then wait for 001 to JOIN (FR #286).
+            self._433_attempts += 1
+            if self._433_attempts > 5:
+                info(f"INFO 433 give-up nick={self.nick} attempts={self._433_attempts}")
+                return
+            alt = nick_after_433(self.nick, self.machine)
+            # Force a different nick if helper returned the same string.
+            if alt.lower() == self.nick.lower():
+                alt = nick_after_433(alt, self.machine)
+            info(f"INFO 433 nick-in-use was={self.nick} retry={alt}")
+            self.nick = alt
+            self.core.nick = alt
+            self.send(f"NICK {alt}")
+            return
+
         if cmd == "001":
-            self.join_shop()
+            if not self._joined:
+                self.join_shop()
+                self._joined = True
 
         if cmd == "JOIN":
             nick = parse_prefix_nick(":" + prefix) if prefix else None
@@ -330,7 +357,11 @@ def build_arg_parser() -> argparse.ArgumentParser:
     p.add_argument("--tls", action="store_true", default=True)
     p.add_argument("--no-tls", action="store_false", dest="tls")
     p.add_argument("--tls-insecure", action="store_true")
-    p.add_argument("--nick", default="console")
+    p.add_argument(
+        "--nick",
+        default="",
+        help="IRC nick (default console-<machine>, FR #286; bare 'console' remapped)",
+    )
     p.add_argument("--machine", default=None, help="override COMPUTERNAME for #{machine}")
     p.add_argument("--home", default=None)
     p.add_argument("--password-file", default=None)
@@ -354,14 +385,22 @@ def build_arg_parser() -> argparse.ArgumentParser:
 def selftest() -> int:
     mid = machine_id("IONOS")
     assert shop_channel(mid) == "#ionos", shop_channel(mid)
+    assert default_console_nick("IONOS") == "console-ionos"
+    assert nick_after_433("console", "flamingo") == "console-flamingo"
+    assert nick_after_433("console-flamingo", "flamingo").startswith("console-flamingo-")
     auth = AuthPolicy(operators={"simon"}, accounts=set())
     assert auth.allow("Simon")
     assert not auth.allow("stranger")
-    core = AircConsoleCore(machine="ionos", auth=auth, sessions=ConsoleSessionManager(on_output=None))
+    core = AircConsoleCore(
+        machine="ionos",
+        auth=auth,
+        sessions=ConsoleSessionManager(on_output=None),
+        nick=default_console_nick("ionos"),
+    )
     assert core.may_speak_on_channel() is False
     r = core.handle_raw(":evil!e@h PRIVMSG #ionos :whoami")
     assert r and r.action == "silent_channel"
-    r2 = core.handle_raw(":evil!e@h PRIVMSG console :whoami")
+    r2 = core.handle_raw(":evil!e@h PRIVMSG console-ionos :whoami")
     assert r2 and r2.action == "deny"
     info("INFO selftest ok")
     return 0

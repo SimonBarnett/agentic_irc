@@ -1,6 +1,7 @@
 # airc console (FR #253)
 
-Installable Windows service: IRC nick **`console`** on **`#{machinename}`**.
+Installable Windows service: IRC nick **`console-<machinename>`** on
+**`#{machinename}`** (FR #286 — avoids 433 when bare `console` is taken).
 
 ## Behaviour
 

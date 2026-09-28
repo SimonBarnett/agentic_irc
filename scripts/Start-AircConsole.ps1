@@ -17,7 +17,8 @@ param(
     [string]$Python = '',
     [string]$HostName = 'irc.ntsa.uk',
     [int]$Port = 6697,
-    [string]$Nick = 'console',
+    # Empty = Python default console-<machine> (FR #286). Bare 'console' remapped there.
+    [string]$Nick = '',
     [Alias('Home')]
     [string]$ConsoleHome = '',
     [string]$PasswordFile = '',
@@ -81,9 +82,10 @@ $argsList = @(
     $script,
     '--host', $HostName,
     '--port', "$Port",
-    '--nick', $Nick,
     '--home', $ConsoleHome
 )
+# FR #286: omit --nick when empty so Python uses console-<machine>.
+if ($Nick) { $argsList += @('--nick', $Nick) }
 # #271: always point at console.password — Python mints a GUID if missing.
 if (-not $PasswordFile) {
     $PasswordFile = Join-Path $ConsoleHome 'console.password'

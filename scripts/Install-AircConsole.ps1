@@ -68,57 +68,117 @@ if (-not (Test-Path -LiteralPath $opsFile) -and $Operators.Count -gt 0) {
     Set-Content -LiteralPath $opsFile -Value ($Operators -join "`n") -Encoding utf8
 }
 
-$svc = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
-if ($svc) {
-    Write-Host "INFO $ServiceName exists; reconfiguring"
-    & $Nssm stop $ServiceName 2>$null | Out-Null
-    Start-Sleep -Seconds 2
-} else {
-    Write-Host "INFO Installing $ServiceName"
-    & $Nssm install $ServiceName powershell.exe
-    if ($LASTEXITCODE -ne 0) { throw "nssm install failed: $LASTEXITCODE" }
+function Invoke-AircNssm {
+    param(
+        [Parameter(Mandatory)][string]$Exe,
+        [Parameter(Mandatory)][string[]]$NssmArgs
+    )
+    # nssm writes status to stderr even on success ("STOP: The service has not been
+    # started"). Under $ErrorActionPreference=Stop that becomes NativeCommandError (#273).
+    $prevEa = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        $out = & $Exe @NssmArgs 2>&1
+        $code = [int]$LASTEXITCODE
+    } finally {
+        $ErrorActionPreference = $prevEa
+    }
+    return [pscustomobject]@{
+        ExitCode = $code
+        Output   = @($out | ForEach-Object { "$_" })
+    }
 }
 
+function Remove-AircConsoleService {
+    param(
+        [Parameter(Mandatory)][string]$Exe,
+        [Parameter(Mandatory)][string]$Name
+    )
+    $svc = Get-Service -Name $Name -ErrorAction SilentlyContinue
+    if (-not $svc) {
+        Write-Host "INFO no existing $Name service"
+        return
+    }
+    Write-Host "INFO removing existing $Name (status=$($svc.Status))"
+    $null = Invoke-AircNssm -Exe $Exe -NssmArgs @('stop', $Name)
+    Start-Sleep -Seconds 2
+    # confirm = non-interactive remove
+    $rm = Invoke-AircNssm -Exe $Exe -NssmArgs @('remove', $Name, 'confirm')
+    Start-Sleep -Seconds 1
+    $left = Get-Service -Name $Name -ErrorAction SilentlyContinue
+    if ($left) {
+        # Fallback when nssm remove is sticky
+        sc.exe delete $Name 2>&1 | Out-Null
+        Start-Sleep -Seconds 1
+        $left = Get-Service -Name $Name -ErrorAction SilentlyContinue
+    }
+    if ($left) {
+        throw ("failed to remove existing service {0}; nssm exit={1} out={2}" -f $Name, $rm.ExitCode, ($rm.Output -join ' '))
+    }
+    Write-Host "INFO removed $Name"
+}
+
+# Issue #273: always tear down any prior install, then register from this tree.
+Remove-AircConsoleService -Exe $Nssm -Name $ServiceName
+Write-Host "INFO Installing $ServiceName"
+$inst = Invoke-AircNssm -Exe $Nssm -NssmArgs @('install', $ServiceName, 'powershell.exe')
+if ($inst.ExitCode -ne 0) {
+    throw ("nssm install failed: {0} ({1})" -f $inst.ExitCode, ($inst.Output -join ' '))
+}
+
+# #271: always wire console.password path (Python mints GUID if missing).
 if (-not $PasswordFile) {
-    $defaultPw = Join-Path $ConsoleHome 'console.password'
-    if (Test-Path -LiteralPath $defaultPw) { $PasswordFile = $defaultPw }
+    $PasswordFile = Join-Path $ConsoleHome 'console.password'
 }
 
 # Application MUST be powershell.exe (never the .ps1 Path — see NSSM GUI / issue #259).
 $appParams = "-NoProfile -ExecutionPolicy Bypass -File `"$Launcher`" -ServiceMode -ConsoleHome `"$ConsoleHome`""
-if ($PasswordFile) { $appParams += " -PasswordFile `"$PasswordFile`"" }
+$appParams += " -PasswordFile `"$PasswordFile`""
 if (Test-Path -LiteralPath $opsFile) { $appParams += " -OperatorsFile `"$opsFile`"" }
 
-& $Nssm set $ServiceName Application powershell.exe
-& $Nssm set $ServiceName AppDirectory (Split-Path $Launcher -Parent)
-& $Nssm set $ServiceName AppParameters $appParams
-& $Nssm set $ServiceName DisplayName 'airc console (#{machine} IRC shell)'
-& $Nssm set $ServiceName Description 'FR #253: nick console on #{machinename}; auth PRIVMSG -> shell; silent in channel.'
-& $Nssm set $ServiceName Start SERVICE_AUTO_START
-& $Nssm set $ServiceName AppExit Default Restart
-& $Nssm set $ServiceName AppRestartDelay 5000
-& $Nssm set $ServiceName AppThrottle 1500
-& $Nssm set $ServiceName ObjectName LocalSystem
-
+$setPairs = @(
+    @('Application', 'powershell.exe'),
+    @('AppDirectory', (Split-Path $Launcher -Parent)),
+    @('AppParameters', $appParams),
+    @('DisplayName', 'airc console (#{machine} IRC shell)'),
+    @('Description', 'FR #253: nick console on #{machinename}; auth PRIVMSG -> shell; silent in channel.'),
+    @('Start', 'SERVICE_AUTO_START'),
+    @('AppExit', 'Default', 'Restart'),
+    @('AppRestartDelay', '5000'),
+    @('AppThrottle', '1500'),
+    @('ObjectName', 'LocalSystem')
+)
 $logDir = Join-Path $env:USERPROFILE '.grok\long-running-background-tasks'
 New-Item -ItemType Directory -Force -Path $logDir | Out-Null
 $log = Join-Path $logDir 'airc-console-service.log'
-& $Nssm set $ServiceName AppStdout $log
-& $Nssm set $ServiceName AppStderr $log
-& $Nssm set $ServiceName AppStdoutCreationDisposition 4
-& $Nssm set $ServiceName AppStderrCreationDisposition 4
-& $Nssm set $ServiceName AppRotateFiles 1
-& $Nssm set $ServiceName AppRotateBytes 1048576
+$setPairs += @(
+    @('AppStdout', $log),
+    @('AppStderr', $log),
+    @('AppStdoutCreationDisposition', '4'),
+    @('AppStderrCreationDisposition', '4'),
+    @('AppRotateFiles', '1'),
+    @('AppRotateBytes', '1048576')
+)
+foreach ($pair in $setPairs) {
+    $argsN = @('set', $ServiceName) + $pair
+    $r = Invoke-AircNssm -Exe $Nssm -NssmArgs $argsN
+    if ($r.ExitCode -ne 0) {
+        throw ("nssm set failed ({0}): {1}" -f ($pair -join ' '), ($r.Output -join ' '))
+    }
+}
 
 icacls $ConsoleHome /grant 'SYSTEM:(OI)(CI)(M)' /T 2>$null | Out-Null
 if ($PasswordFile -and (Test-Path -LiteralPath $PasswordFile)) {
     icacls $PasswordFile /grant 'SYSTEM:(R)' 2>$null | Out-Null
 }
 
-Write-Host ("Application=" + (& $Nssm get $ServiceName Application))
-Write-Host ("AppParameters=" + (& $Nssm get $ServiceName AppParameters))
+$appGet = Invoke-AircNssm -Exe $Nssm -NssmArgs @('get', $ServiceName, 'Application')
+$parGet = Invoke-AircNssm -Exe $Nssm -NssmArgs @('get', $ServiceName, 'AppParameters')
+Write-Host ("Application=" + ($appGet.Output -join ' ').Trim())
+Write-Host ("AppParameters=" + ($parGet.Output -join ' ').Trim())
 Get-Service $ServiceName | Format-Table Name, Status, StartType -AutoSize
-Write-Host 'INFO Install done. Operators: ~\.airc-console\operators.txt (seeded if missing).'
+Write-Host 'INFO Install done (prior service removed if present; #273).'
+Write-Host 'INFO Operators: ~\.airc-console\operators.txt (seeded if missing).'
 Write-Host 'INFO NickServ password: auto GUID in ~\.airc-console\console.password on first start (#271).'
 Write-Host 'INFO Ergo server PASS: AGENTIC_IRC_PASSWORD or ~\.airc-console\ergo.password / ~\.grok\ergo\connect.password.'
 Write-Host 'INFO Then: Start-Service AircConsole'

@@ -38,6 +38,11 @@ from the unpacked release (keeps scripts + third_party together).
 registers from the current tree. Stopping an already-stopped service must not
 fail the script (`nssm` stderr under `$ErrorActionPreference Stop`).
 
+**Issue #277:** unattended end state is **service Running**. Install copies
+fleet `~\.grok\ergo\connect.password` → `~\.airc-console\ergo.password` (for
+LocalSystem), mints NickServ GUID if needed, then `Start-Service`. Use
+`-NoStart` only to skip the start. Never invent the Ergo server secret.
+
 ```bat
 scripts\Install-AircConsole.cmd
 net start AircConsole

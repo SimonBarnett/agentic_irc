@@ -26,20 +26,20 @@ The release zip includes **`third_party/nssm/win64/nssm.exe`** (issue #266). You
 `third_party\` together after unpack.
 
 ```bat
-REM elevated cmd.exe
-Set-Content %USERPROFILE%\.airc-console\operators.txt Simon
+REM elevated cmd.exe — unattended (#277): seeds secrets + starts service
 scripts\Install-AircConsole.cmd
-net start AircConsole
 ```
+
+Install copies fleet `%\USERPROFILE%\.grok\ergo\connect.password` →
+`%\USERPROFILE%\.airc-console\ergo.password`, mints NickServ GUID
+`console.password` if missing, removes any prior service, installs, and
+**starts** `AircConsole` (Running). Pass `-NoStart` only to skip start.
 
 Equivalent PowerShell (explicit Bypass):
 
 ```powershell
-Set-Content $env:USERPROFILE\.airc-console\operators.txt "Simon"
-# NickServ: auto GUID in console.password on first start (issue #271)
-# Ergo PASS: AGENTIC_IRC_PASSWORD or .airc-console\ergo.password / ~/.grok/ergo/connect.password
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\Install-AircConsole.ps1
-Start-Service AircConsole
+Get-Service AircConsole
 ```
 
 Foreground smoke:

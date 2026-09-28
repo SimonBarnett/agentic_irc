@@ -15,8 +15,12 @@ param(
     [Alias('Home')]
     [string]$ConsoleHome = '',
     [string]$PasswordFile = '',
+    # Optional explicit Ergo server PASS source file (copied into ConsoleHome\ergo.password).
+    [string]$ErgoPasswordFile = '',
     [string[]]$Operators = @('Simon'),
-    [string]$ServiceName = 'AircConsole'
+    [string]$ServiceName = 'AircConsole',
+    # #275: default starts the service so Running is the unattended end state.
+    [switch]$NoStart
 )
 
 $ErrorActionPreference = 'Stop'
@@ -63,10 +67,91 @@ if (-not $ConsoleHome) {
     $ConsoleHome = Join-Path $env:USERPROFILE '.airc-console'
 }
 New-Item -ItemType Directory -Force -Path $ConsoleHome | Out-Null
-$opsFile = Join-Path $ConsoleHome 'operators.txt'
-if (-not (Test-Path -LiteralPath $opsFile) -and $Operators.Count -gt 0) {
-    Set-Content -LiteralPath $opsFile -Value ($Operators -join "`n") -Encoding utf8
+
+function Write-AircSecretFile {
+    param(
+        [Parameter(Mandatory)][string]$Path,
+        [Parameter(Mandatory)][string]$Secret
+    )
+    $text = ($Secret -replace '[\r\n]+$', '').Trim()
+    if (-not $text) { throw "refusing empty secret for $Path" }
+    # ASCII one-line; no BOM — same shape as connect.password / NickServ GUID.
+    [IO.File]::WriteAllText($Path, $text + "`n", [Text.UTF8Encoding]::new($false))
+    icacls $Path /grant 'SYSTEM:(R)' 2>$null | Out-Null
+    if ($env:USERNAME) {
+        icacls $Path /grant ("{0}:(R)" -f $env:USERNAME) 2>$null | Out-Null
+    }
 }
+
+function Initialize-AircConsoleHomeSecrets {
+    param(
+        [Parameter(Mandatory)][string]$Home,
+        [string[]]$OperatorNicks,
+        [string]$NickServPasswordFile = '',
+        [string]$ErgoSourceFile = ''
+    )
+    $opsFile = Join-Path $Home 'operators.txt'
+    if (-not (Test-Path -LiteralPath $opsFile) -and $OperatorNicks.Count -gt 0) {
+        Set-Content -LiteralPath $opsFile -Value ($OperatorNicks -join "`n") -Encoding utf8
+        Write-Host "INFO wrote $opsFile"
+    } elseif (Test-Path -LiteralPath $opsFile) {
+        Write-Host "INFO keep $opsFile"
+    } else {
+        throw 'operators.txt missing and -Operators empty (FR #253)'
+    }
+
+    # #271 NickServ GUID — mint here so first service start is unattended.
+    if (-not $NickServPasswordFile) {
+        $NickServPasswordFile = Join-Path $Home 'console.password'
+    }
+    if (-not (Test-Path -LiteralPath $NickServPasswordFile) -or -not (Get-Content -LiteralPath $NickServPasswordFile -Raw -ErrorAction SilentlyContinue).Trim()) {
+        $guid = [guid]::NewGuid().ToString()
+        Write-AircSecretFile -Path $NickServPasswordFile -Secret $guid
+        Write-Host "INFO minted NickServ GUID -> $NickServPasswordFile"
+    } else {
+        Write-Host "INFO keep $NickServPasswordFile"
+    }
+
+    # #277: Ergo server PASS is the fleet secret at ~/.grok/ergo/connect.password
+    # (same file Start-TalkSeat / ears use). Copy into home\ergo.password for
+    # LocalSystem — never invent, never print the value.
+    $ergoDest = Join-Path $Home 'ergo.password'
+    $fleetConnect = Join-Path $env:USERPROFILE '.grok\ergo\connect.password'
+    $secret = $null
+    $source = $null
+    if ($ErgoSourceFile -and (Test-Path -LiteralPath $ErgoSourceFile)) {
+        $secret = (Get-Content -LiteralPath $ErgoSourceFile -Raw).Trim()
+        $source = $ErgoSourceFile
+    }
+    if (-not $secret -and (Test-Path -LiteralPath $fleetConnect)) {
+        $secret = (Get-Content -LiteralPath $fleetConnect -Raw).Trim()
+        $source = $fleetConnect
+    }
+    if (-not $secret -and $env:AGENTIC_IRC_PASSWORD) {
+        $secret = $env:AGENTIC_IRC_PASSWORD.Trim()
+        $source = 'AGENTIC_IRC_PASSWORD'
+    }
+    if (-not $secret -and (Test-Path -LiteralPath $ergoDest)) {
+        $secret = (Get-Content -LiteralPath $ergoDest -Raw).Trim()
+        $source = $ergoDest
+    }
+    if (-not $secret) {
+        throw "Ergo server PASS missing: expected $fleetConnect (fleet connect.password). Issue #277."
+    }
+    Write-AircSecretFile -Path $ergoDest -Secret $secret
+    Write-Host "INFO seeded ergo.password from $source -> $ergoDest"
+    return [pscustomobject]@{
+        OperatorsFile       = $opsFile
+        NickServPasswordFile = $NickServPasswordFile
+        ErgoPasswordFile    = $ergoDest
+    }
+}
+
+$secrets = Initialize-AircConsoleHomeSecrets -Home $ConsoleHome -OperatorNicks $Operators `
+    -NickServPasswordFile $PasswordFile -ErgoSourceFile $ErgoPasswordFile
+$opsFile = $secrets.OperatorsFile
+$PasswordFile = $secrets.NickServPasswordFile
+$ergoFile = $secrets.ErgoPasswordFile
 
 function Invoke-AircNssm {
     param(
@@ -126,11 +211,6 @@ if ($inst.ExitCode -ne 0) {
     throw ("nssm install failed: {0} ({1})" -f $inst.ExitCode, ($inst.Output -join ' '))
 }
 
-# #271: always wire console.password path (Python mints GUID if missing).
-if (-not $PasswordFile) {
-    $PasswordFile = Join-Path $ConsoleHome 'console.password'
-}
-
 # Application MUST be powershell.exe (never the .ps1 Path — see NSSM GUI / issue #259).
 $appParams = "-NoProfile -ExecutionPolicy Bypass -File `"$Launcher`" -ServiceMode -ConsoleHome `"$ConsoleHome`""
 $appParams += " -PasswordFile `"$PasswordFile`""
@@ -168,17 +248,42 @@ foreach ($pair in $setPairs) {
 }
 
 icacls $ConsoleHome /grant 'SYSTEM:(OI)(CI)(M)' /T 2>$null | Out-Null
-if ($PasswordFile -and (Test-Path -LiteralPath $PasswordFile)) {
-    icacls $PasswordFile /grant 'SYSTEM:(R)' 2>$null | Out-Null
+foreach ($sec in @($PasswordFile, $ergoFile, $opsFile)) {
+    if ($sec -and (Test-Path -LiteralPath $sec)) {
+        icacls $sec /grant 'SYSTEM:(R)' 2>$null | Out-Null
+    }
 }
 
 $appGet = Invoke-AircNssm -Exe $Nssm -NssmArgs @('get', $ServiceName, 'Application')
 $parGet = Invoke-AircNssm -Exe $Nssm -NssmArgs @('get', $ServiceName, 'AppParameters')
 Write-Host ("Application=" + ($appGet.Output -join ' ').Trim())
 Write-Host ("AppParameters=" + ($parGet.Output -join ' ').Trim())
+
+if ($NoStart) {
+    Write-Host 'INFO Install done; -NoStart set — not starting service.'
+} else {
+    # #277 unattended end state: service Running.
+    Write-Host "INFO starting $ServiceName"
+    $prevEa = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        Start-Service -Name $ServiceName -ErrorAction Continue
+    } finally {
+        $ErrorActionPreference = $prevEa
+    }
+    $deadline = (Get-Date).AddSeconds(45)
+    do {
+        $svc = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
+        if ($svc -and $svc.Status -eq 'Running') { break }
+        Start-Sleep -Seconds 2
+    } while ((Get-Date) -lt $deadline)
+    if (-not $svc -or $svc.Status -ne 'Running') {
+        $logHint = Join-Path $env:USERPROFILE '.grok\long-running-background-tasks\airc-console-service.log'
+        throw ("$ServiceName failed to reach Running (status=$($svc.Status)). Check $logHint")
+    }
+    Write-Host "INFO $ServiceName Running"
+}
+
 Get-Service $ServiceName | Format-Table Name, Status, StartType -AutoSize
-Write-Host 'INFO Install done (prior service removed if present; #273).'
-Write-Host 'INFO Operators: ~\.airc-console\operators.txt (seeded if missing).'
-Write-Host 'INFO NickServ password: auto GUID in ~\.airc-console\console.password on first start (#271).'
-Write-Host 'INFO Ergo server PASS: AGENTIC_IRC_PASSWORD or ~\.airc-console\ergo.password / ~\.grok\ergo\connect.password.'
-Write-Host 'INFO Then: Start-Service AircConsole'
+Write-Host 'INFO Install complete (unattended #277).'
+Write-Host "INFO home=$ConsoleHome operators + console.password (NickServ GUID) + ergo.password (from ~/.grok/ergo/connect.password)"

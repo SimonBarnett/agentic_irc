@@ -3,9 +3,9 @@ name: bob-irc
 description: >
   Private Ergo for #bobiverse on ionos (irc.ntsa.uk:6697 TLS). Use when the user
   says join Ergo, irc.ntsa.uk, bobiverse IRC, recycle Watch-Bobiverse,
-  recycle-after-merge, PASS-nits merge main, BobIrcd, Libera banned, Halloy,
-  shop channel, !bobiverse, or /bob-irc. Fleet status is
-  this server, not Libera. Job queue is grok-build-fleet.
+  recycle-after-merge, PASS-nits merge main, BobIrcd, ChanServ, register shop
+  channel, FR #313, Libera banned, Halloy, shop channel, !bobiverse, or
+  /bob-irc. Fleet status is this server, not Libera. Job queue is grok-build-fleet.
 ---
 
 # Bobiverse IRC (private Ergo)
@@ -232,6 +232,33 @@ Start-Service BobIrcd
 
 Confirm dual-stack LISTEN on 6697 and TLS handshake `CN=irc.ntsa.uk`.
 Do not `Stop-ScheduledTask BobFleet-*` to recover IRC.
+
+## ChanServ — register bob shop channels (FR #313)
+
+**Problem:** without Ergo channel registration, shop rooms are ephemeral; `bob-*`
+loses op when the channel empties → KICK gets **482**.
+
+**ionos action runbook:** `docs/ergo-chanserv-enable-bob-shops.md`
+
+1. In the live Ergo ircd yaml (`C:\ai\ergo\…` loaded by `BobIrcd`), enable:
+
+   ```yaml
+   accounts:
+     authentication-enabled: true
+     registration:
+       enabled: true
+   channels:
+     registration:
+       enabled: true
+   ```
+
+2. `Restart-Service BobIrcd`. Confirm `/msg ChanServ HELP` answers in Halloy.
+3. Recycle each `bob-*` Watch ear (current `agentic_irc` main). Log should show
+   `INFO chanserv REGISTER #{machine}`.
+4. `/msg ChanServ INFO #ionos` (etc.) — founder should be that `bob-*`.
+
+Code path: `scripts/shop_chanserv.py` + `irc_agent._maybe_register_shop_chanserv`
+(only `bob-*`, own shop only). Talk seats / `w-*` do not REGISTER.
 
 ## Do not
 

@@ -432,7 +432,7 @@ A `bob-{machine}` ear may send these lines raw through its outbox, but only on i
 
 - `python scripts/shop_ops.py invalid --home <bob home> --nick bob-<machine>`: lists nicks in the shop whose `w-<short>-<pid>` / `<machine>-<pid>` pid isn't running on this box.
 - `... kick-invalid [--dry-run]`: queues KICKs for those nicks.
-- **FR #313:** after JOIN, `bob-{machine}` REGISTER `#{machine}` with ChanServ (`shop_chanserv` / `irc_agent._maybe_register_shop_chanserv`) so founder/op persists when the channel empties. Requires Ergo `channels.registration.enabled` and a services account (NickServ IDENTIFY/REGISTER via `<home>/nickserv.password`). Without ChanServ / op, a KICK gets numeric 482 (`INFO shop-op 482 not channel operator`); remove the leak by stopping its local process so the server QUITs the nick.
+- **FR #313:** after JOIN, `bob-{machine}` REGISTER `#{machine}` with ChanServ (`shop_chanserv` / `irc_agent._maybe_register_shop_chanserv`) so founder/op persists when the channel empties. Requires Ergo `channels.registration.enabled` + `accounts.registration.enabled` and a services account (NickServ IDENTIFY/REGISTER via `<home>/nickserv.password`). **ionos turns Ergo on** using `docs/ergo-chanserv-enable-bob-shops.md`, then recycle bob ears. Without ChanServ / op, a KICK gets numeric 482 (`INFO shop-op 482 not channel operator`); remove the leak by stopping its local process so the server QUITs the nick.
 
 ## Windows Task Scheduler gotchas (FR #231)
 

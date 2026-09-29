@@ -30,6 +30,29 @@ JOIN #ionos
 Windows service **`BobIrcd`** (`Start-Service BobIrcd`). Do not use the removed
 `BobIrcd-ionos` scheduled task. See skill `bob-irc`.
 
+## ChanServ — REGISTER `#ionos` (FR #313)
+
+Shop channels stay ephemeral until Ergo enables channel registration. **ionos**
+must turn on NickServ + ChanServ, then recycle `bob-ionos` so it
+`REGISTER`s `#ionos` after JOIN.
+
+**Operator runbook (action this):** `docs/ergo-chanserv-enable-bob-shops.md`
+
+Minimum Ergo knobs (then `Restart-Service BobIrcd`):
+
+```yaml
+accounts:
+  authentication-enabled: true
+  registration:
+    enabled: true
+channels:
+  registration:
+    enabled: true
+```
+
+Verify: `/msg ChanServ INFO #ionos` — expect registered with founder `bob-ionos`
+after the ear logs `INFO chanserv REGISTER #ionos`.
+
 ## Jeeves (digest chair)
 
 Nick `Jeeves`, `irc_agent.py --chair`.

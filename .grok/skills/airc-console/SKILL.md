@@ -24,6 +24,11 @@ Windows service (NSSM `AircConsole`). After connect it probes ChanServ
   **`{machinename}`**, then **`{machinename}_1`**, `_2`, … on nick 433 (session
   stays on the lobby channel; see `docs/airc-console-domain-lobby.md`)
 
+**FR #322:** literal Windows workgroup `WORKGROUP` -> IRC `#workgroup` is an
+**intentional shared lobby** on fleet Ergo (machine nicks disambiguate). No
+special-case rename. Want a private shop: ChanServ-register `#{machinename}`
+or set `AIRC_CONSOLE_DOMAIN` / `--domain`.
+
 Silent in channel. Authenticated users PRIVMSG the console nick; each line is
 piped to that user's shell session; stdout returns in Query only.
 

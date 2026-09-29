@@ -317,10 +317,36 @@ def test_service_selftest_subprocess():
     assert "selftest ok" in proc.stdout
 
 
-def test_pack_script_mentions_zip():
+def test_pack_script_builds_msi():
+    """Issue #305: release artifact is a single MSI (WiX), not a zip."""
     text = (ROOT / "scripts" / "Pack-AircConsoleRelease.ps1").read_text(encoding="utf-8")
     assert "airc-console-" in text
-    assert "Compress-Archive" in text
+    assert ".msi" in text
     assert "Fetch-Nssm" in text
+    assert "Fetch-Wix" in text
+    assert "heat.exe" in text or "$heat" in text
     assert "third_party\\nssm\\win64" in text or "third_party/nssm/win64" in text
+    assert (ROOT / "scripts" / "Fetch-Wix.ps1").is_file()
+    assert (ROOT / "packaging" / "airc-console" / "Product.wxs").is_file()
+    wxs = (ROOT / "packaging" / "airc-console" / "Product.wxs").read_text(encoding="utf-8")
+    assert "InstallScope=\"perMachine\"" in wxs or "InstallScope='perMachine'" in wxs
+    assert "Install-AircConsole.cmd" in wxs
+    assert "305" in wxs or "airc console" in wxs.lower()
+
+
+def test_install_self_elevates_uac():
+    """Issue #305: Install requests UAC; must not abort via #Requires -RunAsAdministrator."""
+    text = (ROOT / "scripts" / "Install-AircConsole.ps1").read_text(encoding="utf-8")
+    # Must not have an active requires-directive (comment mentions are ok).
+    assert not any(
+        ln.strip().startswith("#Requires") and "RunAsAdministrator" in ln
+        for ln in text.splitlines()
+    )
+    assert "Test-AircConsoleIsAdmin" in text
+    assert "Verb RunAs" in text or "-Verb RunAs" in text
+    assert "issue #305" in text.lower() or "Issue #305" in text
+    docs = (ROOT / "docs" / "airc-console-fr253.md").read_text(encoding="utf-8")
+    assert "#305" in docs or "issue #305" in docs
+    readme = (ROOT / "src" / "airc_console" / "README.md").read_text(encoding="utf-8")
+    assert ".msi" in readme
 

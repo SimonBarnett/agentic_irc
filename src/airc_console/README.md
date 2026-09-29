@@ -5,29 +5,38 @@ Installable Windows service: IRC nick **`console-<machinename>`** on **`#{machin
 
 ## Behaviour
 
-- Registers / identifies the `console` nick (password via file or `AIRC_CONSOLE_PASSWORD`)
-- JOINs `#{COMPUTERNAME}` (creates channel when the network allows); **silent** in channel
+- Registers / identifies the console nick (NickServ GUID in `console.password`)
+- JOINs `#{machinename}` (creates channel when the network allows); **silent** in channel
 - Direct PRIVMSG from authenticated operators opens a per-user shell session
 - PRIVMSG text is piped to that console; stdout returns in Query (never on the shop channel)
 - Empty operators/accounts refused
 
-## Install (Windows + NSSM)
+## Install (Windows)
 
-Downloaded zips are **unsigned**. Do **not** double-click / invoke the `.ps1`
-directly under Restricted/AllSigned — that fails with "not digitally signed"
-(FR #256). Use the `.cmd` wrappers (they `Unblock-File` + `-ExecutionPolicy Bypass`).
+### Preferred: single MSI (issue #305)
 
-Copy the unzipped tree to a **local** path (e.g. `C:\ai\airc-console`) before
-install. Do not leave NSSM pointed at a mapped download drive such as
-`P:\download\…` (FR #259 / issue #259). NSSM **Application** is `powershell.exe`;
-**Arguments** are `-NoProfile -ExecutionPolicy Bypass -File …\Start-AircConsole.ps1 -ServiceMode …`.
-
-The release zip includes **`third_party/nssm/win64/nssm.exe`** (issue #266). You do
-**not** need `C:\ai\ergo\nssm.exe` on the client. Keep `scripts\` and
-`third_party\` together after unpack.
+Download `airc-console-<ver>.msi` and run it. The MSI is **per-machine** (UAC),
+installs to `C:\ai\airc-console`, then runs `Install-AircConsole.cmd` elevated
+(seeds `ergo.password`, mints NickServ GUID, registers NSSM `AircConsole`, starts it).
 
 ```bat
-REM elevated cmd.exe — unattended (#277): seeds secrets + starts service
+msiexec /i airc-console-0.1.16.msi
+```
+
+### From scripts (also UAC self-elevates)
+
+Downloaded packages are **unsigned**. Do **not** double-click / invoke the `.ps1`
+directly under Restricted/AllSigned — that fails with "not digitally signed"
+(FR #256). Use the `.cmd` wrapper (Unblock-File + `-ExecutionPolicy Bypass`).
+`Install-AircConsole.ps1` requests UAC when not already admin (issue #305).
+
+NSSM **Application** is `powershell.exe`; Arguments are
+`-NoProfile -ExecutionPolicy Bypass -File …\Start-AircConsole.ps1 -ServiceMode …`.
+
+The release includes **`third_party/nssm/win64/nssm.exe`** (issue #266).
+
+```bat
+REM UAC prompt if needed — unattended (#277): seeds secrets + starts service
 scripts\Install-AircConsole.cmd
 ```
 
@@ -37,13 +46,6 @@ Install copies **release** `config\ergo.password` →
 `python.exe` into NSSM `-Python` (LocalSystem has no PATH — issue #282), removes
 any prior service, installs, and **starts** `AircConsole` (Running). Pass
 `-NoStart` only to skip start.
-
-Equivalent PowerShell (explicit Bypass):
-
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\Install-AircConsole.ps1
-Get-Service AircConsole
-```
 
 Foreground smoke:
 
@@ -56,7 +58,7 @@ scripts\Start-AircConsole.cmd -Operators Simon
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts\Pack-AircConsoleRelease.ps1
-# -> dist/airc-console-<ver>.zip (+ .sha256)
+# -> dist/airc-console-<ver>.msi (+ .sha256)
 ```
 
 GitHub Actions workflow `airc-console-release.yml` publishes tag `airc-console` (rolling) and immutable `airc-console-v*`.

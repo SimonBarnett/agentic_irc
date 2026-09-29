@@ -1,6 +1,6 @@
 @echo off
-REM FR #256: unsigned downloadable install must not depend on machine ExecutionPolicy.
-REM Run elevated. Unblocks Mark-of-the-Web then launches with Bypass.
+REM FR #256 / #305: unsigned downloadable install — Bypass + Unblock-File.
+REM Self-elevates via Install-AircConsole.ps1 (UAC) when not already admin.
 setlocal
 set "HERE=%~dp0"
 powershell.exe -NoProfile -ExecutionPolicy Bypass -Command ^

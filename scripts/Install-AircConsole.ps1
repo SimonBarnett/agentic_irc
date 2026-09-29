@@ -1,11 +1,14 @@
 #Requires -Version 5.1
-#Requires -RunAsAdministrator
 <#
 .SYNOPSIS
-  Register NSSM service AircConsole (Automatic). FR #253 / #256.
+  Register NSSM service AircConsole (Automatic). FR #253 / #256 / #305.
 .NOTES
-  Downloaded zips are unsigned. Prefer Install-AircConsole.cmd (Unblock-File +
+  Downloaded packages are unsigned. Prefer Install-AircConsole.cmd (Unblock-File +
   -ExecutionPolicy Bypass). Direct .ps1 invoke fails under AllSigned/Restricted.
+
+  Issue #305: do NOT use a RunAsAdministrator requires-directive (that aborts without UAC).
+  Self-elevate via Start-Process -Verb RunAs when the caller is not already admin.
+  The MSI release is already elevated (per-machine); this path covers .cmd/.ps1.
 #>
 [CmdletBinding()]
 param(
@@ -30,6 +33,48 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+
+function Test-AircConsoleIsAdmin {
+    $id = [Security.Principal.WindowsIdentity]::GetCurrent()
+    $principal = New-Object Security.Principal.WindowsPrincipal($id)
+    return $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+}
+
+function Get-AircConsoleBoundArgumentList {
+    <#
+      Rebuild -File argv for a UAC re-launch from $PSBoundParameters.
+    #>
+    $list = New-Object System.Collections.Generic.List[string]
+    foreach ($key in $PSBoundParameters.Keys) {
+        $val = $PSBoundParameters[$key]
+        if ($val -is [System.Management.Automation.SwitchParameter]) {
+            if ($val.IsPresent) { [void]$list.Add("-$key") }
+            continue
+        }
+        [void]$list.Add("-$key")
+        if ($val -is [System.Array]) {
+            foreach ($item in $val) { [void]$list.Add([string]$item) }
+        } else {
+            [void]$list.Add([string]$val)
+        }
+    }
+    return , $list.ToArray()
+}
+
+if (-not (Test-AircConsoleIsAdmin)) {
+    $self = $PSCommandPath
+    if (-not $self) { $self = $MyInvocation.MyCommand.Path }
+    if (-not $self) { throw 'Install-AircConsole: cannot resolve script path for UAC elevation (issue #305)' }
+    Write-Host 'INFO not elevated; requesting UAC for Install-AircConsole (issue #305)'
+    $relaunch = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $self) + @(Get-AircConsoleBoundArgumentList)
+    try {
+        $p = Start-Process -FilePath 'powershell.exe' -Verb RunAs -ArgumentList $relaunch -Wait -PassThru
+    } catch {
+        throw ("UAC elevation failed or was cancelled: {0}" -f $_.Exception.Message)
+    }
+    if ($null -eq $p) { throw 'UAC elevation produced no process (cancelled?)' }
+    exit [int]$p.ExitCode
+}
 
 # Resolve fleet machine id early (operators seed + NSSM env + Start -MachineId).
 if (-not $MachineId) {

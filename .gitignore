@@ -28,10 +28,14 @@ src/dumb_dotnet/bin/
 src/dumb_dotnet/obj/
 
 dist/
-# Cached NSSM binary for offline Pack-AircConsoleRelease (issue #266); release zip still ships it.
+# Cached NSSM binary for offline Pack-AircConsoleRelease (issue #266); MSI still ships it.
 third_party/nssm/win64/
 third_party/nssm/*.exe
-# Ergo server PASS embedded into release zips only — never commit (issue #294).
+# WiX v3 binaries downloaded by Fetch-Wix.ps1 for MSI pack (issue #305) — do not commit.
+third_party/wix/bin/
+third_party/wix/_extract/
+third_party/wix/*.zip
+# Ergo server PASS embedded into release MSI only — never commit (issue #294).
 config/ergo.password
 **/connect.password
 

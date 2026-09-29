@@ -1,13 +1,18 @@
 #Requires -Version 5.1
 <#
 .SYNOPSIS
-  Build installable release zip for airc console (FR #253).
+  Build installable release MSI for airc console (FR #253 / issue #305).
+.NOTES
+  Stages the tree (scripts, bundled NSSM, config/ergo.password), then builds a
+  single per-machine .msi via WiX 3 (heat/candle/light). Zip is an internal
+  stage only — published artifact is the MSI.
 #>
 [CmdletBinding()]
 param(
     [string]$RepoRoot = '',
     [string]$OutDir = '',
-    [string]$Version = ''
+    [string]$Version = '',
+    [switch]$KeepStage
 )
 
 $ErrorActionPreference = 'Stop'
@@ -27,6 +32,13 @@ if (-not $Version) {
     } else {
         $Version = '0.1.0'
     }
+}
+
+# MSI Product/@Version is major.minor.build (third segment = patch).
+$msiVersion = $Version
+if ($msiVersion -notmatch '^\d+\.\d+\.\d+') {
+    if ($msiVersion -match '^\d+\.\d+$') { $msiVersion = "$msiVersion.0" }
+    else { throw "VERSION '$Version' is not major.minor.patch for MSI" }
 }
 
 $stage = Join-Path $OutDir ("airc-console-$Version")
@@ -72,7 +84,7 @@ if (-not (Test-Path -LiteralPath $readmeNssm)) {
     )
 }
 
-# Issue #294: embed Ergo server PASS in the zip. Target clients have no ~/.grok.
+# Issue #294: embed Ergo server PASS. Target clients have no ~/.grok.
 $configStage = Join-Path $stage 'config'
 New-Item -ItemType Directory -Force -Path $configStage | Out-Null
 $readmeCfg = Join-Path $RepoRoot 'config\README.txt'
@@ -106,16 +118,72 @@ $ergoOut = Join-Path $configStage 'ergo.password'
 [IO.File]::WriteAllText($ergoOut, $ergoSecret + "`n", [Text.UTF8Encoding]::new($false))
 Write-Host "INFO embedded config/ergo.password from $ergoSource (len=$($ergoSecret.Length); value not printed)"
 
-# Selftest before zip
+# Selftest before MSI
 $py = (Get-Command python.exe).Source
 & $py (Join-Path $stage 'scripts\airc_console_service.py') --selftest
 if ($LASTEXITCODE -ne 0) { throw "selftest failed: $LASTEXITCODE" }
 
-$zip = Join-Path $OutDir ("airc-console-$Version.zip")
-if (Test-Path -LiteralPath $zip) { Remove-Item -Force $zip }
-Compress-Archive -Path (Join-Path $stage '*') -DestinationPath $zip -Force
-$hash = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToLower()
-Set-Content -LiteralPath ($zip + '.sha256') -Value ("$hash  airc-console-$Version.zip") -Encoding ascii
-Write-Host "INFO packed $zip"
+# --- WiX MSI (issue #305): single release artifact ---
+$fetchWix = Join-Path $RepoRoot 'scripts\Fetch-Wix.ps1'
+$wixBin = & $fetchWix -CacheDir (Join-Path $RepoRoot 'third_party\wix')
+$candle = Join-Path $wixBin 'candle.exe'
+$light = Join-Path $wixBin 'light.exe'
+$heat = Join-Path $wixBin 'heat.exe'
+foreach ($tool in @($candle, $light, $heat)) {
+    if (-not (Test-Path -LiteralPath $tool)) { throw "WiX tool missing: $tool" }
+}
+
+$wixWork = Join-Path $OutDir ("wix-airc-console-$Version")
+if (Test-Path -LiteralPath $wixWork) { Remove-Item -Recurse -Force $wixWork }
+New-Item -ItemType Directory -Force -Path $wixWork | Out-Null
+
+$harvested = Join-Path $wixWork 'HarvestedFiles.wxs'
+# Harvest stage into ComponentGroup AircConsoleFiles under INSTALLDIR.
+& $heat dir $stage `
+    -cg AircConsoleFiles `
+    -gg -sfrag -srd -sreg -scom `
+    -dr INSTALLDIR `
+    -var var.StageDir `
+    -out $harvested
+if ($LASTEXITCODE -ne 0) { throw "heat.exe failed: $LASTEXITCODE" }
+
+$productWxs = Join-Path $RepoRoot 'packaging\airc-console\Product.wxs'
+if (-not (Test-Path -LiteralPath $productWxs)) { throw "missing $productWxs" }
+Copy-Item -LiteralPath $productWxs -Destination (Join-Path $wixWork 'Product.wxs') -Force
+
+Push-Location $wixWork
+try {
+    $utilExt = Join-Path $wixBin 'WixUtilExtension.dll'
+    if (-not (Test-Path -LiteralPath $utilExt)) {
+        throw "WixUtilExtension.dll missing under $wixBin (needed for CAQuietExec64)"
+    }
+    & $candle -nologo -ext $utilExt `
+        "-dProductVersion=$msiVersion" `
+        "-dStageDir=$stage" `
+        Product.wxs HarvestedFiles.wxs
+    if ($LASTEXITCODE -ne 0) { throw "candle.exe failed: $LASTEXITCODE" }
+
+    $msi = Join-Path $OutDir ("airc-console-$Version.msi")
+    if (Test-Path -LiteralPath $msi) { Remove-Item -Force $msi }
+    & $light -nologo -ext $utilExt `
+        -cultures:en-us `
+        -out $msi `
+        Product.wixobj HarvestedFiles.wixobj
+    if ($LASTEXITCODE -ne 0) { throw "light.exe failed: $LASTEXITCODE" }
+} finally {
+    Pop-Location
+}
+
+if (-not (Test-Path -LiteralPath $msi)) { throw "MSI not produced: $msi" }
+$hash = (Get-FileHash -LiteralPath $msi -Algorithm SHA256).Hash.ToLower()
+Set-Content -LiteralPath ($msi + '.sha256') -Value ("$hash  airc-console-$Version.msi") -Encoding ascii
+Write-Host "INFO packed $msi"
 Write-Host "INFO sha256 $hash"
-Get-Item $zip, ($zip + '.sha256') | Format-Table Name, Length -AutoSize
+
+# Optional: keep stage for debugging; default remove to avoid shipping zip by accident.
+if (-not $KeepStage) {
+    Remove-Item -Recurse -Force $stage -ErrorAction SilentlyContinue
+    Remove-Item -Recurse -Force $wixWork -ErrorAction SilentlyContinue
+}
+
+Get-Item $msi, ($msi + '.sha256') | Format-Table Name, Length -AutoSize

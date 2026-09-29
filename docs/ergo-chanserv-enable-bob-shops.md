@@ -61,13 +61,16 @@ Do **not** start the removed task `BobIrcd-ionos`.
 Each box on current `agentic_irc` **main** (FR #313 already merged):
 
 1. Pull + recycle **Watch-Bobiverse** / `bob-{machine}` only (skill `bob-irc`).
+   **CAST IRON (Simon 2026-09-29):** `{machine}` is Windows `COMPUTERNAME`
+   lowercased (`BOB_MACHINE_ID`), not a marketing alias. Host
+   `WIN-MPRE8VI4U6U` → `bob-win-mpre8vi4u6u` / `#win-mpre8vi4u6u`.
 2. In that bob home `irc.log` (with `AGENTIC_IRC_DEBUG=1` if needed), expect:
 
    ```text
-   INFO chanserv REGISTER #ionos
+   INFO chanserv REGISTER #win-mpre8vi4u6u
    ```
 
-   (or `#flamingo` / `#marchhare` / `#ce-priority-dev1` for that machine).
+   (or that box's real `#{machine}`).
 
 What the ear does (automatic):
 
@@ -80,17 +83,19 @@ Talk seats, `w-*`, and humans do **not** ChanServ-register.
 ### Confirm founder
 
 ```
-/msg ChanServ INFO #ionos
+/msg ChanServ INFO #win-mpre8vi4u6u
 /msg ChanServ INFO #flamingo
 /msg ChanServ INFO #marchhare
 /msg ChanServ INFO #ce-priority-dev1
 ```
 
 Founder should be the matching `bob-*` (first successful REGISTER while in-channel
-with a services account).
+with a services account **and channel op**).
 
-If still **not registered**: recycle that bob while it is in the shop (empty or
-with op). First REGISTER wins founder.
+If ChanServ says `You must be an oper on the channel to register it`: clear
+other nicks briefly so `bob-{machine}` is **first JOIN** (gets `@`), then
+REGISTER. If still **not registered**: recycle that bob while it is in the
+shop (empty or with op). First REGISTER wins founder.
 
 ## Manual REGISTER (fallback only)
 

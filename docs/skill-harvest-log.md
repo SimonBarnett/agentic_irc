@@ -250,3 +250,10 @@ harvested into `.grok/skills/bob-irc`. Protocol leaflets stay `agentic-irc`
 - Not Start-TalkSeat for named agents (that forces `<machine>-<PID>` nick).
 - MarchHare evidence: Haitch `irc_agent` + `irc_listen` on `~/.agentic-irc-haitch`.
 - Upstream fix: `Watch-AgentHealth.ps1` - remove conflicting `Alias('grok')`/`Alias('cursor')` (case-insensitive clash with `-Grok`/`-Cursor`); rename function param `$Home` -> `$AgentHome` (`$HOME` is read-only); rename `$Args` -> `$PyArgs` (automatic `$args` splat was empty).
+
+## 2026-09-29 — airc-console MSI QuietExec (#309)
+
+- CE-PRIORITY-DEV1: downloaded `airc-console-v0.1.16` MSI; `msiexec /i` (quiet and `/qb!`) exit 1603.
+- Root cause: `packaging/airc-console/Product.wxs` deferred `CAQuietExec64` used `QtExecCmdLine`; needs `Property=RunAircInstall` (CustomActionData).
+- Workaround: admin-extract + `Install-AircConsole.cmd` → service Running; nick `console-ce-priority-dev1` on `#ce-priority-dev1`.
+- Harvest: fix Product.wxs; note in `.grok/skills/airc-console`, `docs/airc-console-fr253.md`, `src/airc_console/README.md`; issue https://github.com/SimonBarnett/agentic_irc/issues/309

@@ -51,10 +51,12 @@
     <!--
       Quiet-exec Install-AircConsole.cmd from the installed tree.
       Requires WixUtilExtension (WixCA / CAQuietExec64 on x64).
+      Issue #309: deferred CAQuietExec64 reads CustomActionData (property =
+      deferred CA Id). QtExecCmdLine is immediate-only and yields 0x80070057.
     -->
     <CustomAction
         Id="SetAircInstallCmd"
-        Property="QtExecCmdLine"
+        Property="RunAircInstall"
         Value="&quot;[INSTALLDIR]scripts\Install-AircConsole.cmd&quot;"
         Execute="immediate" />
     <CustomAction

@@ -6,9 +6,10 @@ deaf ones". A bob-* ear may therefore remove nicks from #{machine} that have no 
 process behind them (leaked test nicks, dead seats). This module is pure logic plus a
 small CLI; irc_agent sends the lines raw only for a bob-* nick on its OWN shop channel.
 
-Ergo gives channel op only to the creator of an empty channel (channel registration /
-ChanServ are disabled on irc.ntsa.uk). KICK/MODE without op returns numeric 482; the
-agent logs it (INFO shop-op 482 ...) so the gap is visible.
+Ergo channel op: with ChanServ disabled, only the creator of an empty channel gets
+op. FR #313: bob-* REGISTER #{machine} via ChanServ after JOIN (see shop_chanserv)
+so founder/op persists. KICK/MODE without op returns numeric 482; the agent logs
+it (INFO shop-op 482 ...) so the gap is visible.
 
 CLI (queues lines in <home>/outbox.txt; the running irc_agent drains them):
   python scripts/shop_ops.py invalid --home ~/.agentic-irc-bobiverse --nick bob-marchhare

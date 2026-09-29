@@ -16,15 +16,20 @@ from airc_console import (  # noqa: E402
     AuthPolicy,
     ConsoleSessionManager,
     console_nick,
+    domain_id,
     ensure_nickserv_password,
     is_bob_fleet_nick,
     load_operators,
+    lobby_channel,
+    lobby_nick,
     machine_id,
     nick_matches_pattern,
+    parse_chanserv_registered,
     parse_ctcp_ping,
     parse_ping_command,
     resolve_server_password,
     shop_channel,
+    shop_console_nick,
 )
 
 
@@ -41,34 +46,47 @@ def test_machine_id_prefers_bob_machine_id_env(monkeypatch):
     monkeypatch.delenv("AIRC_CONSOLE_MACHINE", raising=False)
     assert machine_id() == "ionos"
     assert shop_channel() == "#ionos"
-    assert console_nick() == "console-ionos"
+    assert console_nick() == "ionos_console"
     monkeypatch.delenv("BOB_MACHINE_ID", raising=False)
     monkeypatch.setenv("AIRC_CONSOLE_MACHINE", "flamingo")
     assert machine_id() == "flamingo"
 
 
 def test_console_nick_machine_scoped():
-    """Issue #286: bare console collides (433) on shared Ergo."""
-    assert console_nick("flamingo") == "console-flamingo"
-    assert console_nick("FLAMINGO", "auto") == "console-flamingo"
+    """FR #314: default handshake nick is {machine}_console (ChanServ shop)."""
+    assert console_nick("flamingo") == "flamingo_console"
+    assert console_nick("FLAMINGO", "auto") == "flamingo_console"
     assert console_nick("flamingo", "console") == "console"
     assert console_nick("flamingo", "myconsole") == "myconsole"
+    assert console_nick("flamingo", "legacy") == "console-flamingo"
+    assert shop_console_nick("flamingo") == "flamingo_console"
+    assert lobby_nick("flamingo", 0) == "flamingo"
+    assert lobby_nick("flamingo", 1) == "flamingo_1"
+
+
+def test_domain_lobby_and_chanserv_parse():
+    """FR #314: domain clean + ChanServ INFO parsing."""
+    assert domain_id("WONDERLAND.LOCAL") == "wonderland-local"
+    assert lobby_channel("WONDERLAND.LOCAL") == "#wonderland-local"
+    assert parse_chanserv_registered("Channel #flamingo is not registered.") is False
+    assert parse_chanserv_registered("Channel #flamingo is registered.") is True
+    assert parse_chanserv_registered("") is None
 
 
 def test_ping_wildcard_and_ctcp():
     """Issue #298: answer ping / flam* / CTCP PING without operator auth."""
-    assert nick_matches_pattern("flam*", "console-flamingo", "flamingo")
-    assert nick_matches_pattern("flamingo", "console-flamingo", "flamingo")
-    assert nick_matches_pattern("*", "console-flamingo", "flamingo")
-    assert not nick_matches_pattern("ionos*", "console-flamingo", "flamingo")
+    assert nick_matches_pattern("flam*", "flamingo_console", "flamingo")
+    assert nick_matches_pattern("flamingo", "flamingo_console", "flamingo")
+    assert nick_matches_pattern("*", "flamingo_console", "flamingo")
+    assert not nick_matches_pattern("ionos*", "flamingo_console", "flamingo")
     assert parse_ping_command("ping flam*") == "flam*"
     assert parse_ping_command("PING") == "*"
     assert parse_ctcp_ping("\x01PING 12345\x01") == "12345"
     auth = AuthPolicy(operators=set())  # empty ops — ping must still work
-    core = AircConsoleCore(machine="flamingo", auth=auth, nick="console-flamingo")
+    core = AircConsoleCore(machine="flamingo", auth=auth, nick="flamingo_console")
     r = core.handle_raw(":simon!s@h PRIVMSG #flamingo :ping flam*")
-    assert r and r.action == "pong" and r.reply == "pong console-flamingo"
-    r2 = core.handle_raw(":simon!s@h PRIVMSG console-flamingo :\x01PING abc\x01")
+    assert r and r.action == "pong" and r.reply == "pong flamingo_console"
+    r2 = core.handle_raw(":simon!s@h PRIVMSG flamingo_console :\x01PING abc\x01")
     assert r2 and r2.action == "ctcp_pong" and r2.reply == "abc"
     r3 = core.handle_raw(":simon!s@h PRIVMSG #flamingo :ping ionos*")
     assert r3 and r3.action == "silent_channel"
@@ -93,8 +111,8 @@ def test_auth_bob_fleet_nick_any_machine():
     assert auth.allow("bob-ionos")  # any bob-* fleet nick
     assert auth.allow("simon")
     assert not auth.allow("eveildrop")
-    core = AircConsoleCore(machine="flamingo", auth=auth, nick="console-flamingo")
-    r = core.handle_raw(":bob-flamingo!b@h PRIVMSG console-flamingo :hostname")
+    core = AircConsoleCore(machine="flamingo", auth=auth, nick="flamingo_console")
+    r = core.handle_raw(":bob-flamingo!b@h PRIVMSG flamingo_console :hostname")
     assert r and r.action == "pipe"
 
 

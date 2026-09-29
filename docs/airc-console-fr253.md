@@ -6,9 +6,9 @@
 
 Installable **airc** service on each Windows box:
 
-1. Connect as nick **`console-<machinename>`** (issue #286: bare `console` hits 433 on shared Ergo)
-2. JOIN (create if missing) channel **`#{machinename}`**
-3. Register / identify the nick
+1. Connect as nick **`{machinename}_console`** (FR #314; ChanServ shop). If `#{machinename}` is **not** ChanServ-registered, lobby on **`#{domain_or_workgroup}`** as **`{machinename}`** / `_{n}` (see `docs/airc-console-domain-lobby.md`).
+2. JOIN the selected channel (shop or lobby)
+3. Register / identify the nick (reuse `console.password` GUID)
 4. Stay **silent** in the shop channel
 5. Per authenticated user: PRIVMSG session → interactive console pipe
 6. Only authenticated users may PRIVMSG the console
@@ -32,7 +32,7 @@ Installable **airc** service on each Windows box:
 | Reinstall (issue #273) | `Install-AircConsole` stops+removes any existing `AircConsole` then installs fresh; nssm "not been started" stderr is ignored |
 | Unattended (issue #277/#294) | Seeds `ergo.password` from **release** `config/ergo.password` (not target `~\.grok`), mints NickServ GUID, **Start-Service** → Running |
 | LocalSystem Python (issue #282) | Install bakes absolute `python.exe` into NSSM `-Python`; Start resolves when PATH empty |
-| Unique nick (issue #286) | Default nick `console-<machine>`; on IRC 433 retry with suffix then JOIN |
+| Unique nick (issue #286 / #314) | Handshake `{machine}_console`; ChanServ shop vs domain lobby (see `docs/airc-console-domain-lobby.md`) |
 | Reconnect + ping (issue #298) | Auto-reconnect on EOF/ERROR/dead socket; answer CTCP PING and `ping flam*` |
 | Fleet bob-* (issue #302) | Any `bob-{machinename}` nick may drive the console (already Ergo-auth'd) |
 | Release | `Pack-AircConsoleRelease.ps1` builds `dist/airc-console-*.msi` |

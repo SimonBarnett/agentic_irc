@@ -59,18 +59,109 @@ def shop_channel(machine: str | None = None) -> str:
     return f"#{mid}"
 
 
-def console_nick(machine: str | None = None, explicit: str | None = None) -> str:
-    """IRC nick for the console seat (issue #286).
+def domain_id(override: str | None = None) -> str:
+    """Domain or workgroup id for lobby channel ``#{domain}`` (FR #314).
 
-    Bare ``console`` collides on a shared Ergo (433) when more than one box
-    runs airc-console. Default is ``console-<machine>`` (unique per box).
-    Pass explicit ``console`` only on a single-console network.
+    Prefer explicit override / ``AIRC_CONSOLE_DOMAIN``, then Windows domain when
+    domain-joined, else workgroup. Cleaned like ``machine_id``.
     """
-    if explicit and explicit.strip() and explicit.strip().lower() != "auto":
-        return explicit.strip()
+    raw = (override or os.environ.get("AIRC_CONSOLE_DOMAIN") or "").strip()
+    if not raw and os.name == "nt":
+        try:
+            import winreg  # type: ignore
+
+            key = winreg.OpenKey(
+                winreg.HKEY_LOCAL_MACHINE,
+                r"SYSTEM\CurrentControlSet\Services\Tcpip\Parameters",
+            )
+            try:
+                domain, _ = winreg.QueryValueEx(key, "Domain")
+                if domain and str(domain).strip():
+                    raw = str(domain).strip()
+                else:
+                    # Workgroup often under ComputerName or NV Domain empty
+                    pass
+            finally:
+                winreg.CloseKey(key)
+        except OSError:
+            pass
+        if not raw:
+            try:
+                import subprocess
+
+                out = subprocess.check_output(
+                    ["powershell", "-NoProfile", "-Command",
+                     "(Get-CimInstance Win32_ComputerSystem).Domain; "
+                     "(Get-CimInstance Win32_ComputerSystem).PartOfDomain; "
+                     "(Get-CimInstance Win32_ComputerSystem).Workgroup"],
+                    text=True,
+                    timeout=15,
+                )
+                lines = [ln.strip() for ln in out.splitlines() if ln.strip()]
+                # Domain, PartOfDomain (True/False), Workgroup
+                if len(lines) >= 3 and lines[1].lower() in {"true", "1"}:
+                    raw = lines[0]
+                elif len(lines) >= 3:
+                    raw = lines[2]
+                elif lines:
+                    raw = lines[0]
+            except (OSError, subprocess.SubprocessError):
+                pass
+    if not raw:
+        raw = "WORKGROUP"
+    cleaned = _CHANNEL_SAFE.sub("-", raw).strip("-_")
+    return (cleaned or "workgroup").lower()
+
+
+def lobby_channel(domain: str | None = None) -> str:
+    return f"#{domain_id(domain)}"
+
+
+def shop_console_nick(machine: str | None = None) -> str:
+    """Nick when ChanServ shop is registered: ``{machine}_console`` (FR #314)."""
     mid = machine_id(machine)
-    nick = f"console-{mid}"
-    return nick[:30]
+    return f"{mid}_console"[:30]
+
+
+def lobby_nick(machine: str | None = None, collision: int = 0) -> str:
+    """Nick when shopping on domain lobby: ``{machine}`` / ``{machine}_n`` (FR #314)."""
+    mid = machine_id(machine)
+    if collision <= 0:
+        return mid[:30]
+    return f"{mid}_{collision}"[:30]
+
+
+def console_nick(machine: str | None = None, explicit: str | None = None) -> str:
+    """IRC nick for the console seat.
+
+    FR #314 default handshake nick is ``{machine}_console`` (ChanServ shop mode).
+    Explicit ``console`` / other values still honoured. Legacy ``console-<machine>``
+    only when ``explicit='legacy'``.
+    """
+    if explicit and explicit.strip() and explicit.strip().lower() not in {"auto", ""}:
+        if explicit.strip().lower() == "legacy":
+            mid = machine_id(machine)
+            return f"console-{mid}"[:30]
+        return explicit.strip()
+    return shop_console_nick(machine)
+
+
+def parse_chanserv_registered(text: str) -> bool | None:
+    """Parse ChanServ INFO reply: True registered, False not, None inconclusive."""
+    t = (text or "").lower()
+    if not t.strip():
+        return None
+    if "is not registered" in t or "isn't registered" in t or "not registered" in t:
+        return False
+    if "does not exist" in t or "isn't registered" in t or "no such channel" in t:
+        return False
+    if "is registered" in t or ("registered" in t and "founder" in t):
+        return True
+    if "registered" in t and "not" not in t.split("registered")[0][-12:]:
+        # e.g. "Channel #foo is registered."
+        if "not registered" not in t:
+            return True
+    return None
 
 
 def is_channel_target(target: str) -> bool:
@@ -88,7 +179,13 @@ def nick_matches_pattern(pattern: str, nick: str, machine: str | None = None) ->
         return True
     n = (nick or "").strip().lower()
     mid = machine_id(machine)
-    candidates = {n, mid, f"console-{mid}", f"#{mid}"}
+    candidates = {
+        n,
+        mid,
+        f"console-{mid}",
+        f"{mid}_console",
+        f"#{mid}",
+    }
     p = pat.lower()
     # Allow #channel-style patterns too.
     for c in candidates:

@@ -24,12 +24,17 @@ from airc_console import (
     AuthPolicy,
     ConsoleSessionManager,
     console_nick,
+    domain_id,
     ensure_nickserv_password,
     home_dir,
     load_operators,
+    lobby_channel,
+    lobby_nick,
     machine_id,
+    parse_chanserv_registered,
     resolve_server_password,
     shop_channel,
+    shop_console_nick,
 )
 
 FLOOD_S = 0.35
@@ -38,6 +43,8 @@ IDLE_PING_S = 60.0
 IDLE_DEAD_S = 120.0
 RECONNECT_MIN_S = 3.0
 RECONNECT_MAX_S = 60.0
+# FR #314: ChanServ INFO probe for shop vs domain lobby.
+CHANSERV_PROBE_S = 8.0
 
 
 def info(msg: str) -> None:
@@ -61,10 +68,28 @@ class AircConsoleService:
         self.home = home_dir(args.home)
         self.home.mkdir(parents=True, exist_ok=True)
         self.machine = machine_id(args.machine)
-        self.channel = shop_channel(self.machine)
-        # #286: default console-<machine> — bare "console" gets 433 on shared Ergo.
-        self.nick = console_nick(self.machine, getattr(args, "nick", None))
+        self.domain = domain_id(getattr(args, "domain", None))
+        # FR #314: channel/nick finalized after ChanServ probe (unless overrides).
+        explicit_nick = getattr(args, "nick", None)
+        explicit_chan = getattr(args, "channel", None)
+        self._nick_override = bool(
+            explicit_nick
+            and str(explicit_nick).strip()
+            and str(explicit_nick).strip().lower() not in {"auto", ""}
+        )
+        self._channel_override = bool(explicit_chan and str(explicit_chan).strip())
+        if self._channel_override:
+            ch = str(explicit_chan).strip()
+            self.channel = ch if ch.startswith("#") else f"#{ch}"
+        else:
+            self.channel = shop_channel(self.machine)  # provisional until probe
+        # Handshake nick: shop console nick (or explicit). Lobby may NICK-change after probe.
+        self.nick = console_nick(self.machine, explicit_nick)
         self._nick_retries = 0
+        self._lobby_collision = 0
+        self._mode: str | None = None  # 'shop' | 'lobby' | 'override'
+        self._awaiting_chanserv = False
+        self._chanserv_deadline = 0.0
         # #271: NickServ GUID in console.password (mint+reuse). Ergo PASS separate.
         nickserv_path = (
             Path(args.password_file)
@@ -218,9 +243,69 @@ class AircConsoleService:
         self.register_or_identify()
 
     def join_shop(self) -> None:
+        self.core.channel = self.channel
+        self.core.nick = self.nick
         for cmd in self.core.join_commands():
             self.send(cmd)
-        info(f"INFO joined {self.channel} as {self.nick} (silent)")
+        info(f"INFO joined {self.channel} as {self.nick} mode={self._mode or 'shop'} (silent)")
+
+    def _start_chanserv_probe(self) -> None:
+        """FR #314: INFO #{machine} then pick shop vs domain lobby."""
+        if self._nick_override or self._channel_override:
+            self._mode = "override"
+            self.join_shop()
+            return
+        shop = shop_channel(self.machine)
+        self._awaiting_chanserv = True
+        self._chanserv_deadline = time.monotonic() + CHANSERV_PROBE_S
+        info(f"INFO chanserv-probe INFO {shop} (timeout {CHANSERV_PROBE_S:.0f}s)")
+        self.send(f"PRIVMSG ChanServ :INFO {shop}")
+
+    def _apply_shop_mode(self) -> None:
+        self._awaiting_chanserv = False
+        self._mode = "shop"
+        self.channel = shop_channel(self.machine)
+        want = shop_console_nick(self.machine)
+        if self.nick.lower() != want.lower():
+            self.nick = want
+            self.core.nick = want
+            self.send(f"NICK {want}")
+        info(f"INFO mode=shop channel={self.channel} nick={self.nick}")
+        self.join_shop()
+
+    def _apply_lobby_mode(self, reason: str) -> None:
+        self._awaiting_chanserv = False
+        self._mode = "lobby"
+        self.channel = lobby_channel(self.domain)
+        self._lobby_collision = 0
+        want = lobby_nick(self.machine, 0)
+        if self.nick.lower() != want.lower():
+            self.nick = want
+            self.core.nick = want
+            self.send(f"NICK {want}")
+        info(f"INFO mode=lobby reason={reason} channel={self.channel} nick={self.nick}")
+        self.join_shop()
+
+    def _on_chanserv_notice(self, text: str) -> bool:
+        """Handle ChanServ NOTICE during probe. True if consumed."""
+        if not self._awaiting_chanserv:
+            return False
+        verdict = parse_chanserv_registered(text)
+        info(f"INFO chanserv-reply verdict={verdict} text={text[:160]}")
+        if verdict is True:
+            self._apply_shop_mode()
+            return True
+        if verdict is False:
+            self._apply_lobby_mode("not-registered")
+            return True
+        return False
+
+    def _chanserv_probe_tick(self) -> None:
+        if not self._awaiting_chanserv:
+            return
+        if time.monotonic() >= self._chanserv_deadline:
+            info("INFO chanserv-probe timeout → lobby")
+            self._apply_lobby_mode("timeout")
 
     def _handle_sasl_line(self, cmd: str, args: list[str], trailing: str) -> None:
         tokens = [a.lower() for a in args] + ([trailing.lower()] if trailing else [])
@@ -280,21 +365,32 @@ class AircConsoleService:
             self._handle_sasl_line(cmd, args, trailing)
 
         if cmd == "001":
-            # Welcome — registration succeeded; JOIN shop channel.
+            # Welcome — then ChanServ probe (FR #314) before JOIN.
             self._registered = True
             self._nick_retries = 0
-            self.join_shop()
+            self._start_chanserv_probe()
+
+        if cmd == "NOTICE" and prefix.lower().startswith("chanserv!"):
+            if self._on_chanserv_notice(trailing or " ".join(args)):
+                return
 
         if cmd == "433":
-            # Nickname already in use — never get 001/JOIN without recovery (#286).
+            # Nickname already in use — recover so we can still get 001/JOIN.
             self._nick_retries += 1
-            if self._nick_retries > 5:
+            if self._nick_retries > 8:
                 info(f"INFO nick-collision giving up on {self.nick}")
                 self._force_reconnect = True
                 return
-            alt = console_nick(self.machine, None)
-            if self.nick.lower() == alt.lower():
-                alt = f"{alt}-{self._nick_retries}"[:30]
+            if self._mode == "lobby" or (
+                self._awaiting_chanserv is False and self._mode is None and not self._nick_override
+            ):
+                # FR #314 lobby: {machine}_1, _2, …
+                self._lobby_collision = max(self._lobby_collision, 0) + 1
+                alt = lobby_nick(self.machine, self._lobby_collision)
+            else:
+                alt = shop_console_nick(self.machine)
+                if self.nick.lower() == alt.lower():
+                    alt = f"{alt}_{self._nick_retries}"[:30]
             info(f"INFO nick-in-use 433 {self.nick} -> {alt}")
             self.nick = alt
             self.core.nick = alt
@@ -370,6 +466,7 @@ class AircConsoleService:
                 except Exception as re:
                     info(f"INFO reap-err {re}")
                 try:
+                    self._chanserv_probe_tick()
                     self._idle_keepalive()
                 except Exception as ke:
                     info(f"INFO keepalive-err {ke}")
@@ -443,12 +540,22 @@ def build_arg_parser() -> argparse.ArgumentParser:
     p.add_argument(
         "--nick",
         default="auto",
-        help="IRC nick (default auto = console-<machine>; bare 'console' collides on shared Ergo #286)",
+        help="IRC nick (default auto = {machine}_console handshake; FR #314 may NICK-change after ChanServ probe)",
     )
     p.add_argument(
         "--machine",
         default=None,
         help="fleet shop id (ionos/flamingo/…); default AIRC_CONSOLE_MACHINE / BOB_MACHINE_ID / COMPUTERNAME",
+    )
+    p.add_argument(
+        "--domain",
+        default=None,
+        help="lobby channel id when shop not ChanServ-registered (FR #314); default AIRC_CONSOLE_DOMAIN / Windows domain|workgroup",
+    )
+    p.add_argument(
+        "--channel",
+        default=None,
+        help="force JOIN channel (skips ChanServ probe); default auto shop/lobby",
     )
     p.add_argument("--home", default=None)
     p.add_argument("--password-file", default=None)
@@ -472,9 +579,15 @@ def build_arg_parser() -> argparse.ArgumentParser:
 def selftest() -> int:
     mid = machine_id("IONOS")
     assert shop_channel(mid) == "#ionos", shop_channel(mid)
-    assert console_nick("IONOS") == "console-ionos"
-    assert console_nick("IONOS", "auto") == "console-ionos"
+    assert console_nick("IONOS") == "ionos_console"
+    assert console_nick("IONOS", "auto") == "ionos_console"
     assert console_nick("IONOS", "console") == "console"
+    assert shop_console_nick("flamingo") == "flamingo_console"
+    assert lobby_nick("flamingo", 0) == "flamingo"
+    assert lobby_nick("flamingo", 2) == "flamingo_2"
+    assert domain_id("WONDERLAND.LOCAL") == "wonderland-local"
+    assert parse_chanserv_registered("Channel #ionos is not registered.") is False
+    assert parse_chanserv_registered("Channel #ionos is registered.") is True
     auth = AuthPolicy(operators={"simon"}, accounts=set())
     assert auth.allow("Simon")
     assert not auth.allow("stranger")

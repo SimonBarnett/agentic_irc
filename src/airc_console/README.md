@@ -1,12 +1,14 @@
 # airc console (FR #253)
 
-Installable Windows service: IRC nick **`console-<machinename>`** on **`#{machinename}`**
-(issue #286 — bare `console` is not unique on shared Ergo).
+Installable Windows service. ChanServ-registered **`#{machinename}`** → nick
+**`{machinename}_console`**. Otherwise lobby on **`#{domain_or_workgroup}`** as
+**`{machinename}`** / **`_{n}`** (`docs/airc-console-domain-lobby.md`).
 
 ## Behaviour
 
-- Registers / identifies the console nick (NickServ GUID in `console.password`)
-- JOINs `#{machinename}` (creates channel when the network allows); **silent** in channel
+- Probes ChanServ `INFO #{machinename}` after welcome; settles shop vs domain lobby
+- Registers / identifies the chosen nick (NickServ GUID in `console.password`)
+- JOINs the chosen channel; **silent** in channel
 - Direct PRIVMSG from authenticated operators opens a per-user shell session
 - PRIVMSG text is piped to that console; stdout returns in Query (never on the shop channel)
 - Empty operators/accounts refused

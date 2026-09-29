@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Live IRC host for airc console service (FR #253).
 
-Nick ``console`` on ``#{machinename}``, register/identify, silent in channel,
-authenticated PRIVMSG → per-user console pipe. Designed to run under NSSM.
+ChanServ-registered ``#{machinename}`` → nick ``{machinename}_console``.
+Otherwise lobby on ``#{domain_or_workgroup}`` as ``{machinename}`` / ``_N``.
+Silent in channel; authenticated PRIVMSG → per-user console pipe (NSSM).
 """
 from __future__ import annotations
 
@@ -24,10 +25,15 @@ from airc_console import (
     AuthPolicy,
     ConsoleSessionManager,
     console_nick,
+    domain_channel,
+    domain_lobby_nick,
+    domain_or_workgroup_id,
     ensure_nickserv_password,
     home_dir,
     load_operators,
+    machine_console_nick,
     machine_id,
+    parse_chanserv_info,
     resolve_server_password,
     shop_channel,
 )
@@ -38,6 +44,9 @@ IDLE_PING_S = 60.0
 IDLE_DEAD_S = 120.0
 RECONNECT_MIN_S = 3.0
 RECONNECT_MAX_S = 60.0
+CHANSERV_PROBE_S = 8.0
+NICK_RETRIES_SHOP = 5
+NICK_RETRIES_LOBBY = 20
 
 
 def info(msg: str) -> None:
@@ -61,10 +70,35 @@ class AircConsoleService:
         self.home = home_dir(args.home)
         self.home.mkdir(parents=True, exist_ok=True)
         self.machine = machine_id(args.machine)
-        self.channel = shop_channel(self.machine)
-        # #286: default console-<machine> — bare "console" gets 433 on shared Ergo.
-        self.nick = console_nick(self.machine, getattr(args, "nick", None))
+        self.domain = domain_or_workgroup_id(getattr(args, "domain", None))
+        self.domain_channel = domain_channel(self.domain)
+        self.shop_channel = shop_channel(self.machine)
+        # auto | registered | domain-lobby
+        mode = (getattr(args, "shop_mode", None) or "auto").strip().lower()
+        if mode not in {"auto", "registered", "domain-lobby"}:
+            mode = "auto"
+        self.shop_mode = mode
+        nick_arg = getattr(args, "nick", None)
+        self._nick_explicit = bool(
+            nick_arg and str(nick_arg).strip() and str(nick_arg).strip().lower() != "auto"
+        )
+        if self._nick_explicit:
+            self.nick = console_nick(self.machine, nick_arg)
+        elif self.shop_mode == "domain-lobby":
+            self.nick = domain_lobby_nick(self.machine)
+        else:
+            # Provisional / registered-shop nick.
+            self.nick = machine_console_nick(self.machine)
+        if self.shop_mode == "domain-lobby":
+            self.channel = self.domain_channel
+        else:
+            self.channel = self.shop_channel
         self._nick_retries = 0
+        self._probe_state = "idle"  # idle | waiting | done
+        self._probe_deadline = 0.0
+        self._awaiting_lobby_nick = False
+        self._joined_shop = False
+        self._active_mode: str | None = None
         # #271: NickServ GUID in console.password (mint+reuse). Ergo PASS separate.
         nickserv_path = (
             Path(args.password_file)
@@ -83,6 +117,10 @@ class AircConsoleService:
             info("INFO server PASS available (env/ergo.password)")
         else:
             info("INFO no-server-pass (set AGENTIC_IRC_PASSWORD or ergo.password)")
+        info(
+            f"INFO domain={self.domain} shop={self.shop_channel} "
+            f"lobby={self.domain_channel} shop-mode={self.shop_mode}"
+        )
         ops = load_operators(
             Path(args.operators_file) if args.operators_file else self.home / "operators.txt",
             args.operators,
@@ -114,6 +152,7 @@ class AircConsoleService:
             sessions=self.sessions,
             nick=self.nick,
         )
+        self.core.channel = self.channel
         self.sock: ssl.SSLSocket | socket.socket | None = None
         self._send_lock = threading.Lock()
         self._stop = threading.Event()
@@ -206,6 +245,11 @@ class AircConsoleService:
     def handshake(self) -> None:
         self._want_sasl = False
         self._sasl_done = False
+        self._probe_state = "idle"
+        self._awaiting_lobby_nick = False
+        self._joined_shop = False
+        self._active_mode = None
+        self.core.nick = self.nick
         # Order matches irc_agent: PASS → CAP → NICK/USER → (SASL) → CAP END.
         self.send_server_pass()
         self.request_caps()
@@ -215,12 +259,81 @@ class AircConsoleService:
             self.sasl_plain()
         else:
             self.send("CAP END")
+        # NickServ for provisional nick; re-run after lobby nick settles.
         self.register_or_identify()
 
+    def _set_nick(self, nick: str) -> None:
+        self.nick = nick
+        self.core.nick = nick
+        self.send(f"NICK {nick}")
+
     def join_shop(self) -> None:
+        self.core.channel = self.channel
         for cmd in self.core.join_commands():
             self.send(cmd)
+        self._joined_shop = True
         info(f"INFO joined {self.channel} as {self.nick} (silent)")
+
+    def _start_chanserv_probe(self) -> None:
+        self._probe_state = "waiting"
+        self._probe_deadline = time.monotonic() + CHANSERV_PROBE_S
+        info(f"INFO chanserv-probe {self.shop_channel}")
+        self.send(f"PRIVMSG ChanServ :INFO {self.shop_channel}")
+
+    def _apply_shop_mode(self, mode: str) -> None:
+        """Settle registered shop vs domain lobby after ChanServ probe (or forced mode)."""
+        if self._probe_state == "done" and self._active_mode == mode and self._joined_shop:
+            return
+        self._probe_state = "done"
+        self._active_mode = mode
+        if mode == "registered":
+            self.channel = self.shop_channel
+            self.core.channel = self.channel
+            if not self._nick_explicit:
+                want = machine_console_nick(self.machine)
+                if self.nick.lower() != want.lower():
+                    self._set_nick(want)
+            info(f"INFO shop-mode=registered channel={self.channel} nick={self.nick}")
+            self.register_or_identify()
+            if not self._joined_shop:
+                self.join_shop()
+            return
+
+        # domain-lobby
+        self.channel = self.domain_channel
+        self.core.channel = self.channel
+        if not self._nick_explicit:
+            want = domain_lobby_nick(self.machine)
+            if self.nick.lower() != want.lower():
+                self._nick_retries = 0
+                self._awaiting_lobby_nick = True
+                info(
+                    f"INFO shop-mode=domain-lobby channel={self.channel} "
+                    f"nick={want} (changing from {self.nick})"
+                )
+                self._set_nick(want)
+                return
+        info(f"INFO shop-mode=domain-lobby channel={self.channel} nick={self.nick}")
+        self.register_or_identify()
+        if not self._joined_shop:
+            self.join_shop()
+
+    def _finish_lobby_nick(self) -> None:
+        if not self._awaiting_lobby_nick:
+            return
+        self._awaiting_lobby_nick = False
+        info(f"INFO shop-mode=domain-lobby channel={self.channel} nick={self.nick}")
+        self.register_or_identify()
+        if not self._joined_shop:
+            self.join_shop()
+
+    def _check_probe_timeout(self) -> None:
+        if self._probe_state != "waiting":
+            return
+        if time.monotonic() < self._probe_deadline:
+            return
+        info("INFO chanserv-probe timeout -> domain-lobby")
+        self._apply_shop_mode("domain-lobby")
 
     def _handle_sasl_line(self, cmd: str, args: list[str], trailing: str) -> None:
         tokens = [a.lower() for a in args] + ([trailing.lower()] if trailing else [])
@@ -280,26 +393,67 @@ class AircConsoleService:
             self._handle_sasl_line(cmd, args, trailing)
 
         if cmd == "001":
-            # Welcome — registration succeeded; JOIN shop channel.
+            # Welcome — probe ChanServ (or forced mode) before JOIN.
             self._registered = True
             self._nick_retries = 0
-            self.join_shop()
+            if self._nick_explicit:
+                # Explicit nick: join current channel (shop unless domain-lobby forced).
+                self._apply_shop_mode(
+                    "domain-lobby" if self.shop_mode == "domain-lobby" else "registered"
+                )
+            elif self.shop_mode == "registered":
+                self._apply_shop_mode("registered")
+            elif self.shop_mode == "domain-lobby":
+                self._apply_shop_mode("domain-lobby")
+            else:
+                self._start_chanserv_probe()
 
         if cmd == "433":
-            # Nickname already in use — never get 001/JOIN without recovery (#286).
+            # Nickname already in use — never get 001/JOIN without recovery.
             self._nick_retries += 1
-            if self._nick_retries > 5:
+            lobby = (
+                self._awaiting_lobby_nick
+                or self._active_mode == "domain-lobby"
+                or self.shop_mode == "domain-lobby"
+            )
+            limit = NICK_RETRIES_LOBBY if lobby else NICK_RETRIES_SHOP
+            if self._nick_retries > limit:
                 info(f"INFO nick-collision giving up on {self.nick}")
                 self._force_reconnect = True
                 return
-            alt = console_nick(self.machine, None)
-            if self.nick.lower() == alt.lower():
-                alt = f"{alt}-{self._nick_retries}"[:30]
+            if lobby:
+                alt = domain_lobby_nick(self.machine, self._nick_retries)
+            else:
+                base = machine_console_nick(self.machine)
+                alt = base
+                if alt.lower() == self.nick.lower():
+                    alt = domain_lobby_nick(self.machine, self._nick_retries)
             info(f"INFO nick-in-use 433 {self.nick} -> {alt}")
-            self.nick = alt
-            self.core.nick = alt
-            self.send(f"NICK {alt}")
+            self._set_nick(alt)
             return
+
+        if cmd == "NICK":
+            # Our nick change accepted (prefix is old nick; trailing/arg is new).
+            new_nick = (trailing or (args[0] if args else "")).lstrip(":")
+            if (
+                self._awaiting_lobby_nick
+                and new_nick
+                and self.nick
+                and new_nick.lower() == self.nick.lower()
+            ):
+                self._finish_lobby_nick()
+
+        if cmd == "NOTICE":
+            src = parse_prefix_nick(":" + prefix) if prefix else ""
+            src_l = (src or "").lower()
+            if self._probe_state == "waiting" and src_l in {"chanserv", "cs"}:
+                status = parse_chanserv_info(trailing, self.shop_channel)
+                info(f"INFO chanserv-info status={status}")
+                if status == "registered":
+                    self._apply_shop_mode("registered")
+                elif status == "missing":
+                    self._apply_shop_mode("domain-lobby")
+                # unknown: keep waiting until timeout
 
         if cmd == "JOIN":
             nick = parse_prefix_nick(":" + prefix) if prefix else None
@@ -365,6 +519,10 @@ class AircConsoleService:
                 chunk = self.sock.recv(4096)
             except (socket.timeout, TimeoutError):
                 # Python 3.10+ ssl may raise TimeoutError; keep the loop alive (#286).
+                try:
+                    self._check_probe_timeout()
+                except Exception as pe:
+                    info(f"INFO probe-err {pe}")
                 try:
                     self.sessions.reap_idle()
                 except Exception as re:
@@ -443,12 +601,24 @@ def build_arg_parser() -> argparse.ArgumentParser:
     p.add_argument(
         "--nick",
         default="auto",
-        help="IRC nick (default auto = console-<machine>; bare 'console' collides on shared Ergo #286)",
+        help="IRC nick (default auto = {machine}_console provisional; lobby uses {machine}/_{n})",
     )
     p.add_argument(
         "--machine",
         default=None,
         help="fleet shop id (ionos/flamingo/…); default AIRC_CONSOLE_MACHINE / BOB_MACHINE_ID / COMPUTERNAME",
+    )
+    p.add_argument(
+        "--domain",
+        default=None,
+        help="domain/workgroup id for lobby channel; default AIRC_CONSOLE_DOMAIN / Windows join",
+    )
+    p.add_argument(
+        "--shop-mode",
+        default=os.environ.get("AIRC_CONSOLE_SHOP_MODE", "auto"),
+        choices=["auto", "registered", "domain-lobby"],
+        help="auto=ChanServ INFO #{machine}; registered=#{machine} as {machine}_console; "
+        "domain-lobby=#{domain} as {machine}",
     )
     p.add_argument("--home", default=None)
     p.add_argument("--password-file", default=None)
@@ -472,17 +642,28 @@ def build_arg_parser() -> argparse.ArgumentParser:
 def selftest() -> int:
     mid = machine_id("IONOS")
     assert shop_channel(mid) == "#ionos", shop_channel(mid)
-    assert console_nick("IONOS") == "console-ionos"
-    assert console_nick("IONOS", "auto") == "console-ionos"
+    assert machine_console_nick("IONOS") == "ionos_console"
+    assert console_nick("IONOS") == "ionos_console"
+    assert console_nick("IONOS", "auto") == "ionos_console"
     assert console_nick("IONOS", "console") == "console"
+    assert domain_lobby_nick("IONOS") == "ionos"
+    assert domain_lobby_nick("IONOS", 1) == "ionos_1"
+    assert domain_channel("CE-PRIORITY-DEV") == "#ce-priority-dev"
+    assert parse_chanserv_info("Channel #ionos is not registered.", "#ionos") == "missing"
+    assert (
+        parse_chanserv_info("Information on channel #ionos:\nRegistered: yes", "#ionos")
+        == "registered"
+    )
     auth = AuthPolicy(operators={"simon"}, accounts=set())
     assert auth.allow("Simon")
     assert not auth.allow("stranger")
-    core = AircConsoleCore(machine="ionos", auth=auth, sessions=ConsoleSessionManager(on_output=None))
+    core = AircConsoleCore(
+        machine="ionos", auth=auth, sessions=ConsoleSessionManager(on_output=None), nick="ionos_console"
+    )
     assert core.may_speak_on_channel() is False
     r = core.handle_raw(":evil!e@h PRIVMSG #ionos :whoami")
     assert r and r.action == "silent_channel"
-    r2 = core.handle_raw(":evil!e@h PRIVMSG console :whoami")
+    r2 = core.handle_raw(":evil!e@h PRIVMSG ionos_console :whoami")
     assert r2 and r2.action == "deny"
     info("INFO selftest ok")
     return 0

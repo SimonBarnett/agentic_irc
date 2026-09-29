@@ -21,6 +21,8 @@ Agents: open **live** specs below. Do not treat `mrb-*.md` / `mrb-*.pdf` as curr
 | `feature-request-ionos-shop-channel-bob-ionos-2026-09-21.md` | `#ionos` shop for `bob-ionos` + `w-io-*` (issue #70) |
 | `build-and-test-plan-ionos-shop-channel-bob-ionos-2026-09-21.md` | Worker plan for #70 |
 | `bobiverse-ionos-ircd.md` | Ergo `#ionos` operator note + sister bobiverse.md cross-link |
+| `ergo-chanserv-enable-bob-shops.md` | **ionos action:** enable ChanServ + bob-* REGISTER `#{machine}` (FR #313) |
+| `feature-request-bob-chanserv-register-shop-2026-09-29.md` | FR #313 — bob REGISTER shop with ChanServ |
 | `tofu-rotation.md` | AGPK pin mistakes and key rotation drill |
 | `watch-agent-health-aider.md` | Watch-AgentHealth `-Aider` live REPL wake (after Start-TalkSeat) |
 | `build-and-test-plan-watch-agent-health-aider-2026-09-24.md` | Worker plan for Aider watcher |

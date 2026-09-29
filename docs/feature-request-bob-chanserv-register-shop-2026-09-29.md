@@ -16,3 +16,9 @@
 
 - Transferring existing channels; oper-only SAREGISTER of every historical nick.
 - Changing worker JOIN rules or shop KICK policy beyond documenting ChanServ founder.
+
+## Ionos operator action
+
+Code is on `main`. Ergo still needs the registration knobs turned on.
+
+**Do this on ionos:** `docs/ergo-chanserv-enable-bob-shops.md`

@@ -1,4 +1,4 @@
-﻿# FR â€” airc console ChanServ shop vs domain lobby
+# FR - airc console ChanServ shop vs domain lobby
 
 **Issue:** https://github.com/SimonBarnett/agentic_irc/issues/314
 
@@ -10,17 +10,17 @@ On connect, choose nick and channel from whether `#{machinename}` is
 | Shop `#{machinename}` | Channel | Nick | NickServ |
 |----------------------|---------|------|----------|
 | **Registered** | `#{machinename}` | `{machinename}_console` | IDENTIFY/REGISTER with existing `console.password` GUID |
-| **Not registered** / probe timeout | `#{domain_or_workgroup}` for that session only | `{machinename}`, then `{machinename}_1`, `_2`, â€¦ on 433 | Same GUID after nick settles |
+| **Not registered** / probe timeout | `#{domain_or_workgroup}` for that session only | `{machinename}`, then `{machinename}_1`, `_2`, ... on 433 | Same GUID after nick settles |
 
 ## Behaviour
 
-1. Resolve fleet `machinename` (`AIRC_CONSOLE_MACHINE` / `BOB_MACHINE_ID` / â€¦).
+1. Resolve fleet `machinename` (`AIRC_CONSOLE_MACHINE` / `BOB_MACHINE_ID` / ...).
 2. Resolve domain/workgroup (`--domain` / `AIRC_CONSOLE_DOMAIN` / Windows join;
    never block unbounded on WMI).
 3. Connect provisionally as `{machinename}_console`.
-4. After `001`, `PRIVMSG ChanServ :INFO #{machinename}` (timeout 8s â†’ lobby).
-5. Registered â†’ JOIN shop as `{machinename}_console`.
-6. Missing â†’ `NICK` to `{machinename}` (433 â†’ `_1`, `_2`, â€¦), REGISTER/IDENTIFY,
+4. After `001`, `PRIVMSG ChanServ :INFO #{machinename}` (timeout 8s -> lobby).
+5. Registered -> JOIN shop as `{machinename}_console`.
+6. Missing -> `NICK` to `{machinename}` (433 -> `_1`, `_2`, ...), REGISTER/IDENTIFY,
    JOIN `#{domain_or_workgroup}` only (do not also create `#{machinename}`).
 7. Stay silent on the chosen channel; Query shell unchanged.
 
@@ -45,6 +45,11 @@ Forced modes: `--shop-mode registered|domain-lobby|auto` (env
 
 ## Layout
 
-- `scripts/airc_console.py` â€” helpers + `parse_chanserv_info`
-- `scripts/airc_console_service.py` â€” probe / JOIN state machine
+- `scripts/airc_console.py` - helpers + `parse_chanserv_info`
+- `scripts/airc_console_service.py` - probe / JOIN state machine
 - `.grok/skills/airc-console/SKILL.md`
+
+## Issue #321
+
+Do not block JOIN on a NICK echo after switching to the lobby nick. Ergo may
+omit the confirmation; optimistic NICK then JOIN, re-JOIN on 433.

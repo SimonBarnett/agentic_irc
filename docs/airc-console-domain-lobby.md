@@ -45,6 +45,38 @@ Forced modes: `--shop-mode registered|domain-lobby|auto` (env
 
 ## Layout
 
-- `scripts/airc_console.py` â€” helpers + `parse_chanserv_info`
-- `scripts/airc_console_service.py` â€” probe / JOIN state machine
+- `scripts/airc_console.py` — helpers + `parse_chanserv_info`
+- `scripts/airc_console_service.py` — probe / JOIN state machine
 - `.grok/skills/airc-console/SKILL.md`
+
+## Product call — `#workgroup` shared lobby (FR #322)
+
+**Decision: `#workgroup` is an acceptable intentional shared lobby.** No code change.
+
+### Why
+
+Many Windows boxes report join type workgroup with the literal name `WORKGROUP`.
+FR #314 maps that to IRC `#workgroup`. On shared Ergo (`irc.ntsa.uk`) every such
+box therefore lands in the **same** lobby channel when its shop
+`#{machinename}` is **not** ChanServ-registered.
+
+That is **correct**:
+
+| Concern | Mitigation |
+|---------|------------|
+| Shared channel | Machine nicks (`{machine}`, `{machine}_1`, …) disambiguate who is who |
+| Silence CAST IRON | Consoles do not PRIVMSG the lobby; Query/NOTICE shell only |
+| Unwanted company | Register the shop with ChanServ (`bob-*` FR #313 / oper) so the console JOINs `#{machine}` as `{machine}_console` instead |
+| Private lobby override | Set `AIRC_CONSOLE_DOMAIN` / `--domain` to a distinct id (e.g. `ce-priority-lab`) |
+
+### Not doing (rejected for now)
+
+- Auto-prefixing `#wg-{machine}` (defeats a shared lobby)
+- Renaming default `WORKGROUP` → `#fleet-workgroup` (same sharing, more magic)
+- Code that special-cases the string `WORKGROUP` until a later product call reverses this
+
+### Observed
+
+CE-PRIORITY-DEV1: NetGetJoin workgroup `WORKGROUP` → `#workgroup` while
+`#ce-priority-dev1` was unregistered. Fix path for a dedicated shop: ChanServ
+REGISTER `#ce-priority-dev1` (bob ear / oper), then recycle airc-console.

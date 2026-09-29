@@ -48,3 +48,8 @@ Forced modes: `--shop-mode registered|domain-lobby|auto` (env
 - `scripts/airc_console.py` â€” helpers + `parse_chanserv_info`
 - `scripts/airc_console_service.py` â€” probe / JOIN state machine
 - `.grok/skills/airc-console/SKILL.md`
+
+## Issue #321
+
+Do not block JOIN on a NICK echo after switching to the lobby nick. Ergo may
+omit the confirmation; optimistic NICK then JOIN, re-JOIN on 433.

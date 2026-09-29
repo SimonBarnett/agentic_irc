@@ -306,21 +306,21 @@ class AircConsoleService:
             want = domain_lobby_nick(self.machine)
             if self.nick.lower() != want.lower():
                 self._nick_retries = 0
-                self._awaiting_lobby_nick = True
                 info(
                     f"INFO shop-mode=domain-lobby channel={self.channel} "
                     f"nick={want} (changing from {self.nick})"
                 )
+                # Issue #321: do not wait for a NICK echo — Ergo may omit it and
+                # we would never JOIN. Optimistic NICK then register+JOIN; 433
+                # handler re-nicks and re-JOINs.
                 self._set_nick(want)
-                return
         info(f"INFO shop-mode=domain-lobby channel={self.channel} nick={self.nick}")
         self.register_or_identify()
         if not self._joined_shop:
             self.join_shop()
 
     def _finish_lobby_nick(self) -> None:
-        if not self._awaiting_lobby_nick:
-            return
+        """Legacy helper — lobby path no longer blocks on NICK ack (#321)."""
         self._awaiting_lobby_nick = False
         info(f"INFO shop-mode=domain-lobby channel={self.channel} nick={self.nick}")
         self.register_or_identify()
@@ -411,11 +411,7 @@ class AircConsoleService:
         if cmd == "433":
             # Nickname already in use — never get 001/JOIN without recovery.
             self._nick_retries += 1
-            lobby = (
-                self._awaiting_lobby_nick
-                or self._active_mode == "domain-lobby"
-                or self.shop_mode == "domain-lobby"
-            )
+            lobby = self._active_mode == "domain-lobby" or self.shop_mode == "domain-lobby"
             limit = NICK_RETRIES_LOBBY if lobby else NICK_RETRIES_SHOP
             if self._nick_retries > limit:
                 info(f"INFO nick-collision giving up on {self.nick}")
@@ -430,18 +426,18 @@ class AircConsoleService:
                     alt = domain_lobby_nick(self.machine, self._nick_retries)
             info(f"INFO nick-in-use 433 {self.nick} -> {alt}")
             self._set_nick(alt)
+            if lobby and self._active_mode == "domain-lobby":
+                # Re-IDENTIFY and re-JOIN under the collision nick (#321).
+                self.register_or_identify()
+                self._joined_shop = False
+                self.join_shop()
             return
 
         if cmd == "NICK":
-            # Our nick change accepted (prefix is old nick; trailing/arg is new).
+            # Optional echo; lobby no longer depends on it (#321).
             new_nick = (trailing or (args[0] if args else "")).lstrip(":")
-            if (
-                self._awaiting_lobby_nick
-                and new_nick
-                and self.nick
-                and new_nick.lower() == self.nick.lower()
-            ):
-                self._finish_lobby_nick()
+            if new_nick and self.nick and new_nick.lower() == self.nick.lower():
+                self._awaiting_lobby_nick = False
 
         if cmd == "NOTICE":
             src = parse_prefix_nick(":" + prefix) if prefix else ""

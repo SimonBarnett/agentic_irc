@@ -1,12 +1,13 @@
 ---
 name: airc-console
 description: >
-  Installable airc console Windows service: nick console on #{machinename},
-  silent in channel, authenticated PRIVMSG piped to a per-user shell. Use when
-  Simon says airc console service, Install-AircConsole, MSI, UAC elevate,
-  FR #253, FR #256, FR #259, issue #305, issue #309, MSI 1603, CAQuietExec,
-  CustomActionData, PSScriptRoot empty, Start-AircConsole Split-Path, mapped
-  P: download, not digitally signed, or /airc-console.
+  Installable airc console Windows service: ChanServ shop #{machinename} as
+  {machinename}_console, else domain/workgroup lobby; silent channel; PRIVMSG
+  shell. Use when Simon says airc console service, Install-AircConsole, MSI,
+  domain lobby, ChanServ INFO, FR #253, FR #256, FR #259, issue #305, issue
+  #309, MSI 1603, CAQuietExec, CustomActionData, PSScriptRoot empty,
+  Start-AircConsole Split-Path, mapped P: download, not digitally signed, or
+  /airc-console.
 ---
 
 # airc console (FR #253)
@@ -15,12 +16,16 @@ Foundation: harvest-agent-skills -> https://github.com/SimonBarnett/agentic_irc
 
 ## What it is
 
-Windows service (NSSM `AircConsole`) that keeps IRC nick
-**`console-<machinename>`** (e.g. `console-flamingo`) on **`#{COMPUTERNAME}`**.
-Bare nick `console` collides on shared Ergo (433) when another box holds it
-(issue #286). Silent in the shop channel. Authenticated users PRIVMSG the
-console nick; each line is piped to that user's shell session; stdout returns
-in Query only.
+Windows service (NSSM `AircConsole`). After connect it probes ChanServ
+`INFO #{machinename}`:
+
+- **Registered shop:** JOIN `#{machinename}` as **`{machinename}_console`**
+- **Not registered / timeout:** JOIN `#{domain_or_workgroup}` as
+  **`{machinename}`**, then **`{machinename}_1`**, `_2`, … on nick 433 (session
+  stays on the lobby channel; see `docs/airc-console-domain-lobby.md`)
+
+Silent in channel. Authenticated users PRIVMSG the console nick; each line is
+piped to that user's shell session; stdout returns in Query only.
 
 Not Mode 3 / DUMB PSK. Not Jeeves. Not a talk seat. No `#bobiverse`.
 
@@ -41,8 +46,8 @@ C:\ai\airc-console\scripts\Install-AircConsole.cmd -MachineId <fleet-id>
 ```
 
 Pass `-Python` to an absolute `python.exe` when LocalSystem resolve would miss
-it. Verified on CE-PRIORITY-DEV1: service Running, nick `console-ce-priority-dev1`
-on `#ce-priority-dev1`.
+it. `--shop-mode` / `-ShopMode` and `--domain` / `-Domain` select lobby
+behaviour; default is ChanServ auto-probe.
 
 **FR #256:** do not run the `.ps1` by path under Restricted/AllSigned — use the
 `.cmd` wrapper (Unblock-File + `-ExecutionPolicy Bypass`).

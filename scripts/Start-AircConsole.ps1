@@ -17,10 +17,15 @@ param(
     [string]$Python = '',
     [string]$HostName = 'irc.ntsa.uk',
     [int]$Port = 6697,
-    # Empty/auto -> Python console-<machine> (issue #286; bare console hits 433).
+    # Empty/auto -> Python {machine}_console (ChanServ shop) / {machine} lobby.
     [string]$Nick = 'auto',
     # Fleet shop id (ionos/flamingo/…). Prefer BOB_MACHINE_ID over COMPUTERNAME.
     [string]$MachineId = '',
+    # Domain/workgroup lobby channel id; default AIRC_CONSOLE_DOMAIN / Windows join.
+    [string]$Domain = '',
+    # auto | registered | domain-lobby
+    [ValidateSet('auto', 'registered', 'domain-lobby')]
+    [string]$ShopMode = 'auto',
     [Alias('Home')]
     [string]$ConsoleHome = '',
     [string]$PasswordFile = '',
@@ -120,6 +125,21 @@ $argsList = @(
 )
 if ($MachineId) {
     $argsList += @('--machine', $MachineId)
+}
+if (-not $Domain) {
+    $Domain = ($env:AIRC_CONSOLE_DOMAIN | Where-Object { $_ -and $_.Trim() } | Select-Object -First 1)
+}
+if ($Domain) {
+    $argsList += @('--domain', $Domain)
+}
+if (-not $ShopMode -or $ShopMode -eq 'auto') {
+    $envMode = ($env:AIRC_CONSOLE_SHOP_MODE | Where-Object { $_ -and $_.Trim() } | Select-Object -First 1)
+    if ($envMode) { $ShopMode = $envMode.Trim().ToLowerInvariant() }
+}
+if ($ShopMode -and $ShopMode -ne 'auto') {
+    $argsList += @('--shop-mode', $ShopMode)
+} elseif ($ShopMode -eq 'auto') {
+    $argsList += @('--shop-mode', 'auto')
 }
 # #271: always point at console.password — Python mints a GUID if missing.
 if (-not $PasswordFile) {

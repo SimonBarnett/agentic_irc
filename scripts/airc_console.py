@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """airc console service core (FR #253).
 
-Installable Windows service presence nick ``console`` on ``#{machinename}``.
-Silent in channel. Authenticated PRIVMSG sessions get a per-user console pipe.
+Installable Windows service: on ChanServ-registered ``#{machinename}`` sit as
+``{machinename}_console``; otherwise lobby on ``#{domain_or_workgroup}`` as
+``{machinename}`` / ``{machinename}_N``. Silent in channel. Authenticated
+PRIVMSG sessions get a per-user console pipe.
 
 Offline-testable: auth, channel naming, session lifecycle, silent policy.
 Live IRC loop lives in ``airc_console_service.py``.
@@ -17,11 +19,12 @@ import threading
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Callable
+from typing import Callable, Literal
 
 from account_map import AccountMap, parse_message_tags
 
 NICK = "console"
+IRC_NICK_MAX = 30
 DEFAULT_SHELL = os.environ.get("COMSPEC") or "cmd.exe"
 _PRIVMSG_RE = re.compile(
     r"^:([^!\s]+)(?:![^@\s]*@\S+)?\s+PRIVMSG\s+(\S+)\s+:?(.*)$",
@@ -33,9 +36,16 @@ _PING_CMD_RE = re.compile(r"^\s*ping(?:\s+(\S+))?\s*$", re.IGNORECASE)
 # Issue #302: fleet ear nicks bob-{machine} are already authenticated; machine varies.
 _BOB_FLEET_NICK_RE = re.compile(r"^bob-[a-z0-9][a-z0-9_-]*$", re.IGNORECASE)
 
+ShopProbeResult = Literal["registered", "missing", "unknown"]
+
+
+def _sanitize_id(raw: str) -> str:
+    cleaned = _CHANNEL_SAFE.sub("-", (raw or "").strip()).strip("-_")
+    return (cleaned or "unknown").lower()
+
 
 def machine_id(override: str | None = None) -> str:
-    """Fleet shop id for ``#{machine}`` / ``console-<machine>``.
+    """Fleet shop id for ``#{machine}`` / ``{machine}_console``.
 
     Prefer explicit override, then ``AIRC_CONSOLE_MACHINE`` / ``BOB_MACHINE_ID``
     (fleet ids like ``ionos``), then Windows ``COMPUTERNAME``. Using bare
@@ -50,8 +60,7 @@ def machine_id(override: str | None = None) -> str:
         or os.environ.get("HOSTNAME")
         or "unknown"
     ).strip()
-    cleaned = _CHANNEL_SAFE.sub("-", raw).strip("-_")
-    return (cleaned or "unknown").lower()
+    return _sanitize_id(raw)
 
 
 def shop_channel(machine: str | None = None) -> str:
@@ -59,18 +68,148 @@ def shop_channel(machine: str | None = None) -> str:
     return f"#{mid}"
 
 
-def console_nick(machine: str | None = None, explicit: str | None = None) -> str:
-    """IRC nick for the console seat (issue #286).
+def _fit_nick(stem: str, suffix: str = "") -> str:
+    """Build an IRC nick <= IRC_NICK_MAX, preferring to keep ``suffix`` intact."""
+    stem = (stem or "unknown").strip("-_") or "unknown"
+    suffix = suffix or ""
+    max_stem = IRC_NICK_MAX - len(suffix)
+    if max_stem < 1:
+        return (stem + suffix)[:IRC_NICK_MAX]
+    return (stem[:max_stem] + suffix)[:IRC_NICK_MAX]
 
-    Bare ``console`` collides on a shared Ergo (433) when more than one box
-    runs airc-console. Default is ``console-<machine>`` (unique per box).
-    Pass explicit ``console`` only on a single-console network.
+
+def machine_console_nick(machine: str | None = None) -> str:
+    """Nick when ``#{machine}`` is ChanServ-registered: ``{machine}_console``."""
+    mid = machine_id(machine)
+    return _fit_nick(mid, "_console")
+
+
+def domain_lobby_nick(machine: str | None = None, suffix: int | None = None) -> str:
+    """Nick for domain/workgroup lobby: ``{machine}`` or ``{machine}_{n}`` (n>=1)."""
+    mid = machine_id(machine)
+    if suffix is None or int(suffix) <= 0:
+        return _fit_nick(mid, "")
+    return _fit_nick(mid, f"_{int(suffix)}")
+
+
+def console_nick(machine: str | None = None, explicit: str | None = None) -> str:
+    """IRC nick for the console seat.
+
+    Default is ``{machine}_console`` (registered-shop / provisional connect).
+    Pass explicit ``console`` only on a single-console network; ``auto`` uses default.
     """
     if explicit and explicit.strip() and explicit.strip().lower() != "auto":
-        return explicit.strip()
-    mid = machine_id(machine)
-    nick = f"console-{mid}"
-    return nick[:30]
+        return explicit.strip()[:IRC_NICK_MAX]
+    return machine_console_nick(machine)
+
+
+def domain_or_workgroup_id(override: str | None = None) -> str:
+    """Windows domain NetBIOS name, or workgroup, sanitized for ``#{id}``.
+
+    Order: explicit / ``AIRC_CONSOLE_DOMAIN`` → ``USERDNSDOMAIN`` first label →
+    ``USERDOMAIN`` when it differs from ``COMPUTERNAME`` → short NetGetJoinInformation
+    probe → ``USERDOMAIN`` → ``workgroup``. Never blocks unbounded on WMI.
+    """
+    if override and override.strip():
+        return _sanitize_id(override)
+    env = (os.environ.get("AIRC_CONSOLE_DOMAIN") or "").strip()
+    if env:
+        return _sanitize_id(env)
+
+    dns = (os.environ.get("USERDNSDOMAIN") or "").strip()
+    if dns:
+        return _sanitize_id(dns.split(".")[0])
+
+    userdomain = (os.environ.get("USERDOMAIN") or "").strip()
+    computer = (os.environ.get("COMPUTERNAME") or "").strip()
+    if userdomain and computer and userdomain.upper() != computer.upper():
+        return _sanitize_id(userdomain)
+
+    joined = _net_get_join_id(timeout_s=2.0)
+    if joined:
+        return joined
+
+    if userdomain:
+        return _sanitize_id(userdomain)
+    return "workgroup"
+
+
+def domain_channel(domain: str | None = None) -> str:
+    return f"#{domain_or_workgroup_id(domain)}"
+
+
+def _net_get_join_id(timeout_s: float = 2.0) -> str | None:
+    """Best-effort NetGetJoinInformation (domain or workgroup name)."""
+    if os.name != "nt":
+        return None
+    box: dict[str, str | None] = {"name": None}
+
+    def worker() -> None:
+        try:
+            import ctypes
+            from ctypes import wintypes
+
+            netapi = ctypes.WinDLL("netapi32")
+            NetGetJoinInformation = netapi.NetGetJoinInformation
+            NetGetJoinInformation.argtypes = [
+                wintypes.LPCWSTR,
+                ctypes.POINTER(wintypes.LPWSTR),
+                ctypes.POINTER(ctypes.c_int),
+            ]
+            NetGetJoinInformation.restype = wintypes.DWORD
+            NetApiBufferFree = netapi.NetApiBufferFree
+            NetApiBufferFree.argtypes = [wintypes.LPVOID]
+            NetApiBufferFree.restype = wintypes.DWORD
+
+            buf = wintypes.LPWSTR()
+            join_type = ctypes.c_int()
+            # NetSetupUnknownStatus=0, Workgroup=1, Domain=3 (values vary by SDK;
+            # we only need the name string).
+            rc = NetGetJoinInformation(None, ctypes.byref(buf), ctypes.byref(join_type))
+            if rc == 0 and buf.value:
+                box["name"] = str(buf.value)
+            if buf:
+                NetApiBufferFree(buf)
+        except Exception:
+            return
+
+    t = threading.Thread(target=worker, daemon=True)
+    t.start()
+    t.join(timeout_s)
+    if box["name"]:
+        return _sanitize_id(box["name"])
+    return None
+
+
+def parse_chanserv_info(text: str, channel: str) -> ShopProbeResult:
+    """Classify a ChanServ INFO NOTICE for ``channel``.
+
+    Returns ``registered``, ``missing``, or ``unknown`` (keep waiting / treat as
+    missing after probe timeout).
+    """
+    body = (text or "").strip()
+    if not body:
+        return "unknown"
+    t = body.lower()
+    ch = (channel or "").lower().lstrip("#")
+    if any(
+        s in t
+        for s in (
+            "is not registered",
+            "isn't registered",
+            "isnt registered",
+            "not registered",
+        )
+    ):
+        return "missing"
+    if "no such channel" in t and ch and ch in t.replace("#", ""):
+        return "missing"
+    # Atheme / Ergo-style success: "Information on channel #foo:" / "Registered:"
+    if "registered:" in t or "registered on" in t:
+        return "registered"
+    if "information on" in t and ch and ch in t.replace("#", ""):
+        return "registered"
+    return "unknown"
 
 
 def is_channel_target(target: str) -> bool:
@@ -81,14 +220,22 @@ def is_channel_target(target: str) -> bool:
 def nick_matches_pattern(pattern: str, nick: str, machine: str | None = None) -> bool:
     """True if IRC/client ping pattern matches this console (#298).
 
-    Examples: ``*``, ``flam*``, ``console-flam*``, ``flamingo``, ``console-flamingo``.
+    Examples: ``*``, ``flam*``, ``flamingo_console``, ``flamingo``, ``flamingo_1``.
     """
     pat = (pattern or "").strip()
     if not pat or pat == "*":
         return True
     n = (nick or "").strip().lower()
     mid = machine_id(machine)
-    candidates = {n, mid, f"console-{mid}", f"#{mid}"}
+    candidates = {
+        n,
+        mid,
+        f"console-{mid}",
+        f"{mid}_console",
+        machine_console_nick(mid),
+        domain_lobby_nick(mid),
+        f"#{mid}",
+    }
     p = pat.lower()
     # Allow #channel-style patterns too.
     for c in candidates:
@@ -96,7 +243,7 @@ def nick_matches_pattern(pattern: str, nick: str, machine: str | None = None) ->
             continue
         if fnmatch.fnmatchcase(c, p) or fnmatch.fnmatchcase(c.lstrip("#"), p.lstrip("#")):
             return True
-        # Prefix match without wildcard: "flam" matches flamingo / console-flamingo
+        # Prefix match without wildcard: "flam" matches flamingo / flamingo_console
         if "*" not in p and "?" not in p and (c.startswith(p) or c.lstrip("#").startswith(p)):
             return True
     return False

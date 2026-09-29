@@ -334,6 +334,17 @@ def test_pack_script_builds_msi():
     assert "305" in wxs or "airc console" in wxs.lower()
 
 
+def test_msi_deferred_quietexec_uses_customactiondata():
+    """Issue #309: deferred CAQuietExec64 reads CustomActionData (property = CA Id)."""
+    wxs = (ROOT / "packaging" / "airc-console" / "Product.wxs").read_text(encoding="utf-8")
+    assert 'Property="RunAircInstall"' in wxs
+    assert "CAQuietExec64" in wxs
+    # QtExecCmdLine is immediate-only; must not be the deferred command property.
+    assert 'Property="QtExecCmdLine"' not in wxs
+    docs = (ROOT / "docs" / "airc-console-fr253.md").read_text(encoding="utf-8")
+    assert "#309" in docs or "issue #309" in docs
+
+
 def test_install_self_elevates_uac():
     """Issue #305: Install requests UAC; must not abort via #Requires -RunAsAdministrator."""
     text = (ROOT / "scripts" / "Install-AircConsole.ps1").read_text(encoding="utf-8")

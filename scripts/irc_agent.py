@@ -30,6 +30,7 @@ import moot  # noqa: E402
 import protect  # noqa: E402
 import seal  # noqa: E402
 import shop_ops  # noqa: E402
+import shop_chanserv  # noqa: E402
 import shop_listen  # noqa: E402
 import agent_control  # noqa: E402
 import talk_seat_ghost  # noqa: E402
@@ -885,6 +886,36 @@ class Client:
 
     def _local_machine_id(self) -> str | None:
         return bobreport.machine_from_nick(self.original_nick)
+
+    def _maybe_register_shop_chanserv(self) -> None:
+        """FR #313: bob-* REGISTER #{machine} with ChanServ after JOIN.
+
+        Best-effort NickServ IDENTIFY/REGISTER first so Ergo channel registration
+        (which requires a services account) can succeed when enabled.
+        Failures are ignored in the reader (services may still be off).
+        """
+        nick = self.original_nick or self.live_nick or ""
+        lines = shop_chanserv.register_lines_for_bob(nick, self.channels)
+        if not lines:
+            return
+        pw = shop_chanserv.ensure_bob_nickserv_password(self.home, mint=True)
+        mid = bobreport.machine_from_nick(nick) or "fleet"
+        if pw:
+            for ns in shop_chanserv.nickserv_register_identify_lines(
+                nick, pw, f"{nick}@{mid}.local"
+            ):
+                try:
+                    self.send(ns)
+                except OSError:
+                    return
+            time.sleep(0.3)
+        for line in lines:
+            try:
+                self.send(line)
+                info(f"INFO chanserv REGISTER {line.split()[-1]}")
+            except OSError:
+                info("INFO chanserv REGISTER send failed")
+                return
 
     def _should_bobiverse_pull(self) -> bool:
         return bobreport.should_periodic_bobiverse_pull(
@@ -1943,6 +1974,8 @@ class Client:
             self.send("JOIN " + ch)
         if not self.joined.wait(30):
             self._abort_gate("NO JOIN")
+        # FR #313: bob-* REGISTER #{machine} with ChanServ (founder persists).
+        self._maybe_register_shop_chanserv()
         mid = self._local_machine_id()
         if mid:
             self._maybe_refresh_cursor_fuel(mid)

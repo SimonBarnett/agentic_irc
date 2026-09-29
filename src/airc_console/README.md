@@ -23,6 +23,16 @@ installs to `C:\ai\airc-console`, then runs `Install-AircConsole.cmd` elevated
 msiexec /i airc-console-0.1.16.msi
 ```
 
+**Issue #309:** `0.1.16` MSI fails (`CAQuietExec64` / `0x80070057` / exit 1603).
+Deferred quiet-exec must set `Property="RunAircInstall"` (CustomActionData), not
+`QtExecCmdLine`. Workaround:
+
+```bat
+msiexec /a airc-console-0.1.16.msi /qn TARGETDIR=%TEMP%\airc-extract
+xcopy /E /I /Y %TEMP%\airc-extract\airc-console C:\ai\airc-console
+C:\ai\airc-console\scripts\Install-AircConsole.cmd
+```
+
 ### From scripts (also UAC self-elevates)
 
 Downloaded packages are **unsigned**. Do **not** double-click / invoke the `.ps1`

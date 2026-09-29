@@ -4,8 +4,9 @@ description: >
   Installable airc console Windows service: nick console on #{machinename},
   silent in channel, authenticated PRIVMSG piped to a per-user shell. Use when
   Simon says airc console service, Install-AircConsole, MSI, UAC elevate,
-  FR #253, FR #256, FR #259, issue #305, PSScriptRoot empty, Start-AircConsole
-  Split-Path, mapped P: download, not digitally signed, or /airc-console.
+  FR #253, FR #256, FR #259, issue #305, issue #309, MSI 1603, CAQuietExec,
+  CustomActionData, PSScriptRoot empty, Start-AircConsole Split-Path, mapped
+  P: download, not digitally signed, or /airc-console.
 ---
 
 # airc console (FR #253)
@@ -25,8 +26,23 @@ Not Mode 3 / DUMB PSK. Not Jeeves. Not a talk seat. No `#bobiverse`.
 
 ## Install
 
-**Issue #305 (preferred):** install the single **`airc-console-<ver>.msi`**
+**Issue #305 (preferred once fixed):** install the single **`airc-console-<ver>.msi`**
 (per-machine UAC -> `C:\ai\airc-console` -> elevated `Install-AircConsole.cmd`).
+
+**Issue #309:** `airc-console-v0.1.16` MSI fails install (`CAQuietExec64`
+`0x80070057` / exit 1603) because deferred quiet-exec used `QtExecCmdLine`
+instead of `CustomActionData` (`Property="RunAircInstall"`). Until a patched
+MSI ships, admin-extract then run the cmd:
+
+```bat
+msiexec /a airc-console-0.1.16.msi /qn TARGETDIR=%TEMP%\airc-extract
+xcopy /E /I /Y %TEMP%\airc-extract\airc-console C:\ai\airc-console
+C:\ai\airc-console\scripts\Install-AircConsole.cmd -MachineId <fleet-id>
+```
+
+Pass `-Python` to an absolute `python.exe` when LocalSystem resolve would miss
+it. Verified on CE-PRIORITY-DEV1: service Running, nick `console-ce-priority-dev1`
+on `#ce-priority-dev1`.
 
 **FR #256:** do not run the `.ps1` by path under Restricted/AllSigned — use the
 `.cmd` wrapper (Unblock-File + `-ExecutionPolicy Bypass`).

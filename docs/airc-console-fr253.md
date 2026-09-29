@@ -43,6 +43,12 @@ Installable **airc** service on each Windows box:
 Preferred client path: download **`airc-console-<ver>.msi`** and run it (per-machine UAC).
 The MSI lays down `C:\ai\airc-console` and runs `Install-AircConsole.cmd` elevated.
 
+**Issue #309:** `airc-console-v0.1.16` MSI exits 1603 (`CAQuietExec64` failed to get
+command line data) because deferred quiet-exec used `QtExecCmdLine` instead of
+`CustomActionData` (`Property="RunAircInstall"` in `packaging/airc-console/Product.wxs`).
+Workaround until a patched MSI: `msiexec /a … /qn TARGETDIR=…` then copy to
+`C:\ai\airc-console` and run `scripts\Install-AircConsole.cmd`.
+
 From an unpacked tree / `.cmd`: `Install-AircConsole.ps1` **self-elevates** (UAC) when
 the caller is not already an administrator (issue #305).
 

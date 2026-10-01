@@ -23,16 +23,18 @@ Foundation: harvest-agent-skills (honesty box) -> report back to https://github.
 
 TLS IRC. Status in clear. Secrets only as `SEAL v2` lines.
 
-Fleet builders (`#bobiverse`): `irc.ntsa.uk:6697` (Let's Encrypt). PASS from env `AGENTIC_IRC_PASSWORD` or `~\.grok\ergo\connect.password`. Host/port live in `agentic_build/config/bobiverse.json`. See `agentic_build/docs/bobiverse.md`. Do not point `bob-ionos` at Libera.
+Fleet builders (`#bobiverse`): `irc.ntsa.uk:6697` (Let's Encrypt). PASS from env `AGENTIC_IRC_PASSWORD` or `~\.grok\ergo\connect.password`. Host/port live in `agentic_build/config/bobiverse.json`. See `agentic_build/docs/bobiverse.md`. Do not point any `bob-*` at Libera.
 
-Shop rooms are `#<machine-id>` (`#flamingo`, `#marchhare`, `#ionos`, `#ce-priority-dev1`; `#dev1` same). FR work talk room: `#agentic_irc` (Simon + talk seats; not `bob-*`). Not `#bob-flamingo`. **`bob-ionos`** is the ionos Bob/Grok fleet agent; **`#ionos`** is its shop with all `w-io-*` workers.
+**CAST IRON (Simon 2026-09-29):** shop `#{machine}` / `bob-{machine}` use the box **Windows `COMPUTERNAME` lowercased** (`BOB_MACHINE_ID`), not a fleet marketing alias. Host `WIN-MPRE8VI4U6U` → `win-mpre8vi4u6u` / `bob-win-mpre8vi4u6u` / `#win-mpre8vi4u6u`. Do not invent `ionos` / `#ionos` / `bob-ionos` for that VPS. Named boxes (`flamingo`, `marchhare`, `ce-priority-dev1`) keep those ids only when installed as such.
+
+Shop rooms are `#<machine-id>`. FR work talk room: `#agentic_irc` (Simon + talk seats; not `bob-*`). Not `#bob-<id>`.
 
 | Nick pattern | JOIN (Ergo) | Notes |
 |--------------|-------------|--------|
-| `bob-<id>` | `#bobiverse` + `#{machine}` | Builders; first JOIN creates shop (`bob-ionos` ->' `#ionos`) |
-| `{machine}-{pid}` talk seat | `#{machine}` **only** (CAST IRON 2026-09-25: workers never JOIN `#bobiverse`; irc_agent drops other channels and auto-PARTs them) | **`pid` = coordinator PowerShell `$PID`** (`Start-TalkSeat.ps1` / TSR â€" **not** python `irc_listen` / `irc_agent` PIDs). Default extras include `#agentic_irc` via script default `-Channel`. More rooms (`#airc-moot`, etc.) via `-Channel`. `channels_for_nick` always adds `#bobiverse` + shop for talk seats (issue #108); omitting fleet in `-Channel` does not opt out. Bobosphere is not talk-seat-forbidden. |
-| `w-<shortid>-<pid>` worker | `#{machine}` only | Never `#bobiverse`. Ionos: `w-io-<pid>` ->' `#ionos`. Spawn helper: `scripts/start_worker_irc_agent.py` (UTF-8) must exist under `C:\ai\agentic_irc\scripts` or `D:\ai\agentic_irc\scripts` (sister search paths). Callers: `agentic_build` `Start-BobCursor` + `Start-BobWorker` after that install. |
-| Jeeves `--chair` | `#bobiverse` + every shop | `--home` `~\.agentic-irc-jeeves`; `BOB_DIGEST_HOME` `~\.agentic-irc-bobiverse`. Do not share `bob-ionos` `--home`. skill `bob-irc` |
+| `bob-<id>` | `#bobiverse` + `#{machine}` | Builders; first JOIN creates shop (`bob-win-mpre8vi4u6u` → `#win-mpre8vi4u6u`) |
+| `{machine}-{pid}` talk seat | `#{machine}` **only** (CAST IRON 2026-09-25: workers never JOIN `#bobiverse`; irc_agent drops other channels and auto-PARTs them) | **`pid` = coordinator PowerShell `$PID`** (`Start-TalkSeat.ps1` / TSR — **not** python `irc_listen` / `irc_agent` PIDs). Default extras include `#agentic_irc` via script default `-Channel`. More rooms (`#airc-moot`, etc.) via `-Channel`. `channels_for_nick` always adds `#bobiverse` + shop for talk seats (issue #108); omitting fleet in `-Channel` does not opt out. Bobosphere is not talk-seat-forbidden. |
+| `w-<shortid>-<pid>` worker | `#{machine}` only | Never `#bobiverse`. Spawn helper: `scripts/start_worker_irc_agent.py` (UTF-8) under `C:\ai\agentic_irc\scripts` or `D:\ai\agentic_irc\scripts`. Callers: `agentic_build` `Start-BobCursor` + `Start-BobWorker` after that install. |
+| Jeeves `--chair` | `#bobiverse` + every shop | `--home` `~\.agentic-irc-jeeves`; `BOB_DIGEST_HOME` `~\.agentic-irc-bobiverse`. Do not share the bob ear `--home`. skill `bob-irc` |
 
 Prefer `scripts/Start-TalkSeat.ps1 -MachineId <id>` (default `#bobiverse,#<machine>,#agentic_irc`). `coordinator.pid` **`seat=`** is authoritative; `listen=` / `agent=` are diagnostics only. Worker homes: `~\.agentic-irc-bobiverse\workers\<id>\<pid>`. **`working_on` / idle: webhook only** (`post_working_on.py` â€" never `PRIVMSG simon` or shop for status). Shop: conversation stdout. Open Query: thinking/tool traces only (not working_on). One voice: do not write the same line to `bob-*` and the session outbox. Secrets-shaped lines drop. Status read is `!bobiverse` (chair whisper) only â€" do not send `!report`. Digest chair facts: skill `bob-irc`. Mode 3 pairing PIN is never on `#bobiverse` (skill `invite-airc`). `bob-*` assigns idle workers with `PRIVMSG #{machine}`, not Query.
 

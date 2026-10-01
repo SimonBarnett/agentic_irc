@@ -257,3 +257,12 @@ harvested into `.grok/skills/bob-irc`. Protocol leaflets stay `agentic-irc`
 - Root cause: `packaging/airc-console/Product.wxs` deferred `CAQuietExec64` used `QtExecCmdLine`; needs `Property=RunAircInstall` (CustomActionData).
 - Workaround: admin-extract + `Install-AircConsole.cmd` → service Running; nick `console-ce-priority-dev1` on `#ce-priority-dev1`.
 - Harvest: fix Product.wxs; note in `.grok/skills/airc-console`, `docs/airc-console-fr253.md`, `src/airc_console/README.md`; issue https://github.com/SimonBarnett/agentic_irc/issues/309
+
+## 2026-09-29 - bob shop id = COMPUTERNAME (not ionos alias)
+
+- Simon CAST IRON: fleet marketing alias `ionos` / `#ionos` / `bob-ionos` is wrong for host `WIN-MPRE8VI4U6U`.
+- Shop machine id = Windows `COMPUTERNAME` lowercased (`win-mpre8vi4u6u`); ear `bob-win-mpre8vi4u6u`; ChanServ founder of `#win-mpre8vi4u6u`.
+- Skills: `.grok/skills/bob-irc`, `.grok/skills/agentic-irc`; runbook `docs/ergo-chanserv-enable-bob-shops.md`.
+- ChanServ REGISTER needs channel op; if `You must be an oper on the channel`, make bob first JOIN of empty shop.
+- Live ops on Ergo host already recycled bob + watch onto hostname shop.
+

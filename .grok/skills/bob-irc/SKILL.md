@@ -30,22 +30,25 @@ Do **not** use `!bobiverse` to refresh or read the digest (#174).
 - Fleet: `#bobiverse` — **Jeeves** (GIT, digest chair) + **`bob-*`** (listen for
   next job). Halloy `simon` operator OK. Talk seats and `w-*` workers do **not**
   JOIN here by default. No POINT firehose.
-- Shop: `#flamingo` `#marchhare` `#ionos` `#ce-priority-dev1` (`#dev1` same).
-  Machine names with `#`. Not `#bob-flamingo` / `#bob-ionos`.
-  **`bob-ionos`** is the ionos Bob/Grok builder seat; **`#ionos`** is its shop
-  (all live `w-io-*` git workers JOIN there only).
+- **CAST IRON (Simon 2026-09-29) — shop id = real hostname:** bob shop
+  `#{machine}` / `bob-{machine}` use the box **Windows `COMPUTERNAME`
+  lowercased** (and `BOB_MACHINE_ID`), not a marketing alias. Example: host
+  `WIN-MPRE8VI4U6U` → machine `win-mpre8vi4u6u`, ear `bob-win-mpre8vi4u6u`,
+  shop `#win-mpre8vi4u6u`. Do **not** invent `ionos` / `#ionos` / `bob-ionos`
+  for that VPS. Friendly names (`flamingo`, `marchhare`, `ce-priority-dev1`)
+  stay valid only when they **are** that box's installed machine id.
+- Shop: `#{machine}` for each live box. Not `#bob-<id>`.
 - `bob-<id>` JOINs fleet + shop at start. Bob drop closes `#<id>`.
 - Talk seats (Cursor or Grok, same): nick `{machine}-{pid}` (e.g.
-  `flamingo-19392`). **`pid` = python `irc_agent.py` PID** for that home;
-  not `irc_listen` or PowerShell `$PID`. JOIN fleet + **this box's shop**.
-  Many sessions per box; pid is required. Not `cursor-*` / `grok-*`. Start:
-  `scripts/Start-TalkSeat.ps1 -MachineId <id>` or TSR
-  `scripts/Start-IrcTsr.ps1` + `coordinator.pid` (`agent=` authoritative).
-  One agent per home.
+  `flamingo-19392` or `win-mpre8vi4u6u-8412`). **`pid` = python `irc_agent.py`
+  PID** for that home; not `irc_listen` or PowerShell `$PID`. JOIN fleet +
+  **this box's shop**. Many sessions per box; pid is required. Not
+  `cursor-*` / `grok-*`. Start: `scripts/Start-TalkSeat.ps1 -MachineId <id>`
+  or TSR `scripts/Start-IrcTsr.ps1` + `coordinator.pid` (`agent=`
+  authoritative). One agent per home.
   Do not install Watch-CursorIrc that respawns `cursor-flamingo`.
 - Workers JOIN **shop only**: `w-<shortid>-<pid>` (`w-fl-4412`). Key
-  `flamingo:4412`. Home `~\.agentic-irc-bobiverse\workers\<id>\<pid>`.
-  Ionos git workers: `w-io-<pid>` → `#ionos` only.
+  `<machine>:<pid>`. Home `~\.agentic-irc-bobiverse\workers\<id>\<pid>`.
 - Halloy lists only rooms you `/join`. Leftover `bob-*` panes are Query/PM,
   not shop channels. Do not static-autojoin shops (they come and go).
 
@@ -253,9 +256,13 @@ loses op when the channel empties → KICK gets **482**.
    ```
 
 2. `Restart-Service BobIrcd`. Confirm `/msg ChanServ HELP` answers in Halloy.
-3. Recycle each `bob-*` Watch ear (current `agentic_irc` main). Log should show
-   `INFO chanserv REGISTER #{machine}`.
-4. `/msg ChanServ INFO #ionos` (etc.) — founder should be that `bob-*`.
+3. Recycle each `bob-*` Watch ear (current `agentic_irc` main) with
+   `BOB_MACHINE_ID` = hostname lower. Log should show
+   `INFO chanserv REGISTER #{machine}` (e.g. `#win-mpre8vi4u6u`).
+4. `/msg ChanServ INFO #{machine}` — founder should be that `bob-*`.
+5. ChanServ requires **channel op** to REGISTER. If the reply is
+   `You must be an oper on the channel to register it`, clear other nicks
+   briefly so `bob-{machine}` is first JOIN (gets `@`), then REGISTER.
 
 Code path: `scripts/shop_chanserv.py` + `irc_agent._maybe_register_shop_chanserv`
 (only `bob-*`, own shop only). Talk seats / `w-*` do not REGISTER.
